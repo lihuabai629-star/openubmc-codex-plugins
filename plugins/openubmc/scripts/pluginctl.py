@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import ctypes
 import errno
 import hashlib
 import json
@@ -18,6 +17,7 @@ import tempfile
 import subprocess
 import sys
 import time
+import threading
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,12 +38,23 @@ def prepare_for_start(content: dict[str, bytes]) -> None:
         raise ValueError('First-start dependency preparation requires a live Linux parent')
     signal.signal(signal.SIGTERM, _cancel_dependency_process)
     signal.signal(signal.SIGINT, _cancel_dependency_process)
-    libc = ctypes.CDLL(None, use_errno=True)
-    if libc.prctl(1, signal.SIGTERM, 0, 0, 0) != 0:
-        raise OSError(ctypes.get_errno(), 'Cannot bind preparation to the MCP client')
-    if os.getppid() != parent:
-        raise DependencyCancelled('MCP client exited before dependency preparation')
-    prepare_dependencies(content, False, lock_timeout=540)
+    stopped = threading.Event()
+    def watch_parent():
+        # Linux parent-death signals follow the spawning thread's lifetime.
+        # Codex uses worker threads, so watch process reparenting instead.
+        while not stopped.wait(.1):
+            if os.getppid() != parent:
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+    watcher = threading.Thread(target=watch_parent, daemon=True)
+    watcher.start()
+    try:
+        if os.getppid() != parent:
+            raise DependencyCancelled('MCP client exited before dependency preparation')
+        prepare_dependencies(content, False, lock_timeout=540)
+    finally:
+        stopped.set()
+        watcher.join(timeout=1)
     if os.getppid() != parent:
         raise DependencyCancelled('MCP client exited during dependency preparation')
 

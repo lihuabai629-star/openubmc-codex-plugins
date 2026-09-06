@@ -1,5 +1,5 @@
 {
-  "content_digest": "492bc45f66a4462b95bebb732ec396002cb2882babd80e370ebb430ed0130818",
+  "content_digest": "09cef0669c20fdfc81cf32fda9cc81c1f316fd95047f84db8041765118030d74",
   "files": {
     ".codex-plugin/plugin.json": "68767d04172d3b869d61ffe8759389de37361e313e5b160ee0b476911af1b76a",
     ".mcp.json": "eeb264188d744f1101b5371afe216e233cd14d58c38c2c8533362765cf7246c7",
@@ -16,11 +16,11 @@
     "openubmc-kb-mcp/src/tools.js": "185d8c5fcb8b1a659ca4e364bd9299a79fb9c40542d637835f09a4c592dbfcc7",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2",
     "scripts/install_plugin.py": "4c8ad00cb39683ed6d36ff7b91d687f53786b30c6984152f7dcea51eefa0b830",
-    "scripts/launch_runtime.py": "63a2772ac658f096c52c4dbd9e263b7fdd82977049da0a45c550bbe629874487",
+    "scripts/launch_runtime.py": "f504a375176db31ff8ce5e294e858cb5e538ab879e9b1eb7f53fce2b3279df6b",
     "scripts/plugin_admin.py": "55ea5870b94e0a53c2123e454d648659c4b48a9b6ac58ea736f8e3ca4f3206ee",
     "scripts/plugin_archive.py": "d38904d8e36ae03f17579b1a14a4e69fe07f930053e467007509858af587451d",
     "scripts/plugin_install.py": "dd49996c4280e00007320d0629a7a55a0488bc283ae102858996d974349258e7",
-    "scripts/pluginctl.py": "2f475f300c2f426f05a99cfe2b273c78570f7ff28fb7ea8080a4a9eea27dbbde",
+    "scripts/pluginctl.py": "7452ea89b0279623df803110287d41ab4066e46b34262b644bbff27cc25f68eb",
     "skills/lua-component/SKILL.md": "16fa78b8ca9f127134758d7b6999a53ecaa2137c240f7f85fc6ee712152c8b67",
     "skills/lua-component/agents/openai.yaml": "08dc82afd1e8d0e14ccd1cedfaa9a5e5d23a320f8a8bfd9f24669092ebed2a63",
     "skills/lua-component/skill.json": "80bf5c44b4aaf2868cc9013093b5a5809b9f758027505465d9d62eab8e80ba58",
@@ -255,6 +255,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "e9ebe465ff2205095376e4ea5883b2ab53a946e6",
+  "source_commit": "6df77485be3d6cdf1e8b8f4dce8d30333bc9d404",
   "version": "2.0.11"
 }

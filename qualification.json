@@ -1,0 +1,29 @@
+{
+  "version": "2.0.11",
+  "source_commit": "6df77485be3d6cdf1e8b8f4dce8d30333bc9d404",
+  "content_digest": "09cef0669c20fdfc81cf32fda9cc81c1f316fd95047f84db8041765118030d74",
+  "platform": "Linux",
+  "codex": "0.153.4",
+  "python": "3.12",
+  "native_codex_invocations": 2,
+  "initial_dependency_receipts": 0,
+  "mcp_tools": {
+    "kb": [
+      "openubmc_kb_list",
+      "openubmc_kb_query",
+      "openubmc_kb_status"
+    ],
+    "runtime": [
+      "execute",
+      "observe"
+    ]
+  },
+  "uninstall_reinstall": true,
+  "package_integrity_after_startup": true,
+  "runtime_shutdown_verified": true,
+  "limitations": [
+    "BMC operations and authenticated knowledge queries require separate credentials and validation.",
+    "Native Windows is not qualified.",
+    "The clean installation test used an explicitly configured public package mirror."
+  ]
+}
