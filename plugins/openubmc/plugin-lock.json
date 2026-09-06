@@ -1,8 +1,8 @@
 {
-  "content_digest": "08f347e617fbe1a0bff97b3830a53502bd1d244e1cef0d193f86b920c293e40e",
+  "content_digest": "492bc45f66a4462b95bebb732ec396002cb2882babd80e370ebb430ed0130818",
   "files": {
-    ".codex-plugin/plugin.json": "765a1fca284e3bce3ec93990b3d055ef969b2f88fcd426628858d5577d5db189",
-    ".mcp.json": "6369391be696b398e37e6c0122dc2cd097c5ba39dc951be611e2dc2fd9ad2736",
+    ".codex-plugin/plugin.json": "68767d04172d3b869d61ffe8759389de37361e313e5b160ee0b476911af1b76a",
+    ".mcp.json": "eeb264188d744f1101b5371afe216e233cd14d58c38c2c8533362765cf7246c7",
     "LICENSE": "305aabc561c05723f615729cec53d3101a52c8bec99e434ebb77835826fa2701",
     "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
     "openubmc-kb-mcp/package.json": "e5b2a3e68b95642e5f499634ab45509e7d62f2510e11987114fe252eea9fd98d",
@@ -16,11 +16,11 @@
     "openubmc-kb-mcp/src/tools.js": "185d8c5fcb8b1a659ca4e364bd9299a79fb9c40542d637835f09a4c592dbfcc7",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2",
     "scripts/install_plugin.py": "4c8ad00cb39683ed6d36ff7b91d687f53786b30c6984152f7dcea51eefa0b830",
-    "scripts/launch_runtime.py": "fef43249d5c3b35daff8c369fc4c08cf7b6da63cbd8a7e3c77bde4953ad37fc1",
+    "scripts/launch_runtime.py": "63a2772ac658f096c52c4dbd9e263b7fdd82977049da0a45c550bbe629874487",
     "scripts/plugin_admin.py": "55ea5870b94e0a53c2123e454d648659c4b48a9b6ac58ea736f8e3ca4f3206ee",
     "scripts/plugin_archive.py": "d38904d8e36ae03f17579b1a14a4e69fe07f930053e467007509858af587451d",
     "scripts/plugin_install.py": "dd49996c4280e00007320d0629a7a55a0488bc283ae102858996d974349258e7",
-    "scripts/pluginctl.py": "daa118d3520310673a282b4fe095be48029357f841c1da0a8fe61251f1452e2c",
+    "scripts/pluginctl.py": "2f475f300c2f426f05a99cfe2b273c78570f7ff28fb7ea8080a4a9eea27dbbde",
     "skills/lua-component/SKILL.md": "16fa78b8ca9f127134758d7b6999a53ecaa2137c240f7f85fc6ee712152c8b67",
     "skills/lua-component/agents/openai.yaml": "08dc82afd1e8d0e14ccd1cedfaa9a5e5d23a320f8a8bfd9f24669092ebed2a63",
     "skills/lua-component/skill.json": "80bf5c44b4aaf2868cc9013093b5a5809b9f758027505465d9d62eab8e80ba58",
@@ -233,9 +233,9 @@
     "skills/testing/agents/openai.yaml": "43897decfaec6d3d59f14e9d6da917eae35e3d23d48174c70ed57969c5782439",
     "skills/testing/evals/evals.json": "4acbbf08e1057639c1fae8061e30da258a17ea9d7f036f6e4a0deaba89087690",
     "skills/testing/skill.json": "00f42eb9a7d2dbbcaedd9ecfbc97a99cadbf7cdbe366a8df03200d8879420d4a",
-    "workflow.json": "4589fd20ee602572afaf9b50894af8188d70798360dcaf6f3f8892e56efb176a"
+    "workflow.json": "0439f054725f38ae59974a2fdb2a80ebcf9f079dd165e5460a72868e13a823c1"
   },
-  "manifest_digest": "765a1fca284e3bce3ec93990b3d055ef969b2f88fcd426628858d5577d5db189",
+  "manifest_digest": "68767d04172d3b869d61ffe8759389de37361e313e5b160ee0b476911af1b76a",
   "name": "openubmc",
   "qualification_refs": [
     "docs/runtime-stability-qualification.md",
@@ -255,6 +255,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "850b71120ef6cf3dfbe82530d196a415cd57dd09",
-  "version": "2.0.10+marketplace.1"
+  "source_commit": "e9ebe465ff2205095376e4ea5883b2ab53a946e6",
+  "version": "2.0.11"
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import errno
 import hashlib
 import json
@@ -28,6 +29,23 @@ class DependencyCancelled(ValueError):
 
 def _cancel_dependency_process(_signum, _frame):
     raise DependencyCancelled('Dependency preparation cancelled')
+
+
+def prepare_for_start(content: dict[str, bytes]) -> None:
+    """Keep first-use downloads owned by the MCP client's lifetime on Linux."""
+    parent = os.getppid()
+    if sys.platform != 'linux' or parent <= 1:
+        raise ValueError('First-start dependency preparation requires a live Linux parent')
+    signal.signal(signal.SIGTERM, _cancel_dependency_process)
+    signal.signal(signal.SIGINT, _cancel_dependency_process)
+    libc = ctypes.CDLL(None, use_errno=True)
+    if libc.prctl(1, signal.SIGTERM, 0, 0, 0) != 0:
+        raise OSError(ctypes.get_errno(), 'Cannot bind preparation to the MCP client')
+    if os.getppid() != parent:
+        raise DependencyCancelled('MCP client exited before dependency preparation')
+    prepare_dependencies(content, False, lock_timeout=540)
+    if os.getppid() != parent:
+        raise DependencyCancelled('MCP client exited during dependency preparation')
 
 
 def canonical(value: object) -> bytes:
@@ -396,9 +414,7 @@ def main() -> int:
             report['dependencies'] = str(root)
         elif args.command in ('runtime', 'kb'):
             if args.prepare_on_start and not (dependency_root(content)/'receipt.json').is_file():
-                signal.signal(signal.SIGTERM, _cancel_dependency_process)
-                signal.signal(signal.SIGINT, _cancel_dependency_process)
-                prepare_dependencies(content, False, lock_timeout=540)
+                prepare_for_start(content)
             return launch(args.command, content, lock, args.timings)
         elif args.command == 'doctor':
             report['package_integrity'] = True
