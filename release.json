@@ -5,5 +5,5 @@
   "content_digest": "09cef0669c20fdfc81cf32fda9cc81c1f316fd95047f84db8041765118030d74",
   "archive_sha256": "cef5c3659199579c4a1ba78f95c4f4c594d73226233375d775352824a5958af2",
   "runtime_baseline": "2.0.10",
-  "qualification": "native-marketplace-passed"
+  "qualification": "repository-and-native-marketplace-passed"
 }

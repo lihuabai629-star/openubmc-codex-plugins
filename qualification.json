@@ -25,5 +25,11 @@
     "BMC operations and authenticated knowledge queries require separate credentials and validation.",
     "Native Windows is not qualified.",
     "The clean installation test used an explicitly configured public package mirror."
-  ]
+  ],
+  "repository_validation": {
+    "python_tests": 1780,
+    "node_tests": 44,
+    "passed": true
+  },
+  "reproducible_archive": true
 }
