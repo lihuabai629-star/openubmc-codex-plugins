@@ -1,0 +1,20 @@
+{
+  "name": "openubmc-public",
+  "interface": {
+    "displayName": "Openubmc Public"
+  },
+  "plugins": [
+    {
+      "name": "openubmc",
+      "source": {
+        "source": "local",
+        "path": "./plugins/openubmc"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

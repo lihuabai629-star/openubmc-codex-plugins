@@ -1,0 +1,12 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-publish",
+  "version": "1.0.0",
+  "description": "将已验证的 openUBMC Conan 组件包上传到指定远端。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": ["openubmc-developer", "openubmc-build"],
+  "files": ["SKILL.md", "skill.json", "agents/openai.yaml"],
+  "keywords": ["openubmc", "conan", "upload", "publish"],
+  "categories": ["delivery", "release"]
+}

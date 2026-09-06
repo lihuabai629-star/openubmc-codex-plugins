@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC QEMU Testing"
+  short_description: "验证 QEMU launcher、进程、镜像、串口、端口与 smoke"
+  default_prompt: "使用 $openubmc-qemu-testing 发现仓库 launcher，核对实例与镜像身份，执行分层 smoke 并返回 v2 结果。"

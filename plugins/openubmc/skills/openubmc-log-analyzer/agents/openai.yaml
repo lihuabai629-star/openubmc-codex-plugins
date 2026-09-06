@@ -1,0 +1,4 @@
+interface:
+  display_name: "OpenUBMC 日志分析"
+  short_description: "一键采集、解压并分析 openUBMC BMC 日志包"
+  default_prompt: "使用 $openubmc-log-analyzer 采集或读取 openUBMC 一键日志包并在本地分析问题；缺少实时证据时转交 openubmc-debug。"

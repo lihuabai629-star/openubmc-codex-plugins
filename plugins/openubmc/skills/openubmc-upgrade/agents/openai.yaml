@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC Upgrade"
+  short_description: "通过 Redfish 或 WebUI 验证并升级 openUBMC HPM"
+  default_prompt: "使用 $openubmc-upgrade 接收已验证的 HPM 或 build-upgrade handoff，为目标选择 Redfish 或同源 WebUI 升级路径；组件包以匹配任务 Completed/ErrorCode=0 验证，BMC 包以 fresh Manager 版本验证。批量升级使用受控并发和逐目标 journal。"

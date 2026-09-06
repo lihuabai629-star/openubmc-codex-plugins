@@ -1,0 +1,109 @@
+{
+  "skill_name": "openubmc-dt-testing",
+  "sample_repo": "git@gitcode.com:openUBMC/network_adapter.git",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我 clone 了 network_adapter 组件（git clone git@gitcode.com:openUBMC/network_adapter.git），现在需要为 src/lualib/upgrade/parser_cfg.lua 模块新增一个 UT 用例，测试 extract_upgrade_file 函数在传入根目录路径 '/Firmware1' 时的行为。请帮我编写测试代码并告诉我怎么集成到现有 UT 中。",
+      "expected_output": "在已有的 test/unit/test_upgrade/test_parser_cfg.lua 中新增测试函数，并确认 test/unit/test.lua 已通过 require 'test_upgrade' 加载",
+      "files": [
+        "test/unit/test_upgrade/test_parser_cfg.lua",
+        "test/unit/test.lua",
+        "src/lualib/upgrade/parser_cfg.lua"
+      ],
+      "expectations": [
+        "在 test/unit/test_upgrade/test_parser_cfg.lua 中新增测试函数",
+        "测试函数名以 test_ 开头，如 test_parse_dir_root_path",
+        "使用了 lu.assertEquals 验证返回值",
+        "没有创建新的入口文件，复用了现有的 test/unit/test.lua",
+        "确认 test.lua 中已有 require 'test_upgrade' 加载链",
+        "使用 bingo test -ut 运行",
+        "没有使用 bingo test --unit 等非官方命令"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "network_adapter 组件的集成测试在 test/integration/ 下。我想新增一个 IT 场景，验证通过 D-Bus 查询 NetworkAdapter 对象的 SlotNumber 属性。请参考现有的 test_network_adapter.conf 和 test_network_adapter.lua 的结构，帮我把这个测试加进去。",
+      "expected_output": "在现有 IT 入口 test_network_adapter.lua 中新增测试函数，使用 mdb.get_sub_objects 查询并用 lu.assertEquals 断言",
+      "files": [
+        "test/integration/test_network_adapter.conf",
+        "test/integration/test_network_adapter.lua",
+        "mds/service.json"
+      ],
+      "expectations": [
+        "在 test_network_adapter.lua 的 main 函数中新增测试调用",
+        "使用了 mdb.get_sub_objects 或 mdb.get_object 查询 D-Bus 对象",
+        "使用了 lu.assertEquals 验证 SlotNumber 属性值",
+        "没有创建新的 .conf 文件（复用现有配置）",
+        "确认 service.json 中 test 依赖已包含所需组件",
+        "使用 bingo test -it 运行",
+        "理解了 test_network_adapter.lua 中 skynet.start → dbus_launch → uniqueservice → main 的调用链"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "network_adapter 的 UT 中有一个 test_utils.lua 文件，里面用 create_mds_object 函数 mock 了 MDS 对象。我现在要为一个新模块写 UT，这个模块依赖 network_adapter 的 MDS 对象属性（如 SlotNumber、Model）。请参考 test_utils.lua 的 mock 方式，帮我编写测试代码。",
+      "expected_output": "使用 test_utils.create_mds_object 创建 mock 对象，设置属性后进行测试",
+      "files": [
+        "test/unit/test_utils.lua",
+        "test/unit/device/class/test_network_adapter.lua"
+      ],
+      "expectations": [
+        "使用了 test_utils.create_mds_object 创建 mock MDS 对象",
+        "通过 props table 设置了 SlotNumber、Model 等属性",
+        "mock 对象包含了 get_object_name、path 等必要方法",
+        "测试函数使用了 LuaUnit 断言验证结果",
+        "没有在 UT 中尝试直接调用 D-Bus",
+        "理解了 setmetatable + __index/__newindex 的 mock 机制"
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "我要给 network_adapter 组件跑一下 UT 覆盖率，看看 src/lualib/upgrade/ 目录下的代码覆盖情况。请告诉我怎么操作，以及怎么看结果。",
+      "expected_output": "运行覆盖率命令并解读结果文件",
+      "files": [],
+      "expectations": [
+        "使用 bingo test -ut -cov 运行覆盖率",
+        "说明了查看 temp/coverage/luacov.report.html 获取可视化报告",
+        "说明了查看 temp/coverage/dt_result.json 获取结构化结果",
+        "提到了增量覆盖率的概念",
+        "没有使用 bingo test --coverage 等非官方命令",
+        "建议关注 upgrade 目录下各模块的行覆盖率"
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "我在 network_adapter 组件执行 bingo test -it 时卡住了，一直没有输出。conf 文件里 include_app 了 persistence、maca、hwdiscovery、ipmi_core，但 service.json 的 test 依赖里少了 libmgmt_protocol。帮我排查和修复。",
+      "expected_output": "识别出 service.json test 依赖缺失导致 IT 卡住，给出修复方案",
+      "files": [
+        "test/integration/test_network_adapter.conf",
+        "mds/service.json"
+      ],
+      "expectations": [
+        "检查了 test_network_adapter.conf 中 include_app 的组件列表",
+        "检查了 service.json 中 dependencies.test 的声明",
+        "识别出 conf 中 include_app 的组件必须在 service.json test 依赖中声明",
+        "给出了在 service.json dependencies.test 中添加缺失依赖的修复方案",
+        "没有建议修改 bingo 命令参数来绕过问题",
+        "提到了 IT 超时卡住的常见原因是依赖缺失或 config:set_start 配置错误"
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "请参考 network_adapter 的测试结构，帮我为 NetworkPort 的 LLDP 使能功能设计一组测试用例。该功能允许通过 RPC 设置网口的 LLDP 发送使能状态，设置成功后属性值应更新。",
+      "expected_output": "结构化的测试用例设计，包含 UT 和 IT 两个层面",
+      "files": [
+        "test/unit/device/class/nic_mgmt/port/test_port_set_lldp_enable.lua"
+      ],
+      "expectations": [
+        "每个用例包含名称、编号、级别、测试类型、预置条件、测试步骤、预期结果",
+        "用例编号格式为 特性_子特性_类型_编号",
+        "覆盖了正常设置 LLDP 使能的场景",
+        "覆盖了设置无效参数的异常场景",
+        "区分了 UT 层面（mock 对象测试函数逻辑）和 IT 层面（D-Bus 接口验证）",
+        "每个用例只有一个主要验证点",
+        "测试步骤 ≤7 步"
+      ]
+    }
+  ]
+}

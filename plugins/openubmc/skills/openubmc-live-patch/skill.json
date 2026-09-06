@@ -1,0 +1,40 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-live-patch",
+  "version": "2.0.0",
+  "description": "规划、应用、验证和回滚 openUBMC 现场单文件临时替换，默认 plan-only，并保留备份、校验和挂载恢复证据。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": [
+    "openubmc-developer",
+    "openubmc-debug"
+  ],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml",
+    "references/live-patch-contract.md",
+    "references/remote-file-patterns.md",
+    "scripts/deploy_current_patch.py",
+    "scripts/deploy_live_file.py",
+    "scripts/infer_live_patch.py",
+    "scripts/rollback_live_file.py",
+    "scripts/runtime_cli.py",
+    "scripts/target_runtime_adapter.py",
+    "openubmc_live_patch/__init__.py",
+    "openubmc_live_patch/runtime_backend.py"
+  ],
+  "keywords": [
+    "openubmc",
+    "live-patch",
+    "plan-only",
+    "rollback",
+    "checksum",
+    "runtime-debug"
+  ],
+  "categories": [
+    "debugging",
+    "runtime",
+    "delivery"
+  ]
+}

@@ -1,0 +1,767 @@
+{
+  "schema_version": 1,
+  "skill_name": "openubmc-developer",
+  "evals": [
+    {
+      "id": "trigger-structural-source-analysis",
+      "covers": [
+        "trigger.structural-positive",
+        "authorization.read-only",
+        "structure.single-writer"
+      ],
+      "prompt": "请分析这个现有 openUBMC 组件为什么由两个模块同时写入 AlarmState，确定当前结构下哪个模块应该负责；只分析，不修改文件。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "Follow the existing state owner and keep adapters read-only.\n",
+          "src/alarm_store.lua": "local M = {}\nfunction M.set(value) M.value = value end\nfunction M.get() return M.value end\nreturn M\n",
+          "src/alarm_policy.lua": "local store = require('alarm_store')\nlocal M = {}\nfunction M.evaluate(active) store.set(active and 'Active' or 'Clear') end\nreturn M\n",
+          "src/alarm_api.lua": "local store = require('alarm_store')\nlocal M = {}\nfunction M.acknowledge() store.set('Clear') end\nfunction M.read() return store.get() end\nreturn M\n",
+          "tests/alarm_policy_spec.lua": "-- policy owns transitions; API exposes reads and commands\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "alarm_policy|policy|策略",
+            "owner|负责|写入"
+          ]
+        },
+        "commands": {
+          "forbidden_patterns": [
+            "git\\s+log"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-exact-source-edit",
+      "covers": [
+        "trigger.source-exact-negative",
+        "authorization.explicit-implementation",
+        "workflow.lightweight"
+      ],
+      "prompt": "现有 openUBMC 组件中，按已确定方案直接修改：在 src/retry_policy.lua 的 clamp 函数最前面增加 value < 0 时 return 0；在 tests/retry_policy_spec.lua 增加 assert(clamp(-1) == 0)；其余代码不变，并运行 python3 tests/verify_retry.py。",
+      "workspace": {
+        "files": {
+          "src/retry_policy.lua": "local M = {}\nfunction M.clamp(requested, maximum)\n    if requested > maximum then return maximum end\n    return requested\nend\nreturn M\n",
+          "tests/retry_policy_spec.lua": "local policy = require('retry_policy')\nassert(policy.clamp(2, 5) == 2)\nassert(policy.clamp(9, 5) == 5)\n",
+          "tests/verify_retry.py": "from pathlib import Path\nsource = Path('src/retry_policy.lua').read_text(encoding='utf-8')\ntest = Path('tests/retry_policy_spec.lua').read_text(encoding='utf-8')\nassert 'requested < 0' in source and 'return 0' in source\nassert 'clamp(-1, 5)' in test and '== 0' in test\nprint('retry policy verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "retry-policy",
+          "argv": [
+            "python3",
+            "tests/verify_retry.py"
+          ],
+          "stdout_contains": [
+            "retry policy verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "workspace_changes": [
+          "src/retry_policy.lua",
+          "tests/retry_policy_spec.lua"
+        ],
+        "skills": {
+          "allowed": [],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "allowed": []
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_retry\\.py"
+          ]
+        },
+        "files": {
+          "src/retry_policy.lua": {
+            "contains": [
+              "requested < 0",
+              "return 0"
+            ]
+          },
+          "tests/retry_policy_spec.lua": {
+            "contains": [
+              "clamp(-1, 5)",
+              "== 0"
+            ]
+          }
+        },
+        "messages": {
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-natural-component-fix",
+      "covers": [
+        "trigger.implementation-positive",
+        "trigger.natural-source-positive",
+        "authorization.explicit-implementation",
+        "workflow.lightweight"
+      ],
+      "prompt": "现有 openUBMC 组件中，这个问题的源码归属还不确定。请修复 thermal_policy：风扇少于 4 个时设置 silent 应返回 InvalidMode，其他模式保持不变；先根据现有实现确定这个业务规则应由哪个模块负责，修改正确位置并运行 python3 tests/verify_thermal.py。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "This is an existing openUBMC component. thermal_policy owns mode validation; adapters only forward requests.\n",
+          "src/thermal_policy.lua": "local M = {}\nfunction M.set_mode(mode, fan_count)\n    return mode\nend\nreturn M\n",
+          "tests/thermal_policy_spec.lua": "local policy = require('thermal_policy')\nassert(policy.set_mode('balanced', 3) == 'balanced')\nassert(policy.set_mode('silent', 4) == 'silent')\n",
+          "tests/verify_thermal.py": "from pathlib import Path\nsource = Path('src/thermal_policy.lua').read_text(encoding='utf-8')\ntest = Path('tests/thermal_policy_spec.lua').read_text(encoding='utf-8')\nassert 'fan_count < 4' in source and 'InvalidMode' in source\nassert \"set_mode('silent', 3)\" in test and 'InvalidMode' in test\nprint('thermal policy verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "thermal-policy",
+          "argv": [
+            "python3",
+            "tests/verify_thermal.py"
+          ],
+          "stdout_contains": [
+            "thermal policy verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "forbid_redundant_unchanged_reads": true,
+        "workspace_changes": [
+          "src/thermal_policy.lua",
+          "tests/thermal_policy_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "allowed": []
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_thermal\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_thermal\\.py",
+            "output_pattern": "thermal policy verified"
+          }
+        ],
+        "files": {
+          "src/thermal_policy.lua": {
+            "contains": [
+              "fan_count < 4",
+              "InvalidMode"
+            ]
+          },
+          "tests/thermal_policy_spec.lua": {
+            "contains": [
+              "set_mode('silent', 3)",
+              "InvalidMode"
+            ]
+          }
+        },
+        "messages": {
+          "scope": "after_target_skill_read",
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-authored-generation-analysis",
+      "covers": [
+        "trigger.generated-chain-positive",
+        "authorization.read-only",
+        "generation.authored-input"
+      ],
+      "prompt": "现有 openUBMC 组件中，只读分析给 Policy 模型增加 LastGoodMode 应该改哪里。仓库里同时有模型、生成后的 Lua 文件和恢复服务；确认哪些文件是输入、哪些由工具生成、哪些调用方会受影响，不要修改文件或手工同步生成物。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "mds/model.json is authored source. generated/policy_db.lua is produced by tools/generate.py and must not be edited directly.\n",
+          "mds/model.json": "{\"objects\":{\"Policy\":{\"properties\":{\"Mode\":{\"type\":\"string\"}}}}}\n",
+          "generated/policy_db.lua": "return { table = 'Policy', fields = {'Mode'} }\n",
+          "src/policy_service.lua": "local M = {}\nfunction M.restore(row) return row.Mode end\nreturn M\n",
+          "tools/generate.py": "# repository generator placeholder\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "allowed": [
+            "references/mdb-mds.md",
+            "references/persistence-compatibility.md"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "mds/model\\.json|authored|模型",
+            "generated/policy_db\\.lua|生成",
+            "policy_service|consumer|消费者"
+          ],
+          "forbidden_patterns": [
+            "手工修改 generated|手动同步 generated|manually edit generated"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-cross-component-owner-analysis",
+      "covers": [
+        "trigger.cross-component-positive",
+        "authorization.read-only",
+        "structure.single-writer"
+      ],
+      "prompt": "只读分析两个现有 openUBMC 组件对 EffectivePowerState 的重复写入。provider 负责采集和归一化，northbound_adapter 负责对外映射；请根据当前依赖方向确定唯一 writer 和正确修改面，不要改文件。",
+      "workspace": {
+        "files": {
+          "provider/src/power_state.lua": "local M = {}\nfunction M.update(raw, store) store:set(raw == 1 and 'On' or 'Off') end\nreturn M\n",
+          "northbound_adapter/src/power_mapping.lua": "local M = {}\nfunction M.publish(raw, store) store:set(raw and 'On' or 'Off') end\nreturn M\n",
+          "contracts/power-state.md": "provider owns acquisition and normalized EffectivePowerState; adapters translate the published state without writing it\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "allowed": [
+            "references/development-guidelines.md",
+            "references/interface-mapping.md"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "provider",
+            "唯一|single|writer|写入者",
+            "adapter|适配"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-exact-path-generated-chain-analysis",
+      "covers": [
+        "trigger.exact-path-judgment-positive",
+        "authorization.read-only",
+        "generation.authored-input"
+      ],
+      "prompt": "现有 openUBMC 组件中，请只读评估 mds/model.json 中 Policy.Mode 增加 Recovery 枚举是否能只改这个文件。虽然路径已经明确，仍需根据仓库现有生成链、派生文件和恢复调用方确定完整修改面；不要修改文件或手工同步生成物。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "mds/model.json is authored input. tools/generate.py creates generated/policy_db.lua. Restore behavior is owned by src/policy_restore.lua.\n",
+          "mds/model.json": "{\"objects\":{\"Policy\":{\"properties\":{\"Mode\":{\"type\":\"string\",\"enum\":[\"Normal\",\"Safe\"]}}}}}\n",
+          "tools/generate.py": "# reads mds/model.json and writes generated/policy_db.lua\n",
+          "generated/policy_db.lua": "return { Mode = {'Normal', 'Safe'} }\n",
+          "src/policy_restore.lua": "local model = require('policy_db')\nlocal M = {}\nfunction M.restore(row) return row.Mode end\nreturn M\n",
+          "tests/policy_restore_spec.lua": "-- restored Mode must be accepted by the generated model contract\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "allowed": [
+            "references/mdb-mds.md",
+            "references/persistence-compatibility.md"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "mds/model\\.json|authored|输入",
+            "tools/generate\\.py|generator|生成器",
+            "generated/policy_db\\.lua|派生|生成物",
+            "policy_restore|调用方|consumer"
+          ],
+          "forbidden_patterns": [
+            "只需修改 mds/model\\.json|only change mds/model\\.json"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-product-assembly-source-analysis",
+      "covers": [
+        "trigger.product-assembly-positive",
+        "authorization.read-only",
+        "generation.authored-input"
+      ],
+      "prompt": "现有 openUBMC 产品装配要加入 telemetry_service。请只读分析 product/manifest.yaml、services/telemetry/service.json 和启动注册表之间的 authored/生成关系，确定依赖顺序与完整源码修改面；本轮不修改、不构建。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "product/manifest.yaml and services/*/service.json are authored assembly source. generated/startup_registry.lua is rendered by tools/render_product.py.\n",
+          "product/manifest.yaml": "services:\n  - inventory_service\n",
+          "services/inventory/service.json": "{\"name\":\"inventory_service\",\"after\":[]}\n",
+          "services/telemetry/service.json": "{\"name\":\"telemetry_service\",\"after\":[\"inventory_service\"]}\n",
+          "tools/render_product.py": "# combines product/manifest.yaml with service metadata\n",
+          "generated/startup_registry.lua": "return {'inventory_service'}\n",
+          "src/startup_loader.lua": "local registry = require('startup_registry')\nreturn function(start) for _, name in ipairs(registry) do start(name) end end\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-build"
+          ]
+        },
+        "references": {
+          "allowed": [
+            "references/startup-product-assembly.md"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "product/manifest\\.yaml",
+            "services/telemetry/service\\.json|service metadata|服务元数据",
+            "render_product|生成",
+            "inventory_service|依赖|after"
+          ],
+          "forbidden_patterns": [
+            "已构建|build succeeded|构建完成"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-tiny-known-location-edit",
+      "covers": [
+        "trigger.tiny-lightweight",
+        "workflow.lightweight"
+      ],
+      "prompt": "把 docs/component.md 第 3 行的 recieve 改成 receive，只改这一处并检查结果。",
+      "workspace": {
+        "files": {
+          "docs/component.md": "# Component\n\nThe service can recieve events.\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "tiny-edit",
+          "argv": [
+            "python3",
+            "-c",
+            "from pathlib import Path; text=Path('docs/component.md').read_text(); assert 'receive' in text and 'recieve' not in text; print('tiny edit verified')"
+          ],
+          "stdout_contains": [
+            "tiny edit verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "workspace_changes": [
+          "docs/component.md"
+        ],
+        "skills": {
+          "allowed": [],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "allowed": []
+        },
+        "files": {
+          "docs/component.md": {
+            "contains": [
+              "receive"
+            ],
+            "not_contains": [
+              "recieve"
+            ]
+          }
+        },
+        "messages": {
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-mechanical-source-edit",
+      "covers": [
+        "trigger.source-mechanical-negative",
+        "workflow.lightweight"
+      ],
+      "prompt": "把 src/defaults.lua 中已经确认的 RETRY_LIMIT 从 3 改成 4，只改这个常量并运行 python3 tests/verify_defaults.py。",
+      "workspace": {
+        "files": {
+          "src/defaults.lua": "return { RETRY_LIMIT = 3 }\n",
+          "tests/verify_defaults.py": "from pathlib import Path\ntext = Path('src/defaults.lua').read_text(encoding='utf-8')\nassert 'RETRY_LIMIT = 4' in text and 'RETRY_LIMIT = 3' not in text\nprint('defaults verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "mechanical-source-edit",
+          "argv": [
+            "python3",
+            "tests/verify_defaults.py"
+          ],
+          "stdout_contains": [
+            "defaults verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "workspace_changes": [
+          "src/defaults.lua"
+        ],
+        "skills": {
+          "allowed": [],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "allowed": []
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_defaults\\.py"
+          ]
+        },
+        "files": {
+          "src/defaults.lua": {
+            "contains": [
+              "RETRY_LIMIT = 4"
+            ],
+            "not_contains": [
+              "RETRY_LIMIT = 3"
+            ]
+          }
+        },
+        "messages": {
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-source-and-build-preflight",
+      "covers": [
+        "trigger.mixed-source-build",
+        "authorization.explicit-implementation",
+        "authorization.downstream-explicit-only"
+      ],
+      "prompt": "现有 openUBMC 组件中，这个问题的源码归属还不确定。请修复 thermal_policy：风扇少于 4 个时设置 silent 应返回 InvalidMode；先根据现有实现确定这个业务规则应由哪个模块负责，修改正确位置并运行 python3 tests/verify_thermal.py；源码验证通过后继续做组件编译前检查，但本轮不要真正构建、升级或发布。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "This is an existing openUBMC component. thermal_policy owns validation; keep source verification separate from build preflight.\n",
+          "src/thermal_policy.lua": "local M = {}\nfunction M.set_mode(mode, fan_count)\n    return mode\nend\nreturn M\n",
+          "tests/thermal_policy_spec.lua": "local policy = require('thermal_policy')\nassert(policy.set_mode('balanced', 3) == 'balanced')\nassert(policy.set_mode('silent', 4) == 'silent')\n",
+          "tests/verify_thermal.py": "from pathlib import Path\nsource = Path('src/thermal_policy.lua').read_text(encoding='utf-8')\ntest = Path('tests/thermal_policy_spec.lua').read_text(encoding='utf-8')\nassert 'fan_count < 4' in source and 'InvalidMode' in source\nassert \"set_mode('silent', 3)\" in test and 'InvalidMode' in test\nprint('mixed thermal source verified')\n",
+          "conanfile.py": "# component recipe\n",
+          "mds/service.json": "{\"name\": \"sample\", \"version\": \"1.0.0\"}\n"
+        },
+        "git": {
+          "dirty_files": {}
+        }
+      },
+      "post_checks": [
+        {
+          "name": "mixed-source",
+          "argv": [
+            "python3",
+            "tests/verify_thermal.py"
+          ],
+          "stdout_contains": [
+            "mixed thermal source verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "workspace_changes": [
+          "src/thermal_policy.lua",
+          "tests/thermal_policy_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer",
+            "openubmc-build"
+          ],
+          "allowed": [
+            "openubmc-developer",
+            "openubmc-build"
+          ],
+          "forbidden": [
+            "openubmc-upgrade",
+            "openubmc-publish"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_thermal\\.py"
+          ],
+          "forbidden_patterns": [
+            "bmcgo\\s+build(?!\\s+(?:-h|--help)(?:\\s|$))|conan\\s+(?:create|build|upload)"
+          ]
+        },
+        "files": {
+          "src/thermal_policy.lua": {
+            "contains": [
+              "fan_count < 4",
+              "InvalidMode"
+            ]
+          },
+          "tests/thermal_policy_spec.lua": {
+            "contains": [
+              "set_mode('silent', 3)",
+              "InvalidMode"
+            ]
+          },
+          "mds/service.json": {
+            "equals": "{\"name\": \"sample\", \"version\": \"1.0.0\"}\n"
+          }
+        },
+        "messages": {
+          "required_patterns": [
+            "源码|source",
+            "构建|build",
+            "检查|preflight|输入"
+          ],
+          "forbidden_patterns": [
+            "已升级|uploaded|activated|已发布"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-build-only-task",
+      "covers": [
+        "trigger.build-negative",
+        "authorization.downstream-explicit-only"
+      ],
+      "prompt": "现有 openUBMC 组件源码已经准备好。我只需要进行组件编译前检查并了解构建所需输入，不修改源码，本轮不要真正构建。",
+      "workspace": {
+        "files": {
+          "conanfile.py": "# component recipe\n",
+          "mds/service.json": "{\"name\": \"sample\"}\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-build"
+          ],
+          "allowed": [
+            "openubmc-build"
+          ],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "Git|HEAD|工作树|worktree",
+            "changed|修改|生成|generate"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-runtime-diagnosis-only",
+      "covers": [
+        "trigger.runtime-negative",
+        "authorization.read-only"
+      ],
+      "prompt": "我需要诊断运行中 BMC 上服务反复重启的问题，只做目标侧证据采集和运行时诊断，不修改源码；先说明还需要哪些目标信息。",
+      "workspace": {
+        "files": {}
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-debug"
+          ],
+          "allowed": [
+            "openubmc-debug"
+          ],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "目标|target|BMC",
+            "证据|日志|evidence|log"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-new-component-scaffold",
+      "covers": [
+        "trigger.scaffold-negative"
+      ],
+      "prompt": "我要新建一个 openUBMC 组件，目标目录还不存在。先检查创建脚手架需要哪些输入和生成器能力，不实际生成文件。",
+      "workspace": {
+        "files": {}
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-component-creator"
+          ],
+          "allowed": [
+            "openubmc-component-creator"
+          ],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "generator|生成器|模板",
+            "组件名|名称|name|目录"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-shared-testing-infrastructure",
+      "covers": [
+        "trigger.shared-testing-owner",
+        "testing.shared-infrastructure-explicit"
+      ],
+      "prompt": "请修改当前工作区 test_infra/ 下跨多个 openUBMC 组件复用的 runner、fixture 和 mock 生命周期：每个 suite 使用独立临时目录和 registry，任一 case 抛异常也必须清理；运行 python3 tests/verify_test_infra.py。只改共享测试基础设施，不修改组件业务代码。",
+      "workspace": {
+        "files": {
+          "test_infra/__init__.py": "",
+          "test_infra/runner.py": "from .fixtures import shared_fixture\n\ndef run_suite(cases):\n    fixture = shared_fixture()\n    results = [case(fixture) for case in cases]\n    fixture.cleanup()\n    return results\n",
+          "test_infra/fixtures.py": "from pathlib import Path\nimport tempfile\n\n_SHARED_ROOT = Path(tempfile.mkdtemp(prefix='openubmc-tests-'))\n_MOCKS = {}\n\nclass Fixture:\n    def __init__(self):\n        self.root = _SHARED_ROOT\n        self.mocks = _MOCKS\n\n    def cleanup(self):\n        self.mocks.clear()\n\ndef shared_fixture():\n    return Fixture()\n",
+          "tests/verify_test_infra.py": "from pathlib import Path\nimport shutil\nimport sys\n\nsys.path.insert(0, str(Path(__file__).resolve().parents[1]))\n\nfrom test_infra.runner import run_suite\n\nroots = []\n\ndef remember(fixture, value):\n    roots.append(Path(fixture.root))\n    fixture.mocks['value'] = value\n    return value\n\ntry:\n    assert run_suite([lambda fixture: remember(fixture, 'first')]) == ['first']\n    assert not roots[-1].exists()\n\n    def fail(fixture):\n        remember(fixture, 'failed')\n        raise RuntimeError('boom')\n\n    try:\n        run_suite([fail])\n    except RuntimeError:\n        pass\n    else:\n        raise AssertionError('failure did not propagate')\n\n    assert not roots[-1].exists()\n    assert len(set(roots)) == 2\nfinally:\n    for root in roots:\n        shutil.rmtree(root, ignore_errors=True)\n\nprint('shared test infra verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "shared-test-infra",
+          "argv": [
+            "python3",
+            "tests/verify_test_infra.py"
+          ],
+          "stdout_contains": [
+            "shared test infra verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "workspace_changes": [
+          "test_infra/fixtures.py",
+          "test_infra/runner.py"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-dt-testing"
+          ],
+          "allowed": [
+            "openubmc-dt-testing"
+          ],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_test_infra\\.py"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "runner|运行器",
+            "fixture|mock|清理|cleanup"
+          ]
+        }
+      }
+    },
+    {
+      "id": "trigger-upgrade-only-task",
+      "covers": [
+        "trigger.deployment-negative",
+        "authorization.downstream-explicit-only"
+      ],
+      "prompt": "我已有构建完成的 openUBMC HPM，准备升级一台 BMC。先做升级输入检查和计划，不上传、不激活，也不修改源码。",
+      "workspace": {
+        "files": {}
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-upgrade"
+          ],
+          "allowed": [
+            "openubmc-upgrade"
+          ],
+          "forbidden": [
+            "openubmc-developer"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "HPM|路径|path",
+            "SHA-256|sha256|版本|version",
+            "目标|target|BMC"
+          ]
+        }
+      }
+    }
+  ]
+}

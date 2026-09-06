@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC Build"
+  short_description: "Plan, run, and verify openUBMC builds"
+  default_prompt: "Use $openubmc-build to select the mode that safely contains the command's actual effects, preserve my exact command, reuse the selected checkout, and return checked local build evidence or locally finalized artifact evidence."

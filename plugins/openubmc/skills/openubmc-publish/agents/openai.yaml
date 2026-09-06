@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC Publish"
+  short_description: "将已验证的 openUBMC Conan 组件包发布到指定远端"
+  default_prompt: "使用 $openubmc-publish 发布已验证的 openUBMC Conan 组件包。"

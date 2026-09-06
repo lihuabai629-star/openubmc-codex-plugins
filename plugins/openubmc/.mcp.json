@@ -1,0 +1,57 @@
+{
+  "mcpServers": {
+    "openubmc-target-runtime": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "-I",
+        "./scripts/pluginctl.py",
+        "runtime",
+        "--prepare-on-start"
+      ],
+      "cwd": "./",
+      "env_vars": [
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "OPENUBMC_CREDENTIALS_FILE",
+        "OPENUBMC_TARGET_RUNTIME_STATE_DIR",
+        "OPENUBMC_MCP_FORMAL_RUN",
+        "OPENUBMC_MCP_CLIENT",
+        "OPENUBMC_MCP_TASK_ID",
+        "OPENUBMC_MCP_SESSION_ID",
+        "OPENUBMC_MCP_MODEL_IDENTITY",
+        "OPENUBMC_MCP_CODEX_IDENTITY",
+        "OPENUBMC_MCP_SOURCE_COMMIT",
+        "OPENUBMC_MCP_LIFECYCLE_DIR"
+      ],
+      "startup_timeout_sec": 600,
+      "tool_timeout_sec": 900,
+      "required": true
+    },
+    "openubmc-kb": {
+      "type": "stdio",
+      "command": "python3",
+      "args": [
+        "-I",
+        "./scripts/pluginctl.py",
+        "kb",
+        "--prepare-on-start"
+      ],
+      "cwd": "./",
+      "env_vars": [
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "OPENUBMC_CREDENTIALS_FILE",
+        "OPENUBMC_KB_CONFIG",
+        "OPENUBMC_KB_USERNAME",
+        "OPENUBMC_KB_PASSWORD",
+        "OPENUBMC_KB_CLIENT_SECRET"
+      ],
+      "startup_timeout_sec": 600,
+      "tool_timeout_sec": 900,
+      "required": true
+    }
+  }
+}

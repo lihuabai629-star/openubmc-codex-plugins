@@ -1,0 +1,56 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-qemu-testing",
+  "version": "2.0.0",
+  "description": "基于仓库 launcher 验证 openUBMC QEMU 的进程、镜像、串口、端口、guest readiness 和 smoke 分类。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "components": [
+      "qemu",
+      "launcher",
+      "serial",
+      "ports",
+      "smoke-test"
+    ]
+  },
+  "relatedSkills": [
+    "openubmc-developer",
+    "openubmc-build",
+    "openubmc-dt-testing",
+    "openubmc-debug",
+    "openubmc-qemu-arm-kvm",
+    "openubmc-qemu-resource-tree-debug"
+  ],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml",
+    "references/qemu-verification.md"
+  ],
+  "keywords": [
+    "openubmc",
+    "qemu",
+    "launcher",
+    "pid",
+    "serial",
+    "port-mapping",
+    "image-identity",
+    "smoke-test"
+  ],
+  "categories": [
+    "testing",
+    "troubleshooting",
+    "virtualization"
+  ],
+  "usage": {
+    "prompts": [
+      "从仓库 launcher 启动并验证 openUBMC QEMU",
+      "核对 QEMU PID 和镜像身份",
+      "分析 QEMU 串口和端口映射",
+      "执行 openUBMC QEMU smoke 分类",
+      "安全停止本任务拥有的 QEMU 实例"
+    ]
+  }
+}

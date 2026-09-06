@@ -1,0 +1,43 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-environment-setup",
+  "version": "2.6.0",
+  "description": "自动安装、检查、修复、更新或卸载统一的 openUBMC Agent 工作流环境。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": [
+    "openubmc-debug",
+    "openubmc-log-analyzer",
+    "openubmc-developer",
+    "openubmc-build",
+    "openubmc-upgrade",
+    "openubmc-live-patch",
+    "openubmc-dt-testing",
+    "openubmc-publish",
+    "openubmc-lua-component",
+    "openubmc-qemu-testing"
+  ],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml",
+    "assets/hw_ibmc_bmcgo-0.7.51-py3-none-any.whl",
+    "scripts/client_config.py",
+    "scripts/install_environment.py",
+    "tests/test_client_config.py",
+    "tests/test_install_environment.py",
+    "tests/test_bootstrap.py"
+  ],
+  "keywords": [
+    "openubmc",
+    "environment",
+    "workflow",
+    "skills",
+    "target-runtime",
+    "mcp",
+    "knowledge-base",
+    "wsl",
+    "docker"
+  ],
+  "categories": ["setup", "environment"]
+}

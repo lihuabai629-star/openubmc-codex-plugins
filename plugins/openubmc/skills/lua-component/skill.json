@@ -1,0 +1,44 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-lua-component",
+  "version": "4.0.0",
+  "description": "仅供用户显式调用的兼容入口；将手写 Lua 源码改动交给 openubmc-developer 的 Lua reference，不参与自动路由。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "components": [
+      "skynet",
+      "mdb",
+      "lua-sdk",
+      "dt",
+      "luaunit"
+    ]
+  },
+  "relatedSkills": ["openubmc-developer"],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml"
+  ],
+  "keywords": [
+    "lua",
+    "handwritten-lua",
+    "mdb",
+    "lua-sdk",
+    "skynet",
+    "rpc",
+    "openubmc",
+    "compatibility-entry",
+    "explicit-invocation"
+  ],
+  "categories": [
+    "development",
+    "lua"
+  ],
+  "usage": {
+    "prompts": [
+      "显式使用旧的 openubmc-lua-component 入口"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+interface:
+  display_name: "openUBMC Lua Component"
+  short_description: "显式兼容入口，转入统一 Developer 工作流"
+  default_prompt: "Use $openubmc-lua-component as an explicit compatibility entry and continue the Lua source change through $openubmc-developer."
+
+policy:
+  allow_implicit_invocation: false

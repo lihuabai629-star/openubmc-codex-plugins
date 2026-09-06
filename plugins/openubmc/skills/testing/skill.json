@@ -1,0 +1,59 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-dt-testing",
+  "version": "2.0.0",
+  "description": "编写和执行 openUBMC 组件的 UT/IT 测试，涵盖 LuaUnit 用例编写、Mock 打桩、集成测试配置、覆盖率分析和测试用例设计。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "openubmc": {
+    "minVersion": "1.0.0",
+    "maxVersion": "2.0.0",
+    "components": ["dt", "luaunit", "ut", "it", "luacov"]
+  },
+  "dependencies": {
+    "bingo-cli": ">=1.0.0",
+    "luaunit": ">=3.4"
+  },
+  "relatedSkills": [
+    "openubmc-developer",
+    "openubmc-qemu-testing"
+  ],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml",
+    "evals/evals.json"
+  ],
+  "keywords": [
+    "testing",
+    "unit-test",
+    "integration-test",
+    "dt",
+    "ut",
+    "it",
+    "coverage",
+    "luacov",
+    "case-guide",
+    "luaunit",
+    "mock",
+    "openubmc"
+  ],
+  "categories": [
+    "testing",
+    "quality"
+  ],
+  "usage": {
+    "prompts": [
+      "编写单元测试",
+      "编写集成测试",
+      "运行UT",
+      "运行IT",
+      "bingo test",
+      "测试覆盖率",
+      "设计测试用例",
+      "LuaUnit断言",
+      "Mock打桩",
+      "测试数据准备"
+    ]
+  }
+}

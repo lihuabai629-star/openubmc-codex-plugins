@@ -1,0 +1,768 @@
+{
+  "version": "2026-04-07",
+  "sources": [
+    "NotebookLM: openUBMC architecture notebook",
+    "NotebookLM Q&A: login / object-sync / startup troubleshooting",
+    "Local bundle inventory: openUBMC_20260204-0112.tar",
+    "Log bundle replay with a sanitized fixture"
+  ],
+  "directories": {
+    "LogDump": "Core runtime logs (primary entry for most issues)",
+    "AppDump": "Per-component private logs and MDB snapshots",
+    "RTOSDump": "OS/systemd/kernel logs and system info",
+    "OSDump": "Serial/console recordings",
+    "SpLogDump": "Platform/version or special logs",
+    "BMALogDump": "Host agent / in-band logs",
+    "DeviceDump": "Device-specific low-level logs"
+  },
+  "files": [
+    {
+      "name": "app.log",
+      "paths": ["dump_info/LogDump/app.log"],
+      "component": "business components",
+      "purpose": "component runtime and business logic errors",
+      "keywords": ["error", "exception", "业务", "功能异常", "组件", "报错", "逻辑异常", "接口失败"]
+    },
+    {
+      "name": "framework.log",
+      "paths": ["dump_info/LogDump/framework.log"],
+      "component": "framework (maca/hwdiscovery/hwproxy)",
+      "purpose": "service start/stop, crash/respawn, CSR object load",
+      "keywords": ["startup", "crash", "respawn", "hwdiscovery", "hwproxy", "maca", "启动失败", "进程重启", "拉起失败", "反复重启", "上树失败", "资源树"]
+    },
+    {
+      "name": "operation.log",
+      "paths": ["dump_info/LogDump/operation.log"],
+      "component": "operation_logger / oms",
+      "purpose": "user operations audit",
+      "keywords": ["audit", "operation", "login", "配置", "操作", "命令", "登录失败", "认证失败", "账号锁定", "修改密码", "配置变更"]
+    },
+    {
+      "name": "security.log",
+      "paths": ["dump_info/LogDump/security.log"],
+      "component": "security/iam",
+      "purpose": "auth and security events",
+      "keywords": ["login", "auth", "permission", "证书", "签名", "失败", "安全", "登录失败", "bmc登录失败", "bmc 登录失败", "web登录失败", "web 登录失败", "ssh登录失败", "ssh 登录失败", "无法登录", "认证失败", "密码错误", "账号锁定", "账户锁定", "权限异常"]
+    },
+    {
+      "name": "maintenance.log",
+      "paths": ["dump_info/LogDump/maintenance.log"],
+      "component": "maintenance",
+      "purpose": "maintenance events and fault codes",
+      "keywords": ["maintenance", "fault", "维护", "故障码"]
+    },
+    {
+      "name": "running.log",
+      "paths": ["dump_info/LogDump/running.log"],
+      "component": "system monitor",
+      "purpose": "runtime anomalies and key process events",
+      "keywords": ["running", "anomaly", "健康", "稳定", "异常", "卡顿", "波动", "不稳定"]
+    },
+    {
+      "name": "sensor.log",
+      "paths": ["dump_info/LogDump/sensor.log"],
+      "component": "sensor",
+      "purpose": "sensor events, SEL, read failures",
+      "keywords": ["sensor", "SEL", "reading", "传感器", "读值", "告警"]
+    },
+    {
+      "name": "alarm.log",
+      "paths": ["dump_info/LogDump/alarm.log"],
+      "component": "event/alarm",
+      "purpose": "alarm assert/deassert lifecycle",
+      "keywords": ["alarm", "assert", "deassert", "告警", "事件"]
+    },
+    {
+      "name": "cooling_control.log",
+      "paths": ["dump_info/LogDump/cooling_control.log"],
+      "component": "cooling/thermal_mgmt",
+      "purpose": "fan control strategy computation",
+      "keywords": ["fan", "cooling", "thermal", "风扇", "温控", "散热"]
+    },
+    {
+      "name": "Thermal.log",
+      "paths": ["dump_info/LogDump/Thermal.log"],
+      "component": "thermal_mgmt",
+      "purpose": "thermal policy debug",
+      "keywords": ["thermal", "温度", "过温", "策略"]
+    },
+    {
+      "name": "bmc_health.log",
+      "paths": ["dump_info/LogDump/bmc_health.log"],
+      "component": "bmc_health",
+      "purpose": "CPU/memory usage stats",
+      "keywords": ["cpu", "memory", "performance", "性能", "资源"]
+    },
+    {
+      "name": "ps_black_box.log",
+      "paths": ["dump_info/LogDump/ps_black_box.log"],
+      "component": "power_mgmt",
+      "purpose": "PSU black-box snapshots",
+      "keywords": ["psu", "power", "电源", "黑匣子", "故障"]
+    },
+    {
+      "name": "net_stream.log",
+      "paths": ["dump_info/LogDump/net_stream.log"],
+      "component": "network stack",
+      "purpose": "network traffic/protocol summaries",
+      "keywords": ["network", "ncsi", "lan", "链路", "网络"]
+    },
+    {
+      "name": "hw_stream.log",
+      "paths": ["dump_info/LogDump/hw_stream.log"],
+      "component": "hwproxy/driver",
+      "purpose": "hardware bus traffic summaries",
+      "keywords": ["i2c", "pcie", "hwproxy", "总线", "硬件"]
+    },
+    {
+      "name": "mc_stream.log",
+      "paths": ["dump_info/LogDump/mc_stream.log"],
+      "component": "micro-component",
+      "purpose": "inter-component RPC flow",
+      "keywords": ["rpc", "mdb", "dbus", "组件间", "调用"]
+    },
+    {
+      "name": "journalctl.log",
+      "paths": ["dump_info/RTOSDump/sysinfo/journalctl.log"],
+      "component": "systemd",
+      "purpose": "systemd journal logs",
+      "keywords": ["systemd", "service", "boot", "启动", "失败", "kernel"]
+    },
+    {
+      "name": "raid_controller_lib.log",
+      "paths": ["dump_info/AppDump/storage/raid_controller_lib.log"],
+      "component": "storage",
+      "purpose": "RAID library/hardware interaction",
+      "keywords": ["raid", "storage", "timeout", "控制器", "阵列"]
+    },
+    {
+      "name": "dmesg_info",
+      "paths": ["dump_info/LogDump/dmesg_info"],
+      "component": "kernel",
+      "purpose": "kernel ring buffer snapshot",
+      "keywords": ["dmesg", "ext4", "oom", "io error", "内核", "驱动"]
+    },
+    {
+      "name": "linux_kernel_log",
+      "paths": ["dump_info/LogDump/linux_kernel_log"],
+      "component": "kernel/driver",
+      "purpose": "driver layer logs",
+      "keywords": ["i2c", "smbus", "ncsi", "pcie", "driver", "链路"]
+    },
+    {
+      "name": "cpumem_usage_info_dump.csv",
+      "paths": ["dump_info/LogDump/cpumem_usage_info_dump.csv"],
+      "component": "bmc_health",
+      "purpose": "CPU/memory usage history",
+      "keywords": ["cpu", "memory", "performance", "性能", "资源"]
+    },
+    {
+      "name": "mem_info_*.csv",
+      "paths": ["dump_info/LogDump/mem_info_*.csv"],
+      "component": "system monitor",
+      "purpose": "memory usage breakdown by subsystem",
+      "keywords": ["memory", "rss", "slab", "pagetables", "内存", "泄漏"]
+    },
+    {
+      "name": "remote_log",
+      "paths": ["dump_info/LogDump/remote_log"],
+      "component": "remote_console",
+      "purpose": "KVM/virtual media session logs",
+      "keywords": ["kvm", "vmm", "virtual media", "远程控制台", "挂载失败"]
+    },
+    {
+      "name": "LSI_RAID_Controller_Log",
+      "paths": ["dump_info/LogDump/LSI_RAID_Controller_Log"],
+      "component": "storage",
+      "purpose": "RAID controller firmware logs",
+      "keywords": ["lsi", "raid", "scsi", "timeout", "掉盘"]
+    },
+    {
+      "name": "M3LogDump/m3_log",
+      "paths": ["dump_info/LogDump/M3LogDump/m3_log"],
+      "component": "soc m3",
+      "purpose": "M3 co-processor boot/power logs",
+      "keywords": ["m3", "watchdog", "reset", "power sequence", "上电", "重启"]
+    },
+    {
+      "name": "netcard_info.txt",
+      "paths": ["dump_info/LogDump/netcard/netcard_info.txt"],
+      "component": "network_adapter",
+      "purpose": "NIC inventory and status dump",
+      "keywords": ["nic", "optics", "link", "网卡", "光模块"]
+    },
+    {
+      "name": "pcie_error_log.bin",
+      "paths": ["dump_info/LogDump/pciecard/*/error_log_*.bin"],
+      "component": "pcie_device",
+      "purpose": "PCIe device firmware error log (binary)",
+      "keywords": ["pcie", "dpu", "npu", "error log", "固件", "崩溃"]
+    },
+    {
+      "name": "pcie_operate_log.bin",
+      "paths": ["dump_info/LogDump/pciecard/*/operate_log_*.bin"],
+      "component": "pcie_device",
+      "purpose": "PCIe device operation log (binary)",
+      "keywords": ["pcie", "operate log", "状态机", "行为轨迹"]
+    },
+    {
+      "name": "storage_ctrllog",
+      "paths": ["dump_info/LogDump/storage/ctrllog"],
+      "component": "storage",
+      "purpose": "RAID controller firmware log",
+      "keywords": ["raid", "controller", "firmware", "掉盘", "初始化失败"]
+    },
+    {
+      "name": "storage_smartattribute",
+      "paths": ["dump_info/LogDump/storage/drivelog/*/SMARTAttribute"],
+      "component": "storage",
+      "purpose": "disk SMART attributes snapshot",
+      "keywords": ["smart", "disk", "reallocated", "健康", "预警"]
+    },
+    {
+      "name": "storage_sata_log",
+      "paths": ["dump_info/LogDump/storage/drivelog/*/SATA_Log"],
+      "component": "storage",
+      "purpose": "SATA log data",
+      "keywords": ["sata", "udma", "crc", "链路", "传输"]
+    },
+    {
+      "name": "storage_phy_error_count",
+      "paths": ["dump_info/LogDump/storage/phy/*/PHY_Error_Count.csv"],
+      "component": "storage",
+      "purpose": "SAS PHY error counters",
+      "keywords": ["sas", "phy", "crc", "sync", "背板", "线缆"]
+    },
+    {
+      "name": "veth_drv_info",
+      "paths": ["dump_info/RTOSDump/driver_info/veth_drv_info"],
+      "component": "rtos",
+      "purpose": "virtual ethernet driver state",
+      "keywords": ["veth", "inband", "host agent", "带内", "连接失败"]
+    },
+    {
+      "name": "cdev_drv_info",
+      "paths": ["dump_info/RTOSDump/driver_info/cdev_drv_info"],
+      "component": "rtos",
+      "purpose": "character device driver state (KCS/BT/SMIC)",
+      "keywords": ["kcs", "ipmi", "cdev", "bt", "smic"]
+    },
+    {
+      "name": "edma_drv_info",
+      "paths": ["dump_info/RTOSDump/driver_info/edma_drv_info"],
+      "component": "rtos",
+      "purpose": "EDMA driver state",
+      "keywords": ["edma", "dma", "unknown symbol", "传输"]
+    },
+    {
+      "name": "kbox_info",
+      "paths": ["dump_info/RTOSDump/driver_info/kbox_info"],
+      "component": "rtos",
+      "purpose": "kernel blackbox snapshot",
+      "keywords": ["panic", "watchdog", "reset", "kbox"]
+    },
+    {
+      "name": "lsmod_info",
+      "paths": ["dump_info/RTOSDump/driver_info/lsmod_info"],
+      "component": "rtos",
+      "purpose": "loaded kernel modules",
+      "keywords": ["lsmod", "module", "driver", "模块"]
+    },
+    {
+      "name": "rtos_dmesg_info",
+      "paths": ["dump_info/RTOSDump/driver_info/dmesg_info"],
+      "component": "rtos",
+      "purpose": "kernel ring buffer output",
+      "keywords": ["dmesg", "kernel", "driver", "内核"]
+    },
+    {
+      "name": "services",
+      "paths": ["dump_info/RTOSDump/networkinfo/services"],
+      "component": "rtos",
+      "purpose": "network services mapping/status",
+      "keywords": ["service", "port", "网络服务"]
+    },
+    {
+      "name": "resolv.conf",
+      "paths": ["dump_info/RTOSDump/networkinfo/resolv.conf"],
+      "component": "rtos",
+      "purpose": "DNS configuration",
+      "keywords": ["dns", "resolv", "解析失败"]
+    },
+    {
+      "name": "dhclient.conf",
+      "paths": ["dump_info/RTOSDump/networkinfo/dhclient.conf", "dump_info/RTOSDump/networkinfo/dhclient6.conf"],
+      "component": "rtos",
+      "purpose": "DHCP client config/lease",
+      "keywords": ["dhcp", "lease", "ip获取", "dhclient"]
+    },
+    {
+      "name": "iptables_nat_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/iptables_nat_info", "dump_info/RTOSDump/networkinfo/ip6tables_nat_info"],
+      "component": "rtos",
+      "purpose": "NAT rules (IPv4/IPv6)",
+      "keywords": ["iptables", "nat", "masquerade", "端口转发"]
+    },
+    {
+      "name": "netstat_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/netstat_info"],
+      "component": "rtos",
+      "purpose": "listening ports and active connections",
+      "keywords": ["netstat", "listening", "连接数"]
+    },
+    {
+      "name": "route_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/route_info"],
+      "component": "rtos",
+      "purpose": "routing table",
+      "keywords": ["route", "gateway", "路由"]
+    },
+    {
+      "name": "ifconfig_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/ifconfig_info"],
+      "component": "rtos",
+      "purpose": "interface config and stats",
+      "keywords": ["ifconfig", "link", "rx", "tx", "丢包"]
+    },
+    {
+      "name": "server_config.txt",
+      "paths": ["dump_info/RTOSDump/versioninfo/server_config.txt"],
+      "component": "rtos",
+      "purpose": "server model/config baseline",
+      "keywords": ["server config", "型号", "配置"]
+    },
+    {
+      "name": "package_info",
+      "paths": ["dump_info/RTOSDump/versioninfo/package_info"],
+      "component": "rtos",
+      "purpose": "installed package list",
+      "keywords": ["package", "rpm", "版本", "依赖"]
+    },
+    {
+      "name": "RTOS-Revision",
+      "paths": ["dump_info/RTOSDump/versioninfo/RTOS-Revision"],
+      "component": "rtos",
+      "purpose": "OS revision",
+      "keywords": ["rtos", "revision", "版本"]
+    },
+    {
+      "name": "RTOS-Release",
+      "paths": ["dump_info/RTOSDump/versioninfo/RTOS-Release"],
+      "component": "rtos",
+      "purpose": "OS release",
+      "keywords": ["rtos", "release", "版本"]
+    },
+    {
+      "name": "app_revision.txt",
+      "paths": ["dump_info/RTOSDump/versioninfo/app_revision.txt"],
+      "component": "rtos",
+      "purpose": "app/component revision list",
+      "keywords": ["app revision", "组件版本", "版本"]
+    },
+    {
+      "name": "login",
+      "paths": ["dump_info/RTOSDump/other_info/login"],
+      "component": "rtos",
+      "purpose": "login policy or records",
+      "keywords": ["login", "password policy", "锁定", "console login", "串口登录", "本地登录", "tty"]
+    },
+    {
+      "name": "sshd",
+      "paths": ["dump_info/RTOSDump/other_info/sshd"],
+      "component": "rtos",
+      "purpose": "sshd config/status",
+      "keywords": ["ssh", "sshd", "cipher", "登录失败", "ssh登录失败", "pam", "认证模式", "协议不匹配"]
+    },
+    {
+      "name": "remotelog.conf",
+      "paths": ["dump_info/RTOSDump/other_info/remotelog.conf"],
+      "component": "rtos",
+      "purpose": "remote syslog config",
+      "keywords": ["syslog", "remote log", "上报失败"]
+    },
+    {
+      "name": "ash_history",
+      "paths": ["dump_info/RTOSDump/other_info/command_records/*/ash_history"],
+      "component": "rtos",
+      "purpose": "shell command history",
+      "keywords": ["audit", "history", "命令记录"]
+    },
+    {
+      "name": "top_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/top_info"],
+      "component": "rtos",
+      "purpose": "top output snapshot",
+      "keywords": ["cpu", "load", "top", "卡顿", "性能"]
+    },
+    {
+      "name": "ps_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/ps_info"],
+      "component": "rtos",
+      "purpose": "process/thread snapshot",
+      "keywords": ["ps", "process", "hang", "僵尸"]
+    },
+    {
+      "name": "free_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/free_info"],
+      "component": "rtos",
+      "purpose": "memory usage summary",
+      "keywords": ["memory", "free", "oom", "内存"]
+    },
+    {
+      "name": "vmstat",
+      "paths": ["dump_info/RTOSDump/sysinfo/vmstat"],
+      "component": "rtos",
+      "purpose": "virtual memory stats",
+      "keywords": ["vmstat", "swap", "io wait", "性能"]
+    },
+    {
+      "name": "uptime",
+      "paths": ["dump_info/RTOSDump/sysinfo/uptime", "dump_info/RTOSDump/sysinfo/loadavg"],
+      "component": "rtos",
+      "purpose": "uptime and load averages",
+      "keywords": ["uptime", "loadavg", "重启", "负载"]
+    },
+    {
+      "name": "meminfo",
+      "paths": ["dump_info/RTOSDump/sysinfo/meminfo"],
+      "component": "rtos",
+      "purpose": "detailed memory breakdown",
+      "keywords": ["meminfo", "slab", "kernel memory", "内核"]
+    },
+    {
+      "name": "slabinfo",
+      "paths": ["dump_info/RTOSDump/sysinfo/slabinfo"],
+      "component": "rtos",
+      "purpose": "slab allocator stats",
+      "keywords": ["slab", "leak", "inode", "dentry"]
+    },
+    {
+      "name": "softirqs",
+      "paths": ["dump_info/RTOSDump/sysinfo/softirqs"],
+      "component": "rtos",
+      "purpose": "softirq counters",
+      "keywords": ["softirq", "ksoftirqd", "网络风暴"]
+    },
+    {
+      "name": "interrupts",
+      "paths": ["dump_info/RTOSDump/sysinfo/interrupts"],
+      "component": "rtos",
+      "purpose": "hardware interrupt counts",
+      "keywords": ["interrupt", "irq", "中断风暴"]
+    },
+    {
+      "name": "modules",
+      "paths": ["dump_info/RTOSDump/sysinfo/modules"],
+      "component": "rtos",
+      "purpose": "kernel modules list",
+      "keywords": ["modules", "driver", "加载失败"]
+    },
+    {
+      "name": "cmdline",
+      "paths": ["dump_info/RTOSDump/sysinfo/cmdline"],
+      "component": "rtos",
+      "purpose": "kernel boot parameters",
+      "keywords": ["cmdline", "boot", "参数"]
+    },
+    {
+      "name": "df_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/df_info"],
+      "component": "rtos",
+      "purpose": "disk usage",
+      "keywords": ["disk full", "df", "/var/log", "/data"]
+    },
+    {
+      "name": "lsof_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/lsof_info"],
+      "component": "rtos",
+      "purpose": "open file handles",
+      "keywords": ["lsof", "fd leak", "too many open files"]
+    },
+    {
+      "name": "diskstats",
+      "paths": ["dump_info/RTOSDump/sysinfo/diskstats"],
+      "component": "rtos",
+      "purpose": "disk IO statistics",
+      "keywords": ["diskstats", "io", "flash wear"]
+    },
+    {
+      "name": "partitions",
+      "paths": ["dump_info/RTOSDump/sysinfo/partitions"],
+      "component": "rtos",
+      "purpose": "partition table",
+      "keywords": ["partition", "mtd", "layout"]
+    },
+    {
+      "name": "mtd",
+      "paths": ["dump_info/RTOSDump/sysinfo/mtd"],
+      "component": "rtos",
+      "purpose": "MTD layout",
+      "keywords": ["mtd", "flash", "分区"]
+    },
+    {
+      "name": "filesystems",
+      "paths": ["dump_info/RTOSDump/sysinfo/filesystems"],
+      "component": "rtos",
+      "purpose": "supported filesystems",
+      "keywords": ["filesystem", "ext4", "支持"]
+    },
+    {
+      "name": "ipcs",
+      "paths": ["dump_info/RTOSDump/sysinfo/ipcs_s", "dump_info/RTOSDump/sysinfo/ipcs_q", "dump_info/RTOSDump/sysinfo/ipcs_s_detail"],
+      "component": "rtos",
+      "purpose": "System V IPC status",
+      "keywords": ["ipcs", "semaphore", "queue", "死锁"]
+    },
+    {
+      "name": "locks",
+      "paths": ["dump_info/RTOSDump/sysinfo/locks"],
+      "component": "rtos",
+      "purpose": "kernel file locks",
+      "keywords": ["lock", "file lock", "争抢"]
+    },
+    {
+      "name": "uname_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/uname_info"],
+      "component": "rtos",
+      "purpose": "kernel version summary",
+      "keywords": ["uname", "kernel version"]
+    },
+    {
+      "name": "version",
+      "paths": ["dump_info/RTOSDump/sysinfo/version"],
+      "component": "rtos",
+      "purpose": "kernel build version",
+      "keywords": ["proc version", "gcc", "build"]
+    },
+    {
+      "name": "cpuinfo",
+      "paths": ["dump_info/RTOSDump/sysinfo/cpuinfo"],
+      "component": "rtos",
+      "purpose": "CPU model and cores",
+      "keywords": ["cpuinfo", "core", "频率"]
+    },
+    {
+      "name": "devices",
+      "paths": ["dump_info/RTOSDump/sysinfo/devices"],
+      "component": "rtos",
+      "purpose": "registered devices list",
+      "keywords": ["devices", "char", "block", "节点"]
+    },
+    {
+      "name": "rpc_records.log",
+      "paths": ["dump_info/AppDump/*/rpc_records.log"],
+      "component": "per-component",
+      "purpose": "RPC call counts and statistics",
+      "keywords": ["rpc", "dbus", "调用", "频繁", "统计", "调用风暴", "调用堆积", "阻塞"]
+    },
+    {
+      "name": "sync_property_trace.log",
+      "paths": ["dump_info/AppDump/*/sync_property_trace.log"],
+      "component": "per-component",
+      "purpose": "MDB property sync trace",
+      "keywords": ["property", "sync", "dbus signal", "属性", "不同步", "对象不更新", "属性不更新", "信号未到"]
+    },
+    {
+      "name": "mdb_info.log",
+      "paths": ["dump_info/AppDump/*/mdb_info.log"],
+      "component": "per-component",
+      "purpose": "MDB object tree snapshot",
+      "keywords": ["mdb", "object", "csr", "上树", "对象", "对象缺失", "对象不存在", "资源树", "接口缺失"]
+    }
+    ,
+    {
+      "name": "appdump_sensor",
+      "paths": ["dump_info/AppDump/sensor/"],
+      "component": "sensor",
+      "purpose": "sensor readings and SEL/event generation",
+      "keywords": ["sensor", "sel", "reading", "阈值", "告警"]
+    },
+    {
+      "name": "appdump_power_mgmt",
+      "paths": ["dump_info/AppDump/power_mgmt/"],
+      "component": "power_mgmt",
+      "purpose": "PSU management and power readings",
+      "keywords": ["psu", "power", "功率", "电源"]
+    },
+    {
+      "name": "appdump_thermal_mgmt",
+      "paths": ["dump_info/AppDump/thermal_mgmt/"],
+      "component": "thermal_mgmt",
+      "purpose": "fan control and thermal policy",
+      "keywords": ["fan", "thermal", "温控", "散热"]
+    },
+    {
+      "name": "appdump_network_adapter",
+      "paths": ["dump_info/AppDump/network_adapter/"],
+      "component": "network_adapter",
+      "purpose": "NIC/optics/NCSI info",
+      "keywords": ["ncsi", "nic", "optics", "网卡", "链路"]
+    },
+    {
+      "name": "appdump_pcie_device",
+      "paths": ["dump_info/AppDump/pcie_device/"],
+      "component": "pcie_device",
+      "purpose": "PCIe topology and device inventory",
+      "keywords": ["pcie", "topology", "bdf", "线缆"]
+    },
+    {
+      "name": "appdump_storage",
+      "paths": ["dump_info/AppDump/storage/"],
+      "component": "storage",
+      "purpose": "RAID/drive/volume management",
+      "keywords": ["raid", "storage", "disk", "阵列"]
+    },
+    {
+      "name": "appdump_redfish",
+      "paths": ["dump_info/AppDump/redfish/"],
+      "component": "redfish",
+      "purpose": "Redfish API service",
+      "keywords": ["redfish", "api", "http", "接口"]
+    },
+    {
+      "name": "appdump_frudata",
+      "paths": ["dump_info/AppDump/frudata/"],
+      "component": "frudata",
+      "purpose": "FRU data management",
+      "keywords": ["fru", "elabel", "sn", "资产"]
+    },
+    {
+      "name": "appdump_bios",
+      "paths": ["dump_info/AppDump/bios/"],
+      "component": "bios",
+      "purpose": "BIOS config and management",
+      "keywords": ["bios", "boot", "post", "配置"]
+    },
+    {
+      "name": "appdump_chassis",
+      "paths": ["dump_info/AppDump/chassis/"],
+      "component": "chassis",
+      "purpose": "chassis state and LED/UID",
+      "keywords": ["chassis", "uid", "led", "入侵"]
+    },
+    {
+      "name": "appdump_account",
+      "paths": ["dump_info/AppDump/account/", "dump_info/AppDump/iam/"],
+      "component": "account/iam",
+      "purpose": "user auth and access control",
+      "keywords": ["login", "auth", "permission", "账户"]
+    },
+    {
+      "name": "appdump_event",
+      "paths": ["dump_info/AppDump/event/", "dump_info/AppDump/event_policy/"],
+      "component": "event/event_policy",
+      "purpose": "event generation and policies",
+      "keywords": ["event", "alarm", "policy", "告警"]
+    },
+    {
+      "name": "appdump_observability",
+      "paths": ["dump_info/AppDump/observability/"],
+      "component": "observability",
+      "purpose": "metrics collection",
+      "keywords": ["metrics", "cpu", "memory", "观测"]
+    },
+    {
+      "name": "appdump_rmcpd",
+      "paths": ["dump_info/AppDump/rmcpd/"],
+      "component": "rmcpd",
+      "purpose": "IPMI over LAN service",
+      "keywords": ["ipmi", "rmcp", "lan", "会话"]
+    },
+    {
+      "name": "appdump_mctpd",
+      "paths": ["dump_info/AppDump/mctpd/"],
+      "component": "mctpd",
+      "purpose": "MCTP endpoint discovery",
+      "keywords": ["mctp", "pcie", "endpoint", "发现"]
+    },
+    {
+      "name": "appdump_hwproxy",
+      "paths": ["dump_info/AppDump/hwproxy/"],
+      "component": "hwproxy",
+      "purpose": "hardware access proxy",
+      "keywords": ["i2c", "smbus", "gpio", "timeout"]
+    },
+    {
+      "name": "appdump_hwdiscovery",
+      "paths": ["dump_info/AppDump/hwdiscovery/"],
+      "component": "hwdiscovery",
+      "purpose": "hardware discovery and CSR load",
+      "keywords": ["csr", "probe", "connector", "发现"]
+    },
+    {
+      "name": "appdump_maca",
+      "paths": ["dump_info/AppDump/maca/"],
+      "component": "maca",
+      "purpose": "process health and startup checks",
+      "keywords": ["startupcheck", "respawn", "health", "启动失败"]
+    },
+    {
+      "name": "appdump_bmc_network",
+      "paths": ["dump_info/AppDump/bmc_network/"],
+      "component": "bmc_network",
+      "purpose": "BMC network configuration",
+      "keywords": ["ip", "vlan", "route", "网络配置"]
+    },
+    {
+      "name": "appdump_bmc_time",
+      "paths": ["dump_info/AppDump/bmc_time/"],
+      "component": "bmc_time",
+      "purpose": "NTP/RTC time management",
+      "keywords": ["ntp", "time", "时间跳变"]
+    },
+    {
+      "name": "appdump_bmc_upgrade",
+      "paths": ["dump_info/AppDump/bmc_upgrade/"],
+      "component": "bmc_upgrade",
+      "purpose": "firmware upgrade workflow",
+      "keywords": ["upgrade", "hpm", "升级失败"]
+    }
+  ],
+  "rules": [
+    {
+      "match_keywords": ["运行状态", "当前状态", "状态检查", "近期错误", "最近错误", "错误检查", "异常检查", "健康检查", "健康状态", "整体检查"],
+      "include": ["app.log", "framework.log", "journalctl.log"]
+    },
+    {
+      "match_keywords": ["login", "auth", "permission", "证书", "签名", "登录失败", "无法登录", "认证失败", "密码错误", "账号锁定", "账户锁定", "ssh登录失败", "web登录失败"],
+      "include": ["security.log", "operation.log", "sshd", "login"]
+    },
+    {
+      "match_keywords": ["startup", "boot", "crash", "respawn", "启动失败", "进程重启", "拉起失败", "反复重启", "组件崩溃", "进程崩溃"],
+      "include": ["framework.log", "journalctl.log"]
+    },
+    {
+      "match_keywords": ["sensor", "SEL", "reading", "传感器", "告警"],
+      "include": ["sensor.log", "alarm.log"]
+    },
+    {
+      "match_keywords": ["fan", "thermal", "temperature", "风扇", "温控", "过温"],
+      "include": ["cooling_control.log", "Thermal.log", "app.log"]
+    },
+    {
+      "match_keywords": ["power", "psu", "电源", "功耗"],
+      "include": ["ps_black_box.log", "app.log", "operation.log"]
+    },
+    {
+      "match_keywords": ["network", "ncsi", "lan", "链路", "网络", "ssh连不上", "https不通", "连不上", "访问失败"],
+      "include": ["net_stream.log", "app.log", "framework.log", "sshd", "netstat_info", "ifconfig_info", "route_info"]
+    },
+    {
+      "match_keywords": ["raid", "storage", "disk", "阵列", "磁盘"],
+      "include": ["raid_controller_lib.log", "app.log"]
+    },
+    {
+      "match_keywords": ["dbus", "mdb", "property", "对象", "上树", "不同步", "对象缺失", "对象不更新", "属性不更新", "资源树", "上树失败"],
+      "include": ["rpc_records.log", "sync_property_trace.log", "mdb_info.log"]
+    },
+    {
+      "match_keywords": ["performance", "cpu", "memory", "性能", "资源", "高cpu", "高内存", "卡顿"],
+      "include": ["bmc_health.log", "running.log", "journalctl.log"]
+    }
+  ],
+  "notes": {
+    "rotation": "Many files have rotations: *.log.1.gz, *.log.2.gz",
+    "fallback": "If no rule matches or file meaning is unknown, query NotebookLM and append to logs.md/logs.json",
+    "language": "Prefer adding common Chinese user phrases so problem-driven selection works for teammates"
+  }
+}

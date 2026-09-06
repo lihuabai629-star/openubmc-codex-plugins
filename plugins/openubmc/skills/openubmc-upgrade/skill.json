@@ -1,0 +1,47 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-upgrade",
+  "version": "1.3.0",
+  "description": "通过 Redfish 或同源 WebUI 对一台或多台 BMC 升级并验证 openUBMC HPM；支持组件任务验证、受控并行、逐目标 journal 隔离和安全恢复。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": [
+    "openubmc-developer",
+    "openubmc-build",
+    "openubmc-debug",
+    "openubmc-environment-setup"
+  ],
+  "files": [
+    "SKILL.md",
+    "agents/openai.yaml",
+    "openubmc_upgrade/__init__.py",
+    "openubmc_upgrade/operation_state.py",
+    "openubmc_upgrade/runtime_backend.py",
+    "openubmc_upgrade/webui.py",
+    "references/redfish-upgrade.md",
+    "references/webui-upgrade.md",
+    "scripts/artifact_identity.py",
+    "scripts/preflight_upgrade.py",
+    "scripts/redfish_credentials.py",
+    "scripts/target_runtime_adapter.py",
+    "skill.json"
+  ],
+  "keywords": [
+    "openubmc",
+    "redfish",
+    "webui",
+    "upgrade",
+    "component",
+    "cpld",
+    "vrd",
+    "csr",
+    "batch",
+    "parallel",
+    "rollback",
+    "hpm"
+  ],
+  "categories": [
+    "delivery",
+    "operations"
+  ]
+}

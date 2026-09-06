@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC Debug"
+  short_description: "用多证据面定位 openUBMC 运行态问题"
+  default_prompt: "使用 $openubmc-debug 从源码、接口、对象、告警和日志中组合证据定位问题；需要时对比多个环境，并按 source-only、live-patch 或 build-upgrade 编排修复后的交付验证。"

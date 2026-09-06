@@ -1,0 +1,44 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-log-analyzer",
+  "version": "1.0.0",
+  "description": "采集并离线分析 openUBMC 一键日志包。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "dependencies": {
+    "python": ">=3.10",
+    "ssh": "conditional: SSH bundle fallback",
+    "sshpass": "conditional: password-based SSH fallback"
+  },
+  "relatedSkills": [
+    "openubmc-debug",
+    "openubmc-upgrade",
+    "openubmc-environment-setup"
+  ],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml",
+    "references/analysis.md",
+    "references/logs.json",
+    "references/logs.md",
+    "references/remote-collection.md",
+    "openubmc_log_analyzer/__init__.py",
+    "openubmc_log_analyzer/runtime_backend.py",
+    "scripts/_runtime_distribution.py",
+    "scripts/package_skill.py",
+    "scripts/pull_bundle.py",
+    "scripts/target_runtime_adapter.py"
+  ],
+  "keywords": [
+    "openubmc",
+    "logs",
+    "bundle",
+    "redfish",
+    "analysis"
+  ],
+  "categories": [
+    "debugging",
+    "analysis"
+  ]
+}

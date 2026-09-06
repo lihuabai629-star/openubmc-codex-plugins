@@ -1,0 +1,53 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-developer",
+  "version": "5.5.0",
+  "description": "Automatically analyze and change existing openUBMC source when source ownership, repository extension patterns, authored/generated chains, component lifecycle, persistence, or cross-layer behavior remain unresolved; exclude specified edits, documentation-only work, and separately owned workflows.",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": [
+    "openubmc-build",
+    "openubmc-live-patch",
+    "openubmc-upgrade",
+    "openubmc-publish"
+  ],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml",
+    "evals/evals.json",
+    "evals/trigger-evals.json",
+    "references/development-guidelines.md",
+    "references/downstream-handoffs.md",
+    "references/lua-component.md",
+    "references/mdb-mds.md",
+    "references/persistence-compatibility.md",
+    "references/interface-mapping.md",
+    "references/native-user-space-and-driver-abi.md",
+    "references/startup-product-assembly.md",
+    "references/hardware-vpd.md",
+    "references/sr-dds-product-records.md",
+    "references/profile-schema-import-export.md"
+  ],
+  "keywords": [
+    "openubmc",
+    "source-analysis",
+    "source-development",
+    "code-structure",
+    "repository-patterns",
+    "component-development",
+    "cross-component",
+    "authored-source",
+    "focused-verification"
+  ],
+  "categories": ["development"],
+  "usage": {
+    "prompts": [
+      "分析一个现有组件的源码需求，找到当前负责该行为的模块并给出建议",
+      "按照现有仓库结构实现组件功能修改并完成聚焦验证",
+      "评审一个跨组件源码方案，比较已有实现和正确扩展点",
+      "修改控制运行行为的 authored 模型或配置，并验证生成链和直接消费者",
+      "完成源码修改后，将已验证的源码事实交给 Build，并由 Build 产出 Upgrade 所需制品"
+    ]
+  }
+}

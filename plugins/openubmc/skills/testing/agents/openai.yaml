@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC DT Testing"
+  short_description: "编写并执行 openUBMC 组件 UT/IT 测试"
+  default_prompt: "使用 $openubmc-dt-testing 为当前 openUBMC 组件设计并运行 UT/IT 测试，补齐 Mock、测试数据与覆盖率验证。"

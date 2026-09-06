@@ -1,0 +1,39 @@
+{
+  "author": {
+    "name": "lihuabai629-star"
+  },
+  "description": "OpenUBMC Runtime and operational skills for Codex",
+  "homepage": "https://github.com/lihuabai629-star/openubmc-codex-plugins",
+  "interface": {
+    "capabilities": [
+      "Runtime",
+      "Diagnostics",
+      "Build",
+      "Upgrade"
+    ],
+    "category": "Developer tools",
+    "defaultPrompt": [
+      "Inspect the Runtime state and explain any blocker.",
+      "Run a bounded openUBMC diagnosis with evidence.",
+      "Verify a build or upgrade delivery safely."
+    ],
+    "developerName": "lihuabai629-star",
+    "displayName": "openUBMC",
+    "longDescription": "Diagnosis, build, upgrade, live patch, and verification with durable Runtime evidence.",
+    "shortDescription": "OpenUBMC Runtime workflows and evidence tools for Codex."
+  },
+  "keywords": [
+    "openubmc",
+    "runtime",
+    "diagnosis",
+    "build",
+    "upgrade",
+    "codex"
+  ],
+  "license": "MulanPSL-2.0",
+  "mcpServers": "./.mcp.json",
+  "name": "openubmc",
+  "repository": "https://github.com/lihuabai629-star/openubmc-codex-plugins",
+  "skills": "./skills/",
+  "version": "2.0.10+marketplace.1"
+}

@@ -1,0 +1,55 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-build",
+  "version": "1.0.0",
+  "description": "构建 openUBMC 组件、Conan 包和产品固件制品。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": [
+    "openubmc-developer",
+    "openubmc-upgrade",
+    "openubmc-publish"
+  ],
+  "files": [
+    "SKILL.md",
+    "agents/openai.yaml",
+    "references/2630-wsl-profile.md",
+    "references/artifact-verification.md",
+    "references/build-plan.md",
+    "references/conan-auth.md",
+    "references/handoff-contract.md",
+    "references/modes/component-package.md",
+    "references/modes/diagnose.md",
+    "references/modes/product-artifact.md",
+    "references/modes/publish.md",
+    "references/modes/validate.md",
+    "references/product-build-pitfalls.md",
+    "references/redfish-upgrade.md",
+    "requirements-containment.txt",
+    "scripts/check_dependency_delta.py",
+    "scripts/check_rootfs_access.py",
+    "scripts/create_build_plan.py",
+    "scripts/detect_changed_components.py",
+    "scripts/ensure_planned_version.py",
+    "scripts/finalize_product_attempt.py",
+    "scripts/preflight_build_env.sh",
+    "scripts/run_bmcgo_checked.py",
+    "scripts/run_build_attempt.py",
+    "scripts/update_manifest_conan_ref.py",
+    "scripts/verify_hpm_containment.py",
+    "scripts/verify_product_artifact.py",
+    "scripts/write_artifact_metadata.py",
+    "skill.json"
+  ],
+  "keywords": [
+    "openubmc",
+    "build",
+    "bmcgo",
+    "conan",
+    "firmware"
+  ],
+  "categories": [
+    "development",
+    "delivery"
+  ]
+}

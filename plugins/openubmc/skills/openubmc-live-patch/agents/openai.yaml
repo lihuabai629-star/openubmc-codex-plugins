@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC Live Patch"
+  short_description: "Plan and verify temporary BMC patches"
+  default_prompt: "Use $openubmc-live-patch to apply or roll back a typed temporary BMC file replacement, reuse carried TargetRun context, restore the original mount mode, and verify checksum and fresh runtime evidence."

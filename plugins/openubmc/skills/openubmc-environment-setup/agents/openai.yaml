@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC Environment Setup"
+  short_description: "Automatically install the openUBMC agent workflow"
+  default_prompt: "Use $openubmc-environment-setup to automatically install or repair the complete openUBMC workflow on this machine."

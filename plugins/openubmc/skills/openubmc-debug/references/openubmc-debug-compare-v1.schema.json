@@ -1,0 +1,349 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openubmc.example/schemas/openubmc-debug.compare.v1.json",
+  "title": "openUBMC Debug dual-target comparison v1",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "observed_at",
+    "ok",
+    "code",
+    "normalized_code",
+    "returncode",
+    "mode",
+    "observation",
+    "targets",
+    "scheduler",
+    "completeness",
+    "comparison"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "openubmc-debug.compare.v1"
+    },
+    "tool": {
+      "const": "compare_remote"
+    },
+    "observed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "code": {
+      "enum": ["ok", "partial_comparison"]
+    },
+    "normalized_code": {
+      "enum": ["ok", "partial_comparison"]
+    },
+    "returncode": {
+      "enum": [0, 1]
+    },
+    "mode": {
+      "enum": ["reference-candidate", "symmetric"]
+    },
+    "observation": {
+      "type": "object",
+      "required": ["window_start", "window_end", "start_skew_ms", "phases"],
+      "properties": {
+        "window_start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "window_end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "start_skew_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "phases": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": false
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": [
+          "role",
+          "target_id",
+          "status",
+          "started_at",
+          "completed_at",
+          "queue_delay_ms",
+          "duration_ms",
+          "error_code",
+          "error",
+          "result"
+        ],
+        "properties": {
+          "role": {
+            "oneOf": [
+              {
+                "enum": ["reference", "candidate", "target-a", "target-b"]
+              },
+              {
+                "type": "string",
+                "pattern": "^target-[1-9][0-9]*$"
+              }
+            ]
+          },
+          "target_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": ["ok", "failed"]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "queue_delay_ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "duration_ms": {
+            "type": "number",
+            "minimum": 0
+          },
+          "error_code": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "result": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": ["schema_version"],
+                "properties": {
+                  "schema_version": {
+                    "const": "openubmc-debug.v1"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "scheduler": {
+      "type": "object",
+      "required": [
+        "requested_policy",
+        "actual_concurrency_budget",
+        "target_count",
+        "completed_count",
+        "failed_count",
+        "max_queue_delay_ms",
+        "target_duration_p75_ms",
+        "first_result_ms",
+        "total_duration_ms",
+        "completion_order"
+      ],
+      "properties": {
+        "requested_policy": {
+          "type": "string"
+        },
+        "actual_concurrency_budget": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "target_count": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "completed_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_queue_delay_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "target_duration_p75_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "first_result_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "total_duration_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "completion_order": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "completeness": {
+      "type": "object",
+      "required": ["requested", "completed", "failed"],
+      "properties": {
+        "requested": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "completed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparison": {
+      "type": "object",
+      "required": [
+        "status",
+        "differences",
+        "diff_card",
+        "capability_asymmetry",
+        "unsupported",
+        "target_local_failures",
+        "normalized_volatile_fields",
+        "candidate_comparisons",
+        "value_groups"
+      ],
+      "properties": {
+        "status": {
+          "enum": ["complete", "partial", "inconclusive"]
+        },
+        "differences": {
+          "type": "array"
+        },
+        "diff_card": {
+          "type": "object",
+          "required": [
+            "schema_version",
+            "mode",
+            "status",
+            "comparability",
+            "quality_statuses",
+            "conclusion",
+            "difference_count",
+            "important_changes",
+            "incomparable_paths",
+            "quality_flags",
+            "scope_equal",
+            "freshness_equal"
+          ],
+          "properties": {
+            "schema_version": {
+              "const": "openubmc-debug.diff-card.v1"
+            },
+            "mode": {
+              "enum": ["reference-candidate", "symmetric"]
+            },
+            "status": {
+              "enum": ["complete", "partial"]
+            },
+            "comparability": {
+              "enum": ["comparable", "inconclusive"]
+            },
+            "quality_statuses": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "partial",
+                  "stale",
+                  "truncated",
+                  "unsupported",
+                  "not_observed",
+                  "collection_failed"
+                ]
+              }
+            },
+            "conclusion": {
+              "enum": ["same", "different", "inconclusive"]
+            },
+            "difference_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "important_changes": {
+              "type": "array"
+            },
+            "incomparable_paths": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "quality_flags": {
+              "type": "object"
+            },
+            "scope_equal": {
+              "type": ["boolean", "null"]
+            },
+            "freshness_equal": {
+              "type": ["boolean", "null"]
+            }
+          },
+          "additionalProperties": false
+        },
+        "capability_asymmetry": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unsupported": {
+          "type": "object"
+        },
+        "target_local_failures": {
+          "type": "array"
+        },
+        "normalized_volatile_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "candidate_comparisons": {
+          "type": "array"
+        },
+        "value_groups": {
+          "type": "array"
+        }
+      },
+      "additionalProperties": false
+    },
+    "warnings": {
+      "type": "array"
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

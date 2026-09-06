@@ -1,0 +1,2 @@
+# AES package inspection supports the bmcgo-provided 42.x backend and CI 46.x.
+cryptography>=42.0.7,<47

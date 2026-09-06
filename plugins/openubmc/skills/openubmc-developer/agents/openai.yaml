@@ -1,0 +1,7 @@
+interface:
+  display_name: "OpenUBMC Developer"
+  short_description: "Resolve openUBMC source ownership and structure decisions"
+  default_prompt: "Use $openubmc-developer only for unresolved openUBMC decisions about source ownership, repository extension patterns, authored/generated chains, component lifecycle, persistence, or cross-layer behavior. Exclude specified edits, documentation-only work, and workflows owned by other Skills."
+
+policy:
+  allow_implicit_invocation: true

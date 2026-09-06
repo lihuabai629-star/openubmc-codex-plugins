@@ -1,0 +1,1387 @@
+{
+  "schema_version": 1,
+  "skill_name": "openubmc-developer",
+  "evals": [
+    {
+      "id": "exploratory-lua-read-only",
+      "covers": [
+        "authorization.read-only",
+        "authorization.exploratory-default-read-only",
+        "domain.lua-component"
+      ],
+      "prompt": "我想优化一下 src/cache.lua 里 key 不存在时会抛错的问题，先看看应该怎么处理比较好。",
+      "workspace": {
+        "files": {
+          "src/cache.lua": "local M = {}\n\nfunction M.lookup(cache, key)\n    return cache[key].value\nend\n\nreturn M\n",
+          "docs/behavior.md": "# Cache contract\n\nA missing key returns nil and must not raise an error.\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/lua-component.md"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "nil|不存在|missing"
+          ]
+        }
+      }
+    },
+    {
+      "id": "explicit-lua-implementation",
+      "covers": [
+        "authorization.explicit-implementation",
+        "verification.focused",
+        "domain.lua-component",
+        "workflow.lightweight"
+      ],
+      "prompt": "使用 $openubmc-developer 修复 src/cache.lua：key 不存在时返回 nil，不得解引用 nil，同时保持已有 key 返回 value 的行为；在 tests/cache_spec.lua 保留现有正常路径并增加缺失 key 回归测试，运行 python3 tests/verify_cache.py 验证。直接实现，不需要先向我确认。",
+      "workspace": {
+        "files": {
+          "src/cache.lua": "local M = {}\n\nfunction M.lookup(cache, key)\n    return cache[key].value\nend\n\nreturn M\n",
+          "tests/cache_spec.lua": "local cache = require('src.cache')\n\ndescribe('cache lookup', function()\n    it('keeps an existing value', function()\n        assert.equals('kept', cache.lookup({present = {value = 'kept'}}, 'present'))\n    end)\nend)\n",
+          "tests/verify_cache.py": "from pathlib import Path\nimport re\n\nsource = Path('src/cache.lua').read_text(encoding='utf-8')\ntest = Path('tests/cache_spec.lua').read_text(encoding='utf-8')\nassignment = re.search(r'local\\s+(\\w+)\\s*=\\s*cache\\s*\\[\\s*key\\s*\\]', source)\nassert assignment, 'lookup must retain the selected entry'\nentry = re.escape(assignment.group(1))\nguarded = re.search(rf'if\\s+{entry}\\s*==\\s*nil\\s+then\\s*return\\s+nil\\s+end.*return\\s+{entry}\\.value', source, re.S)\nshort_circuit = re.search(rf'return\\s+{entry}\\s+and\\s+{entry}\\.value', source)\nassert guarded or short_circuit, 'lookup must preserve present values and guard missing keys'\nassert 'present' in test and 'kept' in test\nassert 'missing' in test and 'nil' in test.lower()\nprint('cache contract verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "cache-contract",
+          "argv": [
+            "python3",
+            "tests/verify_cache.py"
+          ],
+          "stdout_contains": [
+            "cache contract verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "forbid_redundant_unchanged_reads": true,
+        "workspace_changes": [
+          "src/cache.lua",
+          "tests/cache_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/lua-component.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_cache\\.py"
+          ],
+          "forbidden_patterns": [
+            "bmcgo|git\\s+(?:reset|checkout|clean)"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_cache\\.py",
+            "output_pattern": "cache contract verified"
+          }
+        ],
+        "messages": {
+          "scope": "after_target_skill_read",
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        },
+        "files": {
+          "src/cache.lua": {
+            "not_contains": [
+              "return cache[key].value"
+            ]
+          },
+          "tests/cache_spec.lua": {
+            "contains": [
+              "kept",
+              "missing",
+              "nil"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "adjacent-defect-report-only",
+      "covers": [
+        "scope.adjacent-report-only",
+        "routing.local-test-ownership",
+        "domain.lua-component",
+        "workflow.lightweight"
+      ],
+      "prompt": "修复现有 openUBMC 组件 src/normalize.lua 的 nil 输入异常，并在 tests/normalize_spec.lua 增加回归测试。src/trim.lua 中存在相似但未授权的问题，不要修改它，只在最终结果中作为独立发现报告。运行 python3 tests/verify_normalize.py。",
+      "workspace": {
+        "files": {
+          "src/normalize.lua": "local M = {}\n\nfunction M.normalize(value)\n    return string.lower(value)\nend\n\nreturn M\n",
+          "src/trim.lua": "local M = {}\n\nfunction M.trim(value)\n    return value:match('^%s*(.-)%s*$')\nend\n\nreturn M\n",
+          "tests/verify_normalize.py": "from pathlib import Path\nimport re\n\nnormalize = Path('src/normalize.lua').read_text(encoding='utf-8')\ntrim = Path('src/trim.lua').read_text(encoding='utf-8')\ntest = Path('tests/normalize_spec.lua').read_text(encoding='utf-8')\nnormalize_guard = re.search(r'if\\s+value\\s*==\\s*nil\\s+then\\s*return\\s+nil\\s+end.*return\\s+string\\.lower\\(value\\)', normalize, re.S)\nnormalize_short = re.search(r'return\\s+value\\s+and\\s+string\\.lower\\(value\\)', normalize)\nassert normalize_guard or normalize_short\nassert 'normalize' in test and 'nil' in test.lower()\noriginal_trim = \"local M = {}\\n\\nfunction M.trim(value)\\n    return value:match('^%s*(.-)%s*$')\\nend\\n\\nreturn M\\n\"\nassert trim == original_trim, 'unrequested adjacent source must remain unchanged'\nprint('normalize contract verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "normalize-contract",
+          "argv": [
+            "python3",
+            "tests/verify_normalize.py"
+          ],
+          "stdout_contains": [
+            "normalize contract verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "forbid_redundant_unchanged_reads": true,
+        "workspace_changes": [
+          "src/normalize.lua",
+          "tests/normalize_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "tdd",
+            "openubmc-dt-testing"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/development-guidelines.md",
+            "references/lua-component.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_normalize\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_normalize\\.py",
+            "output_pattern": "normalize contract verified"
+          }
+        ],
+        "messages": {
+          "scope": "after_target_skill_read",
+          "required_patterns": [
+            "trim",
+            "未修改|未授权|独立|另行|separate"
+          ],
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        }
+      }
+    },
+    {
+      "id": "dirty-workspace-preservation",
+      "covers": [
+        "workspace.dirty-preservation",
+        "workspace.git-dirty-preservation",
+        "domain.lua-component"
+      ],
+      "prompt": "使用 $openubmc-developer 只修复 src/storage.lua 的 nil 解引用并更新 tests/storage_spec.lua，保持已有 drive 返回 capacity 的正常路径，然后运行 python3 tests/verify_storage.py。当前 Git 工作区还有我自己的 tracked 和 untracked 未提交内容，请自行检查并全部原样保留；不要生成、构建、暂存或提交。",
+      "workspace": {
+        "files": {
+          "src/storage.lua": "local M = {}\n\nfunction M.capacity(drive)\n    return drive.info.capacity\nend\n\nreturn M\n",
+          "tests/storage_spec.lua": "local storage = require('src.storage')\n\ndescribe('storage capacity', function()\n    it('keeps a present drive capacity', function()\n        assert.equals(42, storage.capacity({info = {capacity = 42}}))\n    end)\nend)\n",
+          "tests/verify_storage.py": "from pathlib import Path\nimport re\n\nsource = Path('src/storage.lua').read_text(encoding='utf-8')\ntest = Path('tests/storage_spec.lua').read_text(encoding='utf-8')\nguarded = re.search(r'if.*(?:drive\\s*==\\s*nil|drive\\.info\\s*==\\s*nil).*return\\s+nil.*return\\s+drive\\.info\\.capacity', source, re.S)\nshort_circuit = re.search(r'return\\s+drive\\s+and\\s+drive\\.info\\s+and\\s+drive\\.info\\.capacity', source)\nlocal_info = re.search(r'local\\s+(\\w+)\\s*=\\s*drive\\s+and\\s+drive\\.info', source)\nlocal_guarded = False\nif local_info:\n    info = re.escape(local_info.group(1))\n    local_guarded = bool(re.search(rf'if\\s+{info}\\s*==\\s*nil\\s+then\\s*return\\s+nil\\s+end.*return\\s+{info}\\.capacity', source, re.S))\nassert guarded or short_circuit or local_guarded\nassert '42' in test and 'capacity' in test\nassert 'nil' in test.lower()\nprint('storage contract verified')\n",
+          "tests/verify_git_state.py": "from pathlib import Path\nimport subprocess\n\nstatus = subprocess.run(['git', 'status', '--porcelain=v1', '--untracked-files=all'], check=True, text=True, capture_output=True).stdout.splitlines()\nexpected = {' M product/manifest.json', ' M src/storage.lua', ' M tests/storage_spec.lua', '?? generated/DataSync.lua'}\nassert set(status) == expected, status\nassert Path('product/manifest.json').read_text(encoding='utf-8') == '{\\\"userChange\\\": \\\"keep-exactly\\\"}\\n'\nassert Path('generated/DataSync.lua').read_text(encoding='utf-8') == '-- USER_UNCOMMITTED_GENERATED_STATE\\n'\nprint('git workspace state verified')\n",
+          "product/manifest.json": "{\"baseline\": \"tracked\"}\n"
+        },
+        "git": {
+          "dirty_files": {
+            "product/manifest.json": "{\"userChange\": \"keep-exactly\"}\n",
+            "generated/DataSync.lua": "-- USER_UNCOMMITTED_GENERATED_STATE\n"
+          }
+        }
+      },
+      "post_checks": [
+        {
+          "name": "storage-contract",
+          "argv": [
+            "python3",
+            "tests/verify_storage.py"
+          ],
+          "stdout_contains": [
+            "storage contract verified"
+          ]
+        },
+        {
+          "name": "git-workspace-state",
+          "argv": [
+            "python3",
+            "tests/verify_git_state.py"
+          ],
+          "stdout_contains": [
+            "git workspace state verified"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "src/storage.lua",
+          "tests/storage_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/development-guidelines.md",
+            "references/lua-component.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "git\\s+status",
+            "python3\\s+tests/verify_storage\\.py"
+          ],
+          "forbidden_patterns": [
+            "bmcgo|git\\s+(?:add|commit|stash|reset|checkout|clean)"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_storage\\.py",
+            "output_pattern": "storage contract verified"
+          }
+        ],
+        "files": {
+          "product/manifest.json": {
+            "equals": "{\"userChange\": \"keep-exactly\"}\n"
+          },
+          "generated/DataSync.lua": {
+            "equals": "-- USER_UNCOMMITTED_GENERATED_STATE\n"
+          }
+        }
+      }
+    },
+    {
+      "id": "generated-output-completeness",
+      "covers": [
+        "authorization.read-only",
+        "generation.output-integrity",
+        "domain.mdb-mds"
+      ],
+      "prompt": "只读评审一次模型生成结果。生成命令记录为退出码 0，但一个预期 Lua binding 为空，而同批 C++ binding 有内容。判断这次生成能否被接受、还应检查什么；不要修改或重新生成文件。",
+      "workspace": {
+        "files": {
+          "mds/model.json": "{\"objects\":{\"Device\":{\"properties\":{\"State\":\"string\"}}}}\n",
+          "generated/Device.lua": "",
+          "generated/Device.hpp": "struct Device { const char *State; };\n",
+          "evidence/generation-status.txt": "command=bmcgo gen\nexit=0\nexpected=generated/Device.lua,generated/Device.hpp\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "required": [
+            "references/mdb-mds.md"
+          ],
+          "allowed": [
+            "references/mdb-mds.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*mds/model\\.json",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|od|wc|file|stat|xxd|hexdump|python3?)[^\\n]*generated/Device\\.lua"
+          ],
+          "forbidden_patterns": [
+            "bmcgo\\s+gen"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "generation-status\\.txt",
+            "output_pattern": "exit=0.*expected=.*Device\\.lua.*Device\\.hpp"
+          }
+        ],
+        "messages": {
+          "required_patterns": [
+            "退出码|exit|成功",
+            "空|empty|截断|不完整",
+            "不能接受|不可接受|失败|invalid",
+            "Device\\.lua"
+          ]
+        }
+      }
+    },
+    {
+      "id": "downstream-capability-not-implied",
+      "covers": [
+        "authorization.explicit-implementation",
+        "authorization.downstream-explicit-only",
+        "verification.focused",
+        "workflow.lightweight"
+      ],
+      "prompt": "使用 $openubmc-developer 将 src/value.txt 从 old 改为 new，并运行 python3 tests/verify_value.py。当前只要求源码修改和本地验证，没有要求构建、临时替换、升级或发布。",
+      "workspace": {
+        "files": {
+          "src/value.txt": "old\n",
+          "tests/verify_value.py": "from pathlib import Path\nassert Path('src/value.txt').read_text(encoding='utf-8') == 'new\\n'\nprint('source-only verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "source-only-contract",
+          "argv": [
+            "python3",
+            "tests/verify_value.py"
+          ],
+          "stdout_contains": [
+            "source-only verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "forbid_redundant_unchanged_reads": true,
+        "workspace_changes": [
+          "src/value.txt"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build",
+            "openubmc-live-patch",
+            "openubmc-upgrade",
+            "openubmc-publish"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/development-guidelines.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_value\\.py"
+          ],
+          "forbidden_patterns": [
+            "bmcgo",
+            "conan\\s+upload",
+            "scp|ssh|curl"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_value\\.py",
+            "output_pattern": "source-only verified"
+          }
+        ],
+        "messages": {
+          "scope": "after_target_skill_read",
+          "required_patterns": [
+            "new|源码|source",
+            "verified|验证"
+          ],
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        }
+      }
+    },
+    {
+      "id": "knowledge-history-contract-conflict",
+      "covers": [
+        "authorization.read-only",
+        "evidence.conflict",
+        "evidence.knowledge-provenance"
+      ],
+      "prompt": "只读评审当前 openUBMC 行为。源码、openUBMC KB 导出和一条 Obsidian 决策历史分别位于 src/runtime-policy.lua、evidence/openubmc-kb.md、evidence/decision-history.md。请判断现在实际行为、目标契约和历史背景之间的关系；如果它们冲突，不要自行选择新的规范行为，也不要修改文件。",
+      "workspace": {
+        "files": {
+          "src/runtime-policy.lua": "return { mode = 'disabled' }\n",
+          "evidence/openubmc-kb.md": "source=openUBMC KB\nscope=product-a version>=12\nreviewed=2026-07-15\ncontract=feature is enabled after Mapper Ready\n",
+          "evidence/decision-history.md": "source=Obsidian decision history\ndate=2025-11-20\nA temporary startup-race workaround kept the feature disabled. It was not approved as the permanent contract.\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/development-guidelines.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*src/runtime-policy\\.lua",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*evidence/openubmc-kb\\.md",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*evidence/decision-history\\.md"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "源码|source|实际",
+            "disabled",
+            "openUBMC KB|KB|知识库",
+            "enabled|启用",
+            "历史|history|workaround",
+            "冲突|conflict",
+            "确认|选择|不能自行|pause|不足以判断|无法判断|不能判断|insufficient|cannot determine|unable to determine"
+          ]
+        }
+      }
+    },
+    {
+      "id": "service-layer-owner",
+      "covers": [
+        "structure.responsible-layer",
+        "structure.similar-implementation",
+        "implementation.local-pattern",
+        "verification.repository-selected"
+      ],
+      "prompt": "需求已经确认，请直接实现：当风扇数量少于 4 时，ThermalMode 不允许设置为 silent，并返回 InvalidMode；其他模式及数量不少于 4 的 silent 保持正常。请根据仓库现有结构自行找到正确修改位置，沿用相似实现并补充现有测试，然后运行仓库指定的验证命令。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "Adapters only translate protocol data. Domain validation belongs in src/services. Inspect a nearby policy before adding a rule. Run python3 tests/verify_thermal_mode.py for this component.\n",
+          "src/adapters/redfish_thermal.lua": "local thermal = require('src.services.thermal_policy')\n\nlocal M = {}\n\nfunction M.patch(context, body)\n    return thermal.set_mode(context.fan_count, body.Mode)\nend\n\nreturn M\n",
+          "src/services/power_policy.lua": "local M = {}\n\nfunction M.validate_profile(available_psus, profile)\n    if profile == 'performance' and available_psus < 2 then\n        return nil, 'InvalidProfile'\n    end\n    return profile\nend\n\nreturn M\n",
+          "src/services/thermal_policy.lua": "local M = {}\n\nfunction M.set_mode(fan_count, mode)\n    return mode\nend\n\nreturn M\n",
+          "tests/thermal_policy_spec.lua": "local thermal = require('src.services.thermal_policy')\n\ndescribe('thermal policy', function()\n    it('keeps a normal mode', function()\n        assert.equals('balanced', thermal.set_mode(2, 'balanced'))\n    end)\nend)\n",
+          "tests/verify_thermal_mode.py": "from pathlib import Path\nimport re\n\nadapter = Path('src/adapters/redfish_thermal.lua').read_text(encoding='utf-8')\nservice = Path('src/services/thermal_policy.lua').read_text(encoding='utf-8')\nspec = Path('tests/thermal_policy_spec.lua').read_text(encoding='utf-8')\nexpected_adapter = \"local thermal = require('src.services.thermal_policy')\\n\\nlocal M = {}\\n\\nfunction M.patch(context, body)\\n    return thermal.set_mode(context.fan_count, body.Mode)\\nend\\n\\nreturn M\\n\"\nassert adapter == expected_adapter, 'protocol adapter must stay a thin translation layer'\nassert re.search(r\"mode\\s*==\\s*['\\\"]silent['\\\"].*fan_count\\s*<\\s*4\", service, re.S) or re.search(r\"fan_count\\s*<\\s*4.*mode\\s*==\\s*['\\\"]silent['\\\"]\", service, re.S)\nassert 'InvalidMode' in service\nfor token in ('silent', 'InvalidMode', '3', '4', 'balanced'):\n    assert token in spec, token\nprint('thermal mode structure verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "thermal-mode-structure",
+          "argv": [
+            "python3",
+            "tests/verify_thermal_mode.py"
+          ],
+          "stdout_contains": [
+            "thermal mode structure verified"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "src/services/thermal_policy.lua",
+          "tests/thermal_policy_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build"
+          ]
+        },
+        "references": {},
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_thermal_mode\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_thermal_mode\\.py",
+            "output_pattern": "thermal mode structure verified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reuse-existing-helper",
+      "covers": [
+        "structure.existing-extension-point",
+        "implementation.reuse",
+        "implementation.no-duplicate-logic",
+        "verification.focused"
+      ],
+      "prompt": "需求已经确认，请实现网络库存查询兼容带连字符和小写的设备 ID，例如 aa-bb 应匹配记录键 AABB。请先检查同仓库其他库存模块和公共能力，按现有方式修改并补充测试，运行仓库已有验证命令。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "Inventory services must use the canonical ID helper in src/common. Do not duplicate normalization rules. Run python3 tests/verify_network_inventory.py.\n",
+          "src/common/normalize_id.lua": "local M = {}\n\nfunction M.normalize(value)\n    if value == nil then\n        return nil\n    end\n    return string.upper((value:gsub('-', '')))\nend\n\nreturn M\n",
+          "src/services/storage_inventory.lua": "local normalize_id = require('src.common.normalize_id')\n\nlocal M = {}\n\nfunction M.lookup(records, id)\n    return records[normalize_id.normalize(id)]\nend\n\nreturn M\n",
+          "src/services/network_inventory.lua": "local M = {}\n\nfunction M.lookup(records, id)\n    return records[id]\nend\n\nreturn M\n",
+          "tests/network_inventory_spec.lua": "local inventory = require('src.services.network_inventory')\n\ndescribe('network inventory', function()\n    it('looks up a canonical id', function()\n        assert.equals('port', inventory.lookup({AABB = 'port'}, 'AABB'))\n    end)\nend)\n",
+          "tests/verify_network_inventory.py": "from pathlib import Path\nimport re\n\nsource = Path('src/services/network_inventory.lua').read_text(encoding='utf-8')\nspec = Path('tests/network_inventory_spec.lua').read_text(encoding='utf-8')\nassert re.search(r\"require\\(['\\\"]src\\.common\\.normalize_id['\\\"]\\)\", source)\nassert re.search(r'normalize_id\\.normalize\\(id\\)', source)\nassert 'string.upper' not in source and ':gsub' not in source\nfor token in ('aa-bb', 'AABB', 'port'):\n    assert token in spec, token\nprint('network inventory reuse verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "network-inventory-reuse",
+          "argv": [
+            "python3",
+            "tests/verify_network_inventory.py"
+          ],
+          "stdout_contains": [
+            "network inventory reuse verified"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "src/services/network_inventory.lua",
+          "tests/network_inventory_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing"
+          ]
+        },
+        "references": {},
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_network_inventory\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_network_inventory\\.py",
+            "output_pattern": "network inventory reuse verified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "authored-model-generation-chain",
+      "covers": [
+        "generation.authored-input",
+        "generation.semantic-completeness",
+        "structure.direct-consumer",
+        "verification.contract"
+      ],
+      "prompt": "需求已经确认，请在 Device 模型中增加只读 string 属性 Health，并按仓库现有生成链更新 binding。不要手工绕过 authored model；运行仓库给出的生成和验证命令。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "mds/model.json is authored. generated/Device.lua must be produced with python3 tools/gen_model.py. Validate with python3 tests/verify_model.py.\n",
+          "docs/model-conventions.md": "A read-only property uses {\"type\": \"string\", \"readOnly\": true}.\n",
+          "mds/model.json": "{\n  \"objects\": {\n    \"Device\": {\n      \"properties\": {\n        \"State\": {\"type\": \"string\", \"readOnly\": true}\n      }\n    }\n  }\n}\n",
+          "tools/gen_model.py": "import json\nfrom pathlib import Path\n\nmodel = json.loads(Path('mds/model.json').read_text(encoding='utf-8'))\nproperties = model['objects']['Device']['properties']\nlines = ['return {']\nfor name, spec in properties.items():\n    lines.append(f\"  {name} = '{spec['type']}',\")\nlines.append('}')\nPath('generated/Device.lua').write_text('\\n'.join(lines) + '\\n', encoding='utf-8')\nprint('generated Device.lua')\n",
+          "generated/Device.lua": "return {\n  State = 'string',\n}\n",
+          "src/device_service.lua": "local Device = require('generated.Device')\nreturn { model = Device }\n",
+          "tests/verify_model.py": "import json\nfrom pathlib import Path\n\nmodel = json.loads(Path('mds/model.json').read_text(encoding='utf-8'))\nhealth = model['objects']['Device']['properties']['Health']\nassert health == {'type': 'string', 'readOnly': True}\ngenerated = Path('generated/Device.lua').read_text(encoding='utf-8')\nassert generated.strip() and \"Health = 'string'\" in generated\nassert \"State = 'string'\" in generated\nprint('model generation verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "model-generation",
+          "argv": [
+            "python3",
+            "tests/verify_model.py"
+          ],
+          "stdout_contains": [
+            "model generation verified"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "mds/model.json",
+          "generated/Device.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build"
+          ]
+        },
+        "references": {
+          "required": []
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tools/gen_model\\.py",
+            "python3\\s+tests/verify_model\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tools/gen_model\\.py",
+            "output_pattern": "generated Device.lua"
+          },
+          {
+            "command_pattern": "python3\\s+tests/verify_model\\.py",
+            "output_pattern": "model generation verified"
+          }
+        ],
+        "files": {
+          "generated/Device.lua": {
+            "contains": [
+              "Health = 'string'",
+              "State = 'string'"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "cross-component-single-writer",
+      "covers": [
+        "structure.cross-component",
+        "structure.single-writer",
+        "structure.similar-implementation",
+        "verification.consumer-contract"
+      ],
+      "prompt": "需求已经确认，请实现链路连续 3 次探测失败后发布 degraded 状态，并让查询接口原样返回 degraded；恢复成功后继续发布 online。请根据仓库现有状态 owner 和相似监控实现完成修改，不要让 API 或 repair 组件成为第二个写入者，并补充测试。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "Monitor components own observed state. API and repair components are consumers and must not write canonical state. Run python3 tests/verify_link_state.py.\n",
+          "components/power_monitor.lua": "local failures = {}\n\nlocal M = {}\n\nfunction M.observe(id, ok, store)\n    failures[id] = ok and 0 or (failures[id] or 0) + 1\n    if failures[id] >= 2 then\n        store:set(id, 'degraded')\n    elseif ok then\n        store:set(id, 'online')\n    end\nend\n\nreturn M\n",
+          "components/link_monitor.lua": "local M = {}\n\nfunction M.observe(id, ok, store)\n    store:set(id, ok and 'online' or 'offline')\nend\n\nreturn M\n",
+          "components/link_api.lua": "local M = {}\n\nfunction M.get_state(id, store)\n    local value = store:get(id)\n    if value == 'online' then\n        return value\n    end\n    return 'offline'\nend\n\nreturn M\n",
+          "components/link_repair.lua": "local M = {}\n\nfunction M.request(id, repair_queue)\n    return repair_queue:push(id)\nend\n\nreturn M\n",
+          "tests/link_state_spec.lua": "describe('link state', function()\n    it('publishes online after success', function()\n        assert.equals('online', 'online')\n    end)\nend)\n",
+          "tests/verify_link_state.py": "from pathlib import Path\nimport re\n\nmonitor = Path('components/link_monitor.lua').read_text(encoding='utf-8')\napi = Path('components/link_api.lua').read_text(encoding='utf-8')\nrepair = Path('components/link_repair.lua').read_text(encoding='utf-8')\nspec = Path('tests/link_state_spec.lua').read_text(encoding='utf-8')\nassert 'degraded' in monitor and re.search(r'>=\\s*3|==\\s*3', monitor)\nassert \"'online'\" in monitor and 'store:set' in monitor\nassert 'degraded' in api and 'store:set' not in api\nassert 'store:set' not in repair and 'degraded' not in repair\nfor token in ('degraded', '3', 'online', 'recovery'):\n    assert token in spec, token\nprint('single writer link state verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "single-writer-link-state",
+          "argv": [
+            "python3",
+            "tests/verify_link_state.py"
+          ],
+          "stdout_contains": [
+            "single writer link state verified"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "components/link_monitor.lua",
+          "components/link_api.lua",
+          "tests/link_state_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/development-guidelines.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/verify_link_state\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/verify_link_state\\.py",
+            "output_pattern": "single writer link state verified"
+          }
+        ]
+      }
+    },
+    {
+      "id": "local-test-pattern-discovery",
+      "covers": [
+        "structure.test-entry-discovery",
+        "testing.local-fixture-reuse",
+        "implementation.local-pattern",
+        "verification.focused"
+      ],
+      "prompt": "需求已经确认：传感器总线读取返回 nil 时，sensor_reader 应返回 nil 而不是解引用异常。请自行找到组件现有测试入口和 fake bus，用现有方式补充回归并完成验证。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "Component tests use tests/helpers/fake_bus.lua. Run python3 tools/run_component_tests.py sensor after changing sensor_reader.\n",
+          "src/sensor_reader.lua": "local M = {}\n\nfunction M.read(bus, path)\n    return bus.read(path).value\nend\n\nreturn M\n",
+          "tests/helpers/fake_bus.lua": "local M = {}\n\nfunction M.new(values)\n    return { read = function(path) return values[path] end }\nend\n\nreturn M\n",
+          "tests/sensor_reader_spec.lua": "local reader = require('src.sensor_reader')\nlocal fake_bus = require('tests.helpers.fake_bus')\n\ndescribe('sensor reader', function()\n    it('returns a present value', function()\n        assert.equals(42, reader.read(fake_bus.new({temp = {value = 42}}), 'temp'))\n    end)\nend)\n",
+          "tools/run_component_tests.py": "from pathlib import Path\nimport re\nimport sys\n\nassert sys.argv[1:] == ['sensor']\nsource = Path('src/sensor_reader.lua').read_text(encoding='utf-8')\nspec = Path('tests/sensor_reader_spec.lua').read_text(encoding='utf-8')\nassert re.search(r'bus\\.read\\(path\\)', source)\nassert re.search(r'==\\s*nil|\\band\\b', source), 'missing bus value must be guarded'\nfor token in ('fake_bus', 'missing', 'nil', '42'):\n    assert token in spec, token\nprint('sensor component tests passed')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "sensor-component-tests",
+          "argv": [
+            "python3",
+            "tools/run_component_tests.py",
+            "sensor"
+          ],
+          "stdout_contains": [
+            "sensor component tests passed"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "src/sensor_reader.lua",
+          "tests/sensor_reader_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing"
+          ]
+        },
+        "references": {},
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tools/run_component_tests\\.py\\s+sensor"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tools/run_component_tests\\.py\\s+sensor",
+            "output_pattern": "sensor component tests passed"
+          }
+        ],
+        "files": {
+          "tests/helpers/fake_bus.lua": {
+            "equals": "local M = {}\n\nfunction M.new(values)\n    return { read = function(path) return values[path] end }\nend\n\nreturn M\n"
+          }
+        }
+      }
+    },
+    {
+      "id": "product-assembly-authored-selection",
+      "covers": [
+        "structure.product-assembly",
+        "generation.authored-input",
+        "structure.similar-product",
+        "verification.resolved-output"
+      ],
+      "prompt": "需求已经确认，请让 rack 产品包含 telemetry 服务。请检查其他产品的现有装配方式以及 telemetry 自身依赖，只修改正确的 authored 配置并按仓库方式重新生成、验证 rack 的解析结果。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "Product manifests are authored. out/services.json is generated with python3 tools/resolve_product.py products/rack/manifest.json. Validate with python3 tests/verify_rack_product.py.\n",
+          "components/telemetry/service.json": "{\"name\": \"telemetry\", \"requires\": [\"Mapper\"]}\n",
+          "products/tower/manifest.json": "{\"services\": [\"inventory\", \"telemetry\"]}\n",
+          "products/rack/manifest.json": "{\"services\": [\"inventory\"]}\n",
+          "tools/resolve_product.py": "import json\nfrom pathlib import Path\nimport sys\n\nmanifest = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))\nresolved = []\nfor name in manifest['services']:\n    item = {'name': name}\n    service_path = Path('components') / name / 'service.json'\n    if service_path.exists():\n        item.update(json.loads(service_path.read_text(encoding='utf-8')))\n    resolved.append(item)\nPath('out/services.json').write_text(json.dumps({'services': resolved}, indent=2) + '\\n', encoding='utf-8')\nprint('resolved rack services')\n",
+          "out/services.json": "{\n  \"services\": [\n    {\"name\": \"inventory\"}\n  ]\n}\n",
+          "tests/verify_rack_product.py": "import json\nfrom pathlib import Path\n\nmanifest = json.loads(Path('products/rack/manifest.json').read_text(encoding='utf-8'))\nassert manifest['services'].count('telemetry') == 1\nresolved = json.loads(Path('out/services.json').read_text(encoding='utf-8'))['services']\ntelemetry = next(item for item in resolved if item['name'] == 'telemetry')\nassert telemetry['requires'] == ['Mapper']\nprint('rack product assembly verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "rack-product-assembly",
+          "argv": [
+            "python3",
+            "tests/verify_rack_product.py"
+          ],
+          "stdout_contains": [
+            "rack product assembly verified"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "products/rack/manifest.json",
+          "out/services.json"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build"
+          ]
+        },
+        "references": {
+          "required": [
+            "references/startup-product-assembly.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tools/resolve_product\\.py\\s+products/rack/manifest\\.json",
+            "python3\\s+tests/verify_rack_product\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tools/resolve_product\\.py\\s+products/rack/manifest\\.json",
+            "output_pattern": "resolved rack services"
+          },
+          {
+            "command_pattern": "python3\\s+tests/verify_rack_product\\.py",
+            "output_pattern": "rack product assembly verified",
+            "allow_empty_output": true
+          }
+        ],
+        "files": {
+          "components/telemetry/service.json": {
+            "equals": "{\"name\": \"telemetry\", \"requires\": [\"Mapper\"]}\n"
+          }
+        }
+      }
+    },
+    {
+      "id": "persistence-compatible-implementation",
+      "covers": [
+        "authorization.explicit-implementation",
+        "authorization.explicit-high-risk-implementation",
+        "structure.persistence-chain",
+        "generation.authored-input",
+        "compatibility.upgrade-rollback",
+        "verification.focused"
+      ],
+      "prompt": "需求已经确认，请直接实现：在现有 Policy 模型中新增跨重启持久化的 string 字段 LastGoodMode。旧数据缺少该字段时恢复逻辑继续使用 Mode；新数据增加该字段后，旧版本仍只读取原有 Mode，不得破坏回滚。按仓库现有生成链更新 generated 文件，补充升级和回滚测试并运行指定验证；如果仓库证据已经给出唯一方案，不要再次向我确认。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "# Repository rules\n\n- `mds/model.json` is authored source.\n- `tools/gen_policy.py` is the only supported generator for `generated/policy_db.lua`; never edit generated output directly.\n- `src/policy_service.lua` owns restore fallback behavior.\n- Add upgrade and rollback cases to `tests/persistence_spec.lua`.\n- Verify with `python3 tests/verify_persistence.py`.\n",
+          "mds/model.json": "{\"objects\": {\"Policy\": {\"properties\": {\"Mode\": {\"type\": \"string\", \"usage\": \"PoweroffPer\"}}}}}\n",
+          "tools/gen_policy.py": "#!/usr/bin/env python3\nimport json\nfrom pathlib import Path\n\nmodel = json.loads(Path('mds/model.json').read_text(encoding='utf-8'))\nfields = list(model['objects']['Policy']['properties'])\nquoted = ', '.join(repr(name) for name in fields)\nPath('generated/policy_db.lua').write_text(\n    f\"return {{ table = 'Policy', fields = {{{quoted}}} }}\\n\",\n    encoding='utf-8',\n)\nprint('generated policy_db.lua')\n",
+          "generated/policy_db.lua": "return { table = 'Policy', fields = {'Mode'} }\n",
+          "src/policy_service.lua": "local M = {}\nfunction M.restore(row) return row.Mode end\nreturn M\n",
+          "compat/previous-schema.json": "{\"table\": \"Policy\", \"fields\": [\"Mode\"]}\n",
+          "tests/persistence_spec.lua": "describe('policy persistence', function()\n  it('restores the existing Mode field', function()\n    assert.equals('manual', require('policy_service').restore({ Mode = 'manual' }))\n  end)\nend)\n",
+          "tests/verify_persistence.py": "#!/usr/bin/env python3\nimport json\nfrom pathlib import Path\nimport re\n\nmodel = json.loads(Path('mds/model.json').read_text(encoding='utf-8'))\nproperties = model['objects']['Policy']['properties']\nassert list(properties) == ['Mode', 'LastGoodMode']\nassert properties['LastGoodMode']['type'] == 'string'\nassert properties['LastGoodMode']['usage'] == properties['Mode']['usage']\nprevious = json.loads(Path('compat/previous-schema.json').read_text(encoding='utf-8'))\ngenerated = Path('generated/policy_db.lua').read_text(encoding='utf-8')\nassert generated == \"return { table = 'Policy', fields = {'Mode', 'LastGoodMode'} }\\n\"\nassert previous == {'table': 'Policy', 'fields': ['Mode']}\nservice = Path('src/policy_service.lua').read_text(encoding='utf-8')\nfallback = re.search(r'row\\.LastGoodMode\\s+or\\s+row\\.Mode', service)\nexplicit_fallback = re.search(r'if\\s+row\\.LastGoodMode\\s*~=\\s*nil\\s+then\\s*return\\s+row\\.LastGoodMode\\s+end.*return\\s+row\\.Mode', service, re.S)\nassert fallback or explicit_fallback\nspec = Path('tests/persistence_spec.lua').read_text(encoding='utf-8')\nassert len(re.findall(r'\\bit\\s*\\(', spec)) >= 3\nrestore_rows = re.findall(r'restore\\s*\\(\\s*\\{([^}]*)\\}\\s*\\)', spec, re.S)\nassert any(re.search(r'\\bMode\\s*=', row) and not re.search(r'\\bLastGoodMode\\s*=', row) for row in restore_rows)\nassert any(re.search(r'\\bMode\\s*=', row) and re.search(r'\\bLastGoodMode\\s*=', row) for row in restore_rows)\nassert re.search(r'rollback|previous version|old version|回滚|旧版本', spec, re.I)\nprint('persistence compatibility verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "persistence-compatibility",
+          "argv": [
+            "python3",
+            "tests/verify_persistence.py"
+          ],
+          "stdout_contains": [
+            "persistence compatibility verified"
+          ]
+        }
+      ],
+      "expect": {
+        "workspace_changes": [
+          "generated/policy_db.lua",
+          "mds/model.json",
+          "src/policy_service.lua",
+          "tests/persistence_spec.lua"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build",
+            "openubmc-upgrade"
+          ]
+        },
+        "references": {
+          "required": [],
+          "allowed": [
+            "references/mdb-mds.md",
+            "references/persistence-compatibility.md",
+            "references/lua-component.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tools/gen_policy\\.py",
+            "python3\\s+tests/verify_persistence\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tools/gen_policy\\.py",
+            "output_pattern": "generated policy_db\\.lua"
+          },
+          {
+            "command_pattern": "python3\\s+tests/verify_persistence\\.py",
+            "output_pattern": "persistence compatibility verified"
+          }
+        ],
+        "messages": {
+          "required_patterns": [
+            "Policy|policy|负责|模块|层",
+            "authored|model|生成",
+            "升级|upgrade|old row",
+            "回滚|rollback",
+            "测试|验证|fixture"
+          ],
+          "forbidden_patterns": [
+            "请(?:确认|批准|同意)|等待(?:确认|批准|同意)|approval gate|批准门",
+            "(?:需|需要|可以|应|将)(?:手工|手动)(?:修改|同步)[^\\n]*(?:generated|policy_db)|manual(?:ly)?\\s+(?:edit|sync)[^\\n]*generated"
+          ]
+        },
+        "files": {
+          "mds/model.json": {
+            "contains": [
+              "LastGoodMode",
+              "PoweroffPer"
+            ]
+          },
+          "generated/policy_db.lua": {
+            "equals": "return { table = 'Policy', fields = {'Mode', 'LastGoodMode'} }\n"
+          },
+          "src/policy_service.lua": {
+            "contains": [
+              "row.LastGoodMode",
+              "row.Mode"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "persistence-missing-generator-stop",
+      "covers": [
+        "authorization.material-blocker",
+        "structure.persistence-chain",
+        "generation.missing-generator-stop",
+        "compatibility.upgrade-rollback",
+        "proposal.validation-plan"
+      ],
+      "prompt": "请在现有组件中新增跨重启持久化字段 LastGoodMode，并要求旧版本升级后可读取、回滚后也不能损坏旧数据库。现在直接开始修改。当前副本可能不完整；如果缺少权威生成器或无法从当前证据证明回滚兼容，说明具体缺口并停止，不要手工修改 generated 文件，也不要仅以‘非平凡变更需要再次批准’为理由停下。",
+      "workspace": {
+        "files": {
+          "AGENTS.md": "# Repository rules\n\n`mds/model.json` is authored source. `generated/policy_db.lua` is a derivative and may only be changed by the repository generator. If the generator is absent, do not edit either file.\n",
+          "mds/model.json": "{\"objects\": {\"Policy\": {\"properties\": {\"Mode\": {\"type\": \"string\"}}}}}\n",
+          "generated/policy_db.lua": "return { table = 'Policy', fields = {'Mode'} }\n",
+          "src/policy_service.lua": "local M = {}\nfunction M.restore(row) return row.Mode end\nreturn M\n",
+          "compat/previous-schema.json": "{\"table\": \"Policy\", \"fields\": [\"Mode\"]}\n",
+          "tests/persistence_contract.md": "Existing tests cover restart with Mode only. No generator, upgrade fixture, or rollback fixture is present in this source copy.\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-build",
+            "openubmc-upgrade"
+          ]
+        },
+        "references": {
+          "required": [
+            "references/persistence-compatibility.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*mds/model\\.json",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*generated/policy_db\\.lua",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*compat/previous-schema\\.json",
+            "(?:rg\\s+--files|find(?:\\s|$)|fd(?:\\s|$)|ls(?:\\s|$))"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "生成器|generator",
+            "回滚|rollback",
+            "无法|不能|缺少|未提供|不完整",
+            "所需|需要|补充|提供|调用方式|夹具|fixture",
+            "authored|model|生成"
+          ],
+          "forbidden_patterns": [
+            "批准门|approval gate|非平凡[^\\n]*(?:确认|批准)|non-trivial[^\\n]*approval",
+            "(?:需|需要|可以|应|将)(?:手工|手动)(?:修改|同步)[^\\n]*(?:generated|policy_db)|manual(?:ly)?\\s+(?:edit|sync)[^\\n]*generated"
+          ]
+        }
+      }
+    },
+    {
+      "id": "native-compile-and-runtime-verification",
+      "covers": [
+        "authorization.explicit-implementation",
+        "verification.real-compile",
+        "verification.real-runtime",
+        "workflow.lightweight"
+      ],
+      "prompt": "使用 $openubmc-developer 修复 retry limit：requested 小于 0 时返回 0，0 到 maximum 保持原值，超过 maximum 仍截断到 maximum。在现有 C++ 测试中增加负值回归，并运行 python3 tests/run_native.py。直接实现并聚焦验证。",
+      "workspace": {
+        "files": {
+          "src/retry_limit.hpp": "#pragma once\n\nint clamp_retry(int requested, int maximum);\n",
+          "src/retry_limit.cpp": "#include \"retry_limit.hpp\"\n\nint clamp_retry(int requested, int maximum)\n{\n    return requested > maximum ? maximum : requested;\n}\n",
+          "tests/retry_limit_test.cpp": "#include \"retry_limit.hpp\"\n\n#include <cassert>\n\nint main()\n{\n    assert(clamp_retry(2, 5) == 2);\n    assert(clamp_retry(9, 5) == 5);\n}\n",
+          "tests/run_native.py": "from pathlib import Path\nimport subprocess\nimport tempfile\n\nwith tempfile.TemporaryDirectory(prefix='openubmc-native-eval-') as directory:\n    binary = Path(directory) / 'retry_limit_test'\n    build = subprocess.run(\n        ['g++', '-std=c++17', '-Wall', '-Wextra', '-Werror', '-Isrc',\n         'src/retry_limit.cpp', 'tests/retry_limit_test.cpp', '-o', str(binary)],\n        text=True, capture_output=True, check=False,\n    )\n    assert build.returncode == 0, build.stdout + build.stderr\n    executed = subprocess.run([str(binary)], text=True, capture_output=True, check=False)\n    assert executed.returncode == 0, executed.stdout + executed.stderr\nprint('native compile and runtime verified')\n"
+        }
+      },
+      "post_checks": [
+        {
+          "name": "native-compile-runtime",
+          "argv": [
+            "python3",
+            "tests/run_native.py"
+          ],
+          "stdout_contains": [
+            "native compile and runtime verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "forbid_redundant_unchanged_reads": true,
+        "workspace_changes": [
+          "src/retry_limit.cpp",
+          "tests/retry_limit_test.cpp"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build"
+          ]
+        },
+        "references": {
+          "required": []
+        },
+        "commands": {
+          "required_patterns": [
+            "python3\\s+tests/run_native\\.py"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "python3\\s+tests/run_native\\.py",
+            "output_pattern": "native compile and runtime verified"
+          }
+        ],
+        "files": {
+          "src/retry_limit.cpp": {
+            "contains": [
+              "requested < 0"
+            ]
+          },
+          "tests/retry_limit_test.cpp": {
+            "contains": [
+              "clamp_retry(-1, 5)",
+              "== 0"
+            ]
+          }
+        },
+        "messages": {
+          "scope": "after_target_skill_read",
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list"
+          ]
+        }
+      }
+    },
+    {
+      "id": "explicit-build-handoff",
+      "covers": [
+        "authorization.explicit-implementation",
+        "authorization.downstream-explicit-only",
+        "lifecycle.build-handoff",
+        "lifecycle.build-upgrade-chain",
+        "workspace.handoff-retention",
+        "workflow.lightweight"
+      ],
+      "prompt": "使用 $openubmc-developer 将 src/value.txt 从 old 改为 new，运行 python3 tests/verify_value.py。修改完成后准备交给 openubmc-build 继续编译，构建成功后再由 openubmc-upgrade 使用制品；本轮不要真正构建或升级。请只提供源码阶段可验证的交接并保留当前工作区。",
+      "workspace": {
+        "files": {
+          "src/value.txt": "old\n",
+          "tests/verify_value.py": "from pathlib import Path\nassert Path('src/value.txt').read_text(encoding='utf-8') == 'new\\n'\nprint('build handoff source verified')\n"
+        },
+        "git": {
+          "dirty_files": {}
+        }
+      },
+      "post_checks": [
+        {
+          "name": "build-handoff-source",
+          "argv": [
+            "python3",
+            "tests/verify_value.py"
+          ],
+          "stdout_contains": [
+            "build handoff source verified"
+          ]
+        }
+      ],
+      "expect": {
+        "forbid_exact_command_repeats": true,
+        "forbid_redundant_unchanged_reads": true,
+        "workspace_changes": [
+          "src/value.txt"
+        ],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ],
+          "forbidden": [
+            "openubmc-dt-testing",
+            "openubmc-build",
+            "openubmc-upgrade"
+          ]
+        },
+        "references": {
+          "required": [
+            "references/downstream-handoffs.md"
+          ],
+          "allowed": [
+            "references/downstream-handoffs.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "['\"]?python3['\"]?\\s+['\"]?tests/verify_value\\.py"
+          ],
+          "forbidden_patterns": [
+            "bmcgo|conan\\s+(?:create|build|install|upload)|git\\s+(?:worktree|clone)"
+          ]
+        },
+        "command_evidence": [
+          {
+            "command_pattern": "['\"]?python3['\"]?\\s+['\"]?tests/verify_value\\.py",
+            "output_pattern": "build handoff source verified"
+          }
+        ],
+        "messages": {
+          "scope": "after_target_skill_read",
+          "required_patterns": [
+            "openubmc-build|build",
+            "openubmc-upgrade|upgrade",
+            "src/value\\.txt",
+            "生成|generate",
+            "验证|verified|check",
+            "保留|preserv"
+          ],
+          "forbidden_patterns": [
+            "规格卡|specification card|(?:创建|制定|给出).{0,8}(?:计划|todo)|todo list",
+            "(?:已经|已生成|produced).{0,20}(?:HPM|Conan package)|(?:HPM|Conan package).{0,20}(?:已经|已生成|produced)"
+          ]
+        }
+      }
+    },
+    {
+      "id": "hardware-vpd-snapshot-review",
+      "covers": [
+        "authorization.read-only",
+        "domain.hardware-vpd",
+        "verification.focused"
+      ],
+      "prompt": "只读评审现有组件的硬件 VPD 读取和发布路径。判断当前实现是否可以安全发布缓存快照、主要缺口是什么以及应验证哪些边界；不要修改文件，也不要进行目标侧操作。",
+      "workspace": {
+        "files": {
+          "src/vpd_reader.cpp": "#include <cstdint>\n#include <vector>\n\nstruct Transport { int read(unsigned, unsigned char *, unsigned); };\nstruct Cache { void publish(const std::vector<unsigned char>&); };\n\nvoid refresh(Transport& bus, Cache& cache)\n{\n    unsigned char header[4]{};\n    if (bus.read(0, header, sizeof(header)) < 0) return;\n    std::uint16_t length = static_cast<std::uint16_t>(header[2] | (header[3] << 8));\n    std::vector<unsigned char> payload(length);\n    if (bus.read(4, payload.data(), length) < 0) return;\n    cache.publish(payload);\n}\n",
+          "docs/vpd-format.md": "# VPD byte contract\n\nThe four-byte header contains a little-endian payload length. Supported payloads are 8..256 bytes. Transport reads return the number of bytes received. The final byte is a checksum over the preceding payload bytes. A snapshot is visible only after complete validation.\n",
+          "tests/vpd-cases.md": "Current tests cover only a complete 32-byte valid read. Short payloads, oversized lengths, checksum failures, replacement during refresh, and late completion are not covered.\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "required": [
+            "references/hardware-vpd.md"
+          ],
+          "allowed": [
+            "references/hardware-vpd.md",
+            "references/development-guidelines.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*src/vpd_reader\\.cpp",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*docs/vpd-format\\.md"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "短读|短头部|短 payload|完整读取|实际字节数|short read|returned length|返回长度",
+            "8|256|长度|length|上限|bounded",
+            "校验和|checksum",
+            "快照|snapshot|publish|发布",
+            "不能安全|不可安全|不具备安全发布|不应发布|No-Go|unsafe|reject"
+          ]
+        }
+      }
+    },
+    {
+      "id": "sr-dds-effective-selection-review",
+      "covers": [
+        "authorization.read-only",
+        "domain.sr-dds-product-records"
+      ],
+      "prompt": "只读评审一次 SR/DDS 修改是否会在 product-x 上生效。请沿产品选择、继承和 soft variant 链给出结论，不要修改记录或运行生成器。",
+      "workspace": {
+        "files": {
+          "records/root.sr": "include = records/common/device.dds\n",
+          "records/common/device.dds": "id = device-base\nboard = A1\nscanInterval = 10\n",
+          "records/soft/device-high.dds": "extends = device-base\nsoftVariant = high-performance\nscanInterval = 1\n",
+          "products/product-x/profile.json": "{\"roots\":[\"records/root.sr\"],\"board\":\"A1\",\"softVariants\":[\"standard\"]}\n",
+          "change/proposed.txt": "Change records/soft/device-high.dds scanInterval from 2 to 1 for product-x.\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "required": [
+            "references/sr-dds-product-records.md"
+          ],
+          "allowed": [
+            "references/sr-dds-product-records.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*records/root\\.sr",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*products/product-x/profile\\.json"
+          ],
+          "forbidden_patterns": [
+            "bmcgo\\s+gen|bingo\\s+gen"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "softVariant|soft variant|软变体",
+            "standard",
+            "high-performance",
+            "不会[^\\n]{0,40}生效|未生效|不生效|未被选中|not effective|not selected",
+            "选择链|selection|profile|继承|inherit"
+          ]
+        }
+      }
+    },
+    {
+      "id": "profile-schema-contract-review",
+      "covers": [
+        "authorization.read-only",
+        "domain.profile-schema-import-export",
+        "compatibility.upgrade-rollback"
+      ],
+      "prompt": "只读评审一次 ProfileSchema 字段重命名和敏感配置导入导出设计。判断 schema 与 adapter 是否对齐、旧 profile 是否兼容以及是否存在敏感信息风险；不要修改文件。",
+      "workspace": {
+        "files": {
+          "schema/component.json": "{\"properties\":{\"Credential\":{\"type\":\"string\",\"ImportAndExport\":true}},\"additionalProperties\":false}\n",
+          "src/profile_adapter.lua": "local M = {}\nfunction M.export(config) return { Credential = config.password } end\nfunction M.import(profile, config) config.password = profile.Credential end\nreturn M\n",
+          "compat/previous-profile.json": "{\"Password\":\"legacy-secret\"}\n",
+          "docs/change.md": "Rename Password to Credential. Credential remains user configurable and must never be exposed in cleartext export or operation logs. Existing exported profiles must remain importable.\n"
+        }
+      },
+      "expect": {
+        "workspace_changes": [],
+        "skills": {
+          "required": [
+            "openubmc-developer"
+          ],
+          "allowed": [
+            "openubmc-developer"
+          ]
+        },
+        "references": {
+          "required": [
+            "references/profile-schema-import-export.md"
+          ],
+          "allowed": [
+            "references/profile-schema-import-export.md"
+          ]
+        },
+        "commands": {
+          "required_patterns": [
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*schema/component\\.json",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*src/profile_adapter\\.lua",
+            "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*compat/previous-profile\\.json"
+          ]
+        },
+        "messages": {
+          "required_patterns": [
+            "Credential",
+            "Password",
+            "HideValue|隐藏|脱敏|redact|明文|cleartext",
+            "兼容|迁移|alias|旧 profile|previous profile",
+            "schema|adapter"
+          ]
+        }
+      }
+    }
+  ]
+}
