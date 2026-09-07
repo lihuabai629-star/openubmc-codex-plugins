@@ -1,35 +1,210 @@
 {
-  "version": "2.0.11",
-  "source_commit": "6df77485be3d6cdf1e8b8f4dce8d30333bc9d404",
-  "content_digest": "09cef0669c20fdfc81cf32fda9cc81c1f316fd95047f84db8041765118030d74",
-  "platform": "Linux",
-  "codex": "0.153.4",
-  "python": "3.12",
-  "native_codex_invocations": 2,
-  "initial_dependency_receipts": 0,
-  "mcp_tools": {
-    "kb": [
-      "openubmc_kb_list",
-      "openubmc_kb_query",
-      "openubmc_kb_status"
+  "behavior": {
+    "artifacts": {
+      "passed": true,
+      "seconds": 4.542,
+      "tests": 4
+    },
+    "build": {
+      "passed": true,
+      "seconds": 1.349,
+      "tests": 6
+    },
+    "credentials": {
+      "passed": true,
+      "seconds": 6.796,
+      "tests": 9
+    },
+    "doctor": {
+      "passed": true,
+      "seconds": 1.005,
+      "tests": 1
+    },
+    "kb_loader": {
+      "passed": true,
+      "tests": 8
+    },
+    "logs": {
+      "passed": true,
+      "seconds": 0.091,
+      "tests": 3
+    },
+    "migration": {
+      "passed": true,
+      "seconds": 3.594,
+      "tests": 8
+    },
+    "python_entrypoints": {
+      "passed": true,
+      "seconds": 21.622,
+      "tests": 10
+    },
+    "ssh": {
+      "passed": true,
+      "seconds": 4.552,
+      "tests": 4
+    },
+    "upgrade": {
+      "passed": true,
+      "seconds": 5.611,
+      "tests": 2
+    }
+  },
+  "bytecode_regression": {
+    "after_verify_exit_code": 2,
+    "baseline_source_commit": "944720795ef455e9db4ddfe55a8d3f422cadbb53",
+    "cli_help_entries": 41,
+    "entrypoint_tests": 10,
+    "ordinary_help_exit_code": 0,
+    "red_evidence": {
+      "candidate-bytecode-reproduction.json": "9911726bf6074912c87aaa078dbcb5eb61132893981d2109643be6464d77e71c",
+      "python-entrypoints-baseline-red.log": "dcee33bec478a04bed3f389becdfecf806e648df0f1df0fd9bc6722619688a77",
+      "python-missing-lock-red.log": "b9158b72d1023256c908a99fb01aa667ec429affafd323a5ffbfe8d29a04c032",
+      "python-snapshot-red.log": "215207f157649a70cb82309b5ccd0460a391880162a0afebc30c520d43b86994"
+    },
+    "reproduced_added_pyc_files": 88
+  },
+  "cold_dependencies": {
+    "passed": true,
+    "seconds": 36.272
+  },
+  "content_digest": "eb606b02f7e0283268682fb34f1323e183727750ebf7c3e5f0eb45fad1bff1fd",
+  "dependency_locks": {
+    "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
+    "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2"
+  },
+  "mcp_startup": {
+    "kb": {
+      "ok": true,
+      "server": {
+        "name": "openubmc-kb-mcp-server",
+        "version": "1.3.0"
+      },
+      "stderr": "",
+      "tools": [
+        "openubmc_kb_list",
+        "openubmc_kb_query",
+        "openubmc_kb_status"
+      ]
+    },
+    "runtime": {
+      "ok": true,
+      "server": {
+        "name": "openubmc-target-runtime",
+        "version": "openubmc.target-runtime.v1"
+      },
+      "stderr": "",
+      "tools": [
+        "execute",
+        "observe"
+      ]
+    }
+  },
+  "native_codex_qualification": {
+    "archive_sha256": "594b40918ce870844245665866e0a7486e6ac6f3b637396d3780aa53e56baa7e",
+    "codex": "codex-cli 0.153.4",
+    "content_digest": "eb606b02f7e0283268682fb34f1323e183727750ebf7c3e5f0eb45fad1bff1fd",
+    "deterministic_archive": true,
+    "external_state_preserved": true,
+    "invocations": 2,
+    "mcp_health": {
+      "kb": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "stderr": "",
+        "tools": [
+          "openubmc_kb_list",
+          "openubmc_kb_query",
+          "openubmc_kb_status"
+        ]
+      },
+      "runtime": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "stderr": "",
+        "tools": [
+          "execute",
+          "observe"
+        ]
+      }
+    },
+    "native_install": true,
+    "native_uninstall": true,
+    "reinstall": true,
+    "restart_verified": true,
+    "source_commit": "e8e15f2a31b542baa4d2f4c9079cca950c440f62"
+  },
+  "ordinary_python_cli_before_mcp": true,
+  "package_integrity_after_checks": true,
+  "passed": true,
+  "platform": {
+    "codex": "codex-cli 0.153.4",
+    "machine": "x86_64",
+    "node": "v20.18.0",
+    "os": "Linux",
+    "python": "3.12.3"
+  },
+  "qualification_scope": "local_behavior_and_cold_startup",
+  "regression_gate": {
+    "baseline_content_digest": "09cef0669c20fdfc81cf32fda9cc81c1f316fd95047f84db8041765118030d74",
+    "baseline_source_commit": "6df77485be3d6cdf1e8b8f4dce8d30333bc9d404",
+    "baseline_version": "2.0.11",
+    "expected_failure_groups": [
+      "artifacts",
+      "build",
+      "credentials",
+      "doctor",
+      "kb_loader",
+      "logs",
+      "migration",
+      "ssh",
+      "upgrade"
     ],
-    "runtime": [
-      "execute",
-      "observe"
-    ]
+    "harness_rejected_behavior_failure": true,
+    "negative_harness_exit_code": 1
   },
-  "uninstall_reinstall": true,
-  "package_integrity_after_startup": true,
+  "remote_business_qualification": "not_run",
+  "reproducibility": {
+    "archive_sha256": "594b40918ce870844245665866e0a7486e6ac6f3b637396d3780aa53e56baa7e",
+    "passed": true,
+    "rebuilt_archive_sha256": "594b40918ce870844245665866e0a7486e6ac6f3b637396d3780aa53e56baa7e"
+  },
+  "review": {
+    "incremental_source_baseline": "944720795ef455e9db4ddfe55a8d3f422cadbb53",
+    "independent_snapshot_checks": {
+      "independent_archive_sha256": "594b40918ce870844245665866e0a7486e6ac6f3b637396d3780aa53e56baa7e",
+      "injected_source_and_bytecode_executed": false,
+      "missing_package_lock_with_matching_snapshot_receipt": "rejected before unverified source import",
+      "missing_receipt_moved_snapshot_and_unchecked_bytecode": "6 rejection cases passed",
+      "normal_and_isolated_children": "passed",
+      "original_plugin_inventory_unchanged": true
+    },
+    "public_baseline": "6ab39a85c48c2f242b359aae3cd0d33c1b23379a",
+    "source_baseline": "6df77485be3d6cdf1e8b8f4dce8d30333bc9d404",
+    "source_head": "e8e15f2a31b542baa4d2f4c9079cca950c440f62",
+    "spec_unresolved_findings": 0,
+    "standards_unresolved_findings": 0
+  },
   "runtime_shutdown_verified": true,
-  "limitations": [
-    "BMC operations and authenticated knowledge queries require separate credentials and validation.",
-    "Native Windows is not qualified.",
-    "The clean installation test used an explicitly configured public package mirror."
-  ],
-  "repository_validation": {
-    "python_tests": 1780,
-    "node_tests": 44,
-    "passed": true
+  "schema": "openubmc.public-behavior.v1",
+  "source_commit": "e8e15f2a31b542baa4d2f4c9079cca950c440f62",
+  "source_validation": {
+    "codex_adoption": "passed",
+    "command": "python3 scripts/validate_workflow.py",
+    "log_sha256": "e5f1a1021932cbe61972f1be4d3bd21b552debb4442951630af73759e035c26a",
+    "node_tests": 45,
+    "passed": true,
+    "python_tests": 1823,
+    "runtime_diagnosis_chain": "passed",
+    "skipped": 0,
+    "source_commit": "e8e15f2a31b542baa4d2f4c9079cca950c440f62"
   },
-  "reproducible_archive": true
+  "status": "released",
+  "version": "2.0.12"
 }

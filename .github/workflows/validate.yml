@@ -6,10 +6,27 @@ permissions:
   contents: read
 jobs:
   verify:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install locked Codex host
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund --prefix scripts/host
+          echo "$PWD/scripts/host/node_modules/.bin" >> "$GITHUB_PATH"
       - run: python3 -I scripts/check_marketplace.py
+      - name: Check final plugin behavior and cold MCP startup
+        run: python3 -I scripts/check_behavior.py --output "$RUNNER_TEMP/public-behavior.json"
+      - name: Upload behavior evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-behavior
+          path: ${{ runner.temp }}/public-behavior.json
+          if-no-files-found: error

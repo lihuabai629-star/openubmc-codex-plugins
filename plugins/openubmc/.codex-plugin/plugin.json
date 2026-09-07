@@ -35,5 +35,5 @@
   "name": "openubmc",
   "repository": "https://github.com/lihuabai629-star/openubmc-codex-plugins",
   "skills": "./skills/",
-  "version": "2.0.11"
+  "version": "2.0.12"
 }

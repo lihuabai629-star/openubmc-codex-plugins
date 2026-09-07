@@ -32,9 +32,18 @@ codex plugin remove openubmc@openubmc-public
 
 The last command uninstalls the plugin. Credentials and Runtime history stay outside its cache. Start a new task after updates.
 
-If an older `openubmc@personal` installation exists, remove that plugin registration before switching marketplaces. Keep its external credentials and history. A legacy installation with individually registered Skills/MCP servers needs ownership-aware migration before using the marketplace package.
+For an older personal plugin or loose Skill/MCP installation, preview and apply the bundled disable-only migration:
+
+```bash
+python3 -I <plugin-root>/scripts/pluginctl.py migrate --disable-only --preview
+python3 -I <plugin-root>/scripts/pluginctl.py migrate --disable-only
+```
+
+The helper disables owned legacy entries, retains files, links, credentials and history, and preserves `openubmc@openubmc-public`. Start a new Codex task to load the saved state. Restore with `restore-legacy --transaction <id>`; later configuration or ownership changes require reconciliation. The explicit `migrate --remove` route remains available for removing owned loose registrations and links.
 
 ## Dependency recovery
+
+For Python integrations, follow the packaged [entrypoint and import guide](plugins/openubmc/PYTHON.md).
 
 Use `codex plugin list --json` to identify the installed version. The plugin directory is under `${CODEX_HOME:-$HOME/.codex}/plugins/cache/openubmc-public/openubmc/<version>`.
 

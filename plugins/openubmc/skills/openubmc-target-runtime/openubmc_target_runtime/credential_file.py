@@ -30,6 +30,29 @@ class CredentialFileError(ValueError):
     """Credential source could not be read without weakening its local boundary."""
 
 
+def credential_completeness(values: Mapping[str, str]) -> dict[str, object]:
+    """Describe local capability completeness without resolving or using secrets."""
+    groups = {
+        "bmc_ssh": ("OPENUBMC_SSH_USER", "OPENUBMC_SSH_PASSWORD"),
+        "redfish": ("REDFISH_USERNAME", "REDFISH_PASSWORD"),
+        "os_ssh": ("OPENUBMC_OS_SSH_USER", "OPENUBMC_OS_SSH_PASSWORD"),
+        "telnet": ("OPENUBMC_TELNET_USER", "OPENUBMC_TELNET_PASSWORD"),
+    }
+    capabilities = {}
+    missing = []
+    for capability, keys in groups.items():
+        capabilities[capability] = all(values.get(key) for key in keys)
+        selected = any(values.get(key) for key in keys)
+        if capability == "os_ssh":
+            selected = selected or bool(values.get("OPENUBMC_OS_SSH_PORT"))
+        if selected:
+            missing.extend(key for key in keys if not values.get(key))
+    if not any(capabilities.values()) and not missing:
+        missing.extend((*groups["bmc_ssh"], *groups["redfish"]))
+    return {"configured": any(capabilities.values()) and not missing,
+            "capabilities": capabilities, "missing_keys": missing}
+
+
 def _parse_value(value: str, *, line_number: int) -> str:
     cooked = value.strip()
     if "\x00" in cooked:

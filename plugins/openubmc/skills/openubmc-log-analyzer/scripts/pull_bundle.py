@@ -2,6 +2,15 @@
 """Pull an openUBMC one-click log bundle from a remote host."""
 from __future__ import annotations
 
+if __name__ == '__main__':
+    import sys as _openubmc_sys
+    _openubmc_sys.dont_write_bytecode = True
+    import runpy as _openubmc_runpy
+    from pathlib import Path as _openubmc_Path
+    _openubmc_guard = _openubmc_Path(__file__).parent / '../../openubmc-debug/scripts/_plugin_entrypoint.py'
+    _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
+
+
 import argparse
 import datetime as dt
 import getpass
@@ -1447,16 +1456,19 @@ def extract_archive(archive_path: pathlib.Path, extract_parent: pathlib.Path) ->
         bundle_name = bundle_name[: -len(".tar.gz")]
     elif bundle_name.endswith(".tar"):
         bundle_name = bundle_name[: -len(".tar")]
-    extract_dir = extract_parent / bundle_name
-    extract_dir.mkdir(parents=True, exist_ok=True)
+    extract_parent.mkdir(parents=True, exist_ok=True)
+    extract_dir = pathlib.Path(tempfile.mkdtemp(prefix=bundle_name + "-", dir=extract_parent))
     try:
         with tarfile.open(archive_path, "r:*") as archive:
             for member in archive.getmembers():
                 ensure_safe_member_path(extract_dir, member.name)
             archive.extractall(extract_dir, filter="data")
-    except (tarfile.TarError, OSError) as exc:
+        return ExtractionResult(extract_dir=extract_dir, bundle_root=locate_bundle_root(extract_dir))
+    except (BundlePullError, tarfile.TarError, OSError) as exc:
+        shutil.rmtree(extract_dir)
+        if isinstance(exc, BundlePullError):
+            raise
         raise BundlePullError("extract_failed", f"Failed to extract {archive_path}: {exc}") from exc
-    return ExtractionResult(extract_dir=extract_dir, bundle_root=locate_bundle_root(extract_dir))
 
 
 def emit_result(payload: dict[str, object], *, json_mode: bool) -> None:

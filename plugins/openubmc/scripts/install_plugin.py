@@ -2,6 +2,15 @@
 """Install an immutable OpenUBMC Codex plugin with recoverable activation."""
 from __future__ import annotations
 
+if __name__ == '__main__':
+    import sys as _openubmc_sys
+    _openubmc_sys.dont_write_bytecode = True
+    import runpy as _openubmc_runpy
+    from pathlib import Path as _openubmc_Path
+    _openubmc_guard = _openubmc_Path(__file__).parent / '../skills/openubmc-debug/scripts/_plugin_entrypoint.py'
+    _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
+
+
 import argparse
 import copy
 import fcntl
@@ -209,7 +218,7 @@ def activate(archive: Path, archive_sha: str, home: Path, codex: Path) -> dict:
                 raise ValueError('existing immutable release has drifted')
         else:
             stage_directory(release, files)
-        cli = [sys.executable, '-I', str(release/'scripts/pluginctl.py')]
+        cli = [sys.executable, "-B", '-I', str(release/'scripts/pluginctl.py')]
         for operation in ('prepare', 'doctor'):
             command([*cli, operation], env)
         source = home/'plugins/openubmc'
