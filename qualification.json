@@ -100,6 +100,46 @@
       ]
     }
   },
+  "native_codex_qualification": {
+    "archive_sha256": "594b40918ce870844245665866e0a7486e6ac6f3b637396d3780aa53e56baa7e",
+    "codex": "codex-cli 0.153.4",
+    "content_digest": "eb606b02f7e0283268682fb34f1323e183727750ebf7c3e5f0eb45fad1bff1fd",
+    "deterministic_archive": true,
+    "external_state_preserved": true,
+    "invocations": 2,
+    "mcp_health": {
+      "kb": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "stderr": "",
+        "tools": [
+          "openubmc_kb_list",
+          "openubmc_kb_query",
+          "openubmc_kb_status"
+        ]
+      },
+      "runtime": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "stderr": "",
+        "tools": [
+          "execute",
+          "observe"
+        ]
+      }
+    },
+    "native_install": true,
+    "native_uninstall": true,
+    "reinstall": true,
+    "restart_verified": true,
+    "source_commit": "e8e15f2a31b542baa4d2f4c9079cca950c440f62"
+  },
   "ordinary_python_cli_before_mcp": true,
   "package_integrity_after_checks": true,
   "passed": true,
@@ -165,6 +205,6 @@
     "skipped": 0,
     "source_commit": "e8e15f2a31b542baa4d2f4c9079cca950c440f62"
   },
-  "status": "candidate",
+  "status": "released",
   "version": "2.0.12"
 }
