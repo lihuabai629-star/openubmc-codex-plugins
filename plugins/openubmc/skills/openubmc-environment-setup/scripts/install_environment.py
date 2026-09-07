@@ -228,9 +228,8 @@ REQUIRED_CREDENTIAL_KEYS = (
     "OPENUBMC_SSH_PASSWORD",
     "REDFISH_USERNAME",
     "REDFISH_PASSWORD",
-    "OPENUBMC_OS_SSH_USER",
-    "OPENUBMC_OS_SSH_PASSWORD",
 )
+OS_CREDENTIAL_KEYS = ("OPENUBMC_OS_SSH_USER", "OPENUBMC_OS_SSH_PASSWORD")
 
 MARKER_START = "# >>> openUBMC environment setup >>>"
 MARKER_END = "# <<< openUBMC environment setup <<<"
@@ -1502,7 +1501,29 @@ def default_knowledge_config() -> dict[str, object]:
     return {"username": "", "password": ""}
 
 
-def ensure_knowledge_config(home: Path, source: Path | None, dry_run: bool) -> str:
+def validate_knowledge_config(document: dict[str, object]) -> None:
+    """Validate saved values with the KB loader, without authenticating."""
+    loader = next((parent / "openubmc-kb-mcp/src/config.js" for parent in Path(__file__).resolve().parents
+                   if (parent / "openubmc-kb-mcp/src/config.js").is_file()), None)
+    if loader is None:
+        raise SetupError("openUBMC KB configuration loader is missing")
+    environment = {key: value for key, value in os.environ.items()
+                   if key not in {"OPENUBMC_KB_USERNAME", "OPENUBMC_KB_PASSWORD", "OPENUBMC_KB_CLIENT_SECRET"}
+                   and key.upper() not in {"NODE_OPTIONS", "NODE_PATH", "NPM_CONFIG_NODE_OPTIONS"}}
+    with tempfile.TemporaryDirectory(prefix="openubmc-kb-config-") as temporary:
+        path = Path(temporary) / "config.json"
+        atomic_write(path, json.dumps(document), 0o600)
+        script = "const {loadConfig} = await import(process.argv[1]); await loadConfig(process.argv[2]);"
+        try:
+            result = subprocess.run(["node", "--input-type=module", "-e", script, loader.as_uri(), str(path)],
+                                    env=environment, capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as error:
+            raise SetupError("unable to validate openUBMC KB configuration; Node.js is required") from error
+    if result.returncode:
+        raise SetupError("openUBMC KB configuration is incomplete or invalid; check username, password, clientSecret and application settings")
+
+
+def ensure_knowledge_config(home: Path, source: Path | None, dry_run: bool, *, require_complete: bool = False) -> str:
     destination = knowledge_config_path(home)
     configured_source = source
     if configured_source is None:
@@ -1518,6 +1539,8 @@ def ensure_knowledge_config(home: Path, source: Path | None, dry_run: bool) -> s
             raise SetupError("openUBMC KB configuration must contain valid JSON") from error
         if not isinstance(document, dict):
             raise SetupError("openUBMC KB configuration must be a JSON object")
+        if require_complete:
+            validate_knowledge_config(document)
         if dry_run:
             print(f"would import openUBMC KB configuration to {destination}")
         else:
@@ -2391,6 +2414,17 @@ def parse_credentials_value(value: str, *, line_number: int) -> str:
     return cooked
 
 
+def missing_credential_keys(values: dict[str, str]) -> list[str]:
+    groups = []
+    if any(values.get(key) for key in REQUIRED_CREDENTIAL_KEYS):
+        groups.append(REQUIRED_CREDENTIAL_KEYS)
+    if any(values.get(key) for key in (*OS_CREDENTIAL_KEYS, "OPENUBMC_OS_SSH_PORT")):
+        groups.append(OS_CREDENTIAL_KEYS)
+    if not groups:
+        groups.append(REQUIRED_CREDENTIAL_KEYS)
+    return [key for group in groups for key in group if not values.get(key)]
+
+
 def normalize_credentials(
     values: dict[str, str], *, require_complete: bool = False
 ) -> dict[str, str]:
@@ -2414,7 +2448,7 @@ def normalize_credentials(
         normalized["REDFISH_PASSWORD"] = shared_password
 
     if require_complete:
-        missing = [key for key in REQUIRED_CREDENTIAL_KEYS if not normalized.get(key)]
+        missing = missing_credential_keys(normalized)
         if missing:
             raise SetupError("credentials are missing: " + ", ".join(missing))
     return normalized
@@ -2461,7 +2495,7 @@ def credentials_status(path: Path) -> tuple[bool, str]:
     mode = stat.S_IMODE(path.stat().st_mode)
     if mode != 0o600:
         return False, f"permissions are {mode:04o}, expected 0600"
-    missing = [key for key in REQUIRED_CREDENTIAL_KEYS if not values.get(key)]
+    missing = missing_credential_keys(values)
     if missing:
         return False, "missing keys: " + ", ".join(missing)
     return True, "configured"
@@ -2498,8 +2532,10 @@ def prompt_missing_credentials(existing: dict[str, str]) -> dict[str, str]:
         values["REDFISH_USERNAME"] = bmc_user
         values["REDFISH_PASSWORD"] = bmc_password
     if not values.get("OPENUBMC_OS_SSH_USER") or not values.get("OPENUBMC_OS_SSH_PASSWORD"):
-        values["OPENUBMC_OS_SSH_USER"] = input("OS SSH username: ").strip()
-        values["OPENUBMC_OS_SSH_PASSWORD"] = getpass.getpass("OS SSH password: ")
+        os_user = input("OS SSH username (optional; Enter to skip): ").strip() or values.get("OPENUBMC_OS_SSH_USER", "")
+        if os_user:
+            values["OPENUBMC_OS_SSH_USER"] = os_user
+            values["OPENUBMC_OS_SSH_PASSWORD"] = getpass.getpass("OS SSH password: ")
     return normalize_credentials(values, require_complete=True)
 
 
@@ -2512,7 +2548,7 @@ def prepare_credentials(
             if not destination.exists():
                 return {"destination": destination, "result": "missing"}
             values = read_credentials_file(destination)
-            missing = [key for key in REQUIRED_CREDENTIAL_KEYS if not values.get(key)]
+            missing = missing_credential_keys(values)
             return {
                 "destination": destination,
                 "result": "missing" if missing else "repaired",
@@ -2539,7 +2575,7 @@ def prepare_credentials(
             "result": "imported",
             "values": values,
         }
-    missing = [key for key in REQUIRED_CREDENTIAL_KEYS if not existing.get(key)]
+    missing = missing_credential_keys(existing)
     if not missing:
         return {
             "destination": destination,
@@ -5708,7 +5744,7 @@ def perform_credentials(args: argparse.Namespace) -> int:
     validate_openubmc_config_dir(home)
     if args.kb or args.kb_config is not None:
         if args.kb_config is not None:
-            result = ensure_knowledge_config(home, args.kb_config, args.dry_run)
+            result = ensure_knowledge_config(home, args.kb_config, args.dry_run, require_complete=True)
         else:
             if args.non_interactive or not sys.stdin.isatty():
                 raise SetupError("openUBMC KB credential configuration requires a TTY or --kb-config")
@@ -5731,6 +5767,14 @@ def perform_credentials(args: argparse.Namespace) -> int:
                 raise SetupError("openUBMC KB username and password are required")
             document["username"] = username
             document["password"] = password
+            current_secret = document.get("clientSecret", "")
+            secret_prompt = "openUBMC OAuth clientSecret"
+            if current_secret:
+                secret_prompt += " (Enter to keep existing)"
+            document["clientSecret"] = getpass.getpass(secret_prompt + ": ") or current_secret
+            if not isinstance(document["clientSecret"], str) or not document["clientSecret"]:
+                raise SetupError("openUBMC KB clientSecret is required")
+            validate_knowledge_config(document)
             if args.dry_run:
                 print(f"would update openUBMC KB credentials in {path}")
             else:

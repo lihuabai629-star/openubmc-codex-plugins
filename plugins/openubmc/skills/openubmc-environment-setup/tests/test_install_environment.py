@@ -2733,7 +2733,7 @@ class EnvironmentSetupTests(unittest.TestCase):
     def test_credentials_subcommand_imports_private_kb_config_only(self) -> None:
         source = self.root / "kb-config.json"
         source.write_text(
-            json.dumps({"username": "fixture-user", "password": "fixture-secret"}),
+            json.dumps({"username": "fixture-user", "password": "fixture-secret", "clientSecret": "fixture-client-secret"}),
             encoding="utf-8",
         )
         source.chmod(0o600)

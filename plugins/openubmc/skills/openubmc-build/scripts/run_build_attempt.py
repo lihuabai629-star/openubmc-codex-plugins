@@ -36,7 +36,7 @@ from run_bmcgo_checked import (
     DEFAULT_FAILURE_PATTERNS,
     DEFAULT_IGNORE_PATTERNS,
     compile_patterns,
-    ignored,
+    is_failure_line,
 )
 from write_artifact_metadata import artifact_identity
 
@@ -321,9 +321,7 @@ def scan_failure_log(path: Path) -> tuple[int, list[str]]:
     count = 0
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for index, line in enumerate(handle, start=1):
-            if ignored(line, ignore_patterns):
-                continue
-            if any(pattern.search(line) for pattern in patterns):
+            if is_failure_line(line, patterns, ignore_patterns):
                 count += 1
                 matches.append(f"{index}: {line.rstrip()}")
     return count, list(matches)

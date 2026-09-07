@@ -32,16 +32,19 @@ def compile_patterns(patterns: list[str]) -> list[re.Pattern[str]]:
     return [re.compile(pattern) for pattern in patterns]
 
 
-def ignored(line: str, ignore_patterns: list[re.Pattern[str]]) -> bool:
-    return any(pattern.search(line) for pattern in ignore_patterns)
+def is_failure_line(line: str, patterns: list[re.Pattern[str]], ignore_patterns: list[re.Pattern[str]]) -> bool:
+    ignored_spans = [match.span() for pattern in ignore_patterns for match in pattern.finditer(line)]
+    return any(
+        not any(start <= match.start() and match.end() <= end for start, end in ignored_spans)
+        for pattern in patterns
+        for match in pattern.finditer(line)
+    )
 
 
 def matched_failures(lines: list[str], patterns: list[re.Pattern[str]], ignore_patterns: list[re.Pattern[str]]) -> list[str]:
     matches = []
     for index, line in enumerate(lines, start=1):
-        if ignored(line, ignore_patterns):
-            continue
-        if any(pattern.search(line) for pattern in patterns):
+        if is_failure_line(line, patterns, ignore_patterns):
             matches.append(f"{index}: {line.rstrip()}")
     return matches
 

@@ -30,8 +30,16 @@ For a remote that a build must use, do not pass `--with-user`; missing credentia
 ```bash
 for remote in openubmc_sdk openubmc_opensource local; do
   log="$(mktemp)"
-  conan remote auth "$remote" --force -cc core:non_interactive=True 2>&1 | tee "$log"
+  if ! (
+    set -o pipefail
+    conan remote auth "$remote" --force -cc core:non_interactive=True 2>&1 | tee "$log"
+  ); then
+    rm -f "$log"
+    echo "Conan auth command failed for $remote" >&2
+    exit 1
+  fi
   if grep -Eiq '(^|[[:space:]])error:|Wrong user|Wrong password|Authentication error|interactive mode disabled' "$log"; then
+    rm -f "$log"
     echo "Conan auth failed for $remote" >&2
     exit 1
   fi

@@ -13,6 +13,11 @@ from .contracts import TargetSpec
 from .runtime import ResolvedSshCredentials
 
 
+def _timeout_output(value: bytes | str | None) -> str:
+    # TimeoutExpired retains bytes even when subprocess.run uses text=True.
+    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+
+
 class OpenSshUnavailable(RuntimeError):
     pass
 
@@ -244,8 +249,8 @@ class OpenSshControlMasterTransport:
             return subprocess.CompletedProcess(
                 command,
                 124,
-                exc.stdout or "",
-                (exc.stderr or "") + f"\nSSH command timed out after {timeout}s",
+                _timeout_output(exc.stdout),
+                _timeout_output(exc.stderr) + f"\nSSH command timed out after {timeout}s",
             )
 
     def download_file(
@@ -280,8 +285,8 @@ class OpenSshControlMasterTransport:
             return subprocess.CompletedProcess(
                 command,
                 124,
-                exc.stdout or "",
-                (exc.stderr or "") + f"\nSCP timed out after {timeout}s",
+                _timeout_output(exc.stdout),
+                _timeout_output(exc.stderr) + f"\nSCP timed out after {timeout}s",
             )
 
     def upload_file(
@@ -318,8 +323,8 @@ class OpenSshControlMasterTransport:
             return subprocess.CompletedProcess(
                 command,
                 124,
-                exc.stdout or "",
-                (exc.stderr or "") + f"\nSSH upload timed out after {timeout}s",
+                _timeout_output(exc.stdout),
+                _timeout_output(exc.stderr) + f"\nSSH upload timed out after {timeout}s",
             )
 
     def channel_lost_master(

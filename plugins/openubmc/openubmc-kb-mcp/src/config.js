@@ -54,8 +54,8 @@ function tokenCachePath(parsed, configPath) {
 
 function credentialValue(parsed, field, environmentName) {
   const environmentValue = process.env[environmentName];
-  if (typeof environmentValue === "string" && environmentValue.trim()) return environmentValue.trim();
-  return typeof parsed[field] === "string" ? parsed[field].trim() : "";
+  const normalize = value => typeof value === "string" ? (field === "username" ? value.trim() : value) : "";
+  return normalize(environmentValue) || normalize(parsed[field]);
 }
 
 function defaultConfigPath() {

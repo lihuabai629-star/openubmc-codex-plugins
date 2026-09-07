@@ -28,15 +28,21 @@ python3 -I <plugin-root>/skills/openubmc-environment-setup/scripts/install_envir
 
 Select the resulting mode-0600 credentials file through `OPENUBMC_CREDENTIALS_FILE` when needed. Never put credential values in command arguments, logs or ordinary documentation.
 
+BMC credentials can be configured alone. Leave the optional OS username empty to skip OS SSH; a selected capability needs both username and password.
+
 Knowledge-base authentication also requires the user's authorized OAuth application configuration. Import a private JSON file containing `username`, `password` and `clientSecret`, with `clientId`, `redirectUri` and service URLs when the application uses non-default values:
 
 ```bash
 python3 -I <plugin-root>/skills/openubmc-environment-setup/scripts/install_environment.py credentials --kb --kb-config <private-kb-config.json>
 ```
 
+Use `credentials --kb` for interactive entry with hidden password and clientSecret prompts. Enter at the clientSecret prompt keeps an existing secret. Both entry routes validate the local configuration with the KB loader before saving. Existing application settings and secret whitespace are preserved.
+
 Keep that file mode 0600. The plugin does not distribute an OAuth client secret. Missing credentials leave the knowledge MCP available for status checks; they do not prevent Runtime startup. `doctor` proves local package and MCP startup readiness, not BMC or knowledge-service access.
 
 ## Lifecycle
+
+For a legacy loose installation or `openubmc@personal`, use `pluginctl.py migrate --disable-only --preview` to inspect ownership and pending changes, then `migrate --disable-only` to save them. Keep the returned transaction ID for `restore-legacy --transaction <id>`. This route retains old files and links, disables the canonical Skill entries and owned MCP entries, and preserves the target `openubmc@openubmc-public` registration. Use `--target-plugin` when preserving a different target registration. Start a new Codex task to load the saved state. A later config or ownership edit blocks restoration until reconciled. Explicit `migrate --remove` retains the old removal behavior.
 
 Use `codex plugin list` to identify the installed marketplace and `codex plugin remove openubmc@<marketplace>` to uninstall. For a Git marketplace, refresh with `codex plugin marketplace upgrade <marketplace>` and reinstall with `codex plugin add openubmc@<marketplace>`. Start a new Codex task after a version change.
 

@@ -1528,7 +1528,6 @@ class UpgradeMcpBackend:
             "exception",
             "killed",
             "cancelled",
-            "interrupted",
             "failed",
         }
         observations: list[str] = []

@@ -675,29 +675,29 @@ class LocalArtifactStore:
             target=target,
             run_id=run_id,
         )
-        existing = self.repository.find(
-            ArtifactEffectBindingIdentity(
-                created_by_effect=created_by_effect,
-                kind=kind,
-                target=target,
-                run_id=run_id,
-            )
-        )
-        if existing is not None:
-            if existing.reference != reference:
-                raise ReferenceViolation(
-                    "Artifact Effect identity is already bound to different content"
+        with self._lock:
+            existing = self.repository.find(
+                ArtifactEffectBindingIdentity(
+                    created_by_effect=created_by_effect,
+                    kind=kind,
+                    target=target,
+                    run_id=run_id,
                 )
-            return existing.reference
-        managed_path = self._copy_content(source, digest)
-        return self._record(
-            reference,
-            storage_path=managed_path,
-            created_by_effect=created_by_effect,
-            redacted=redacted,
-            managed=True,
-        )
-
+            )
+            if existing is not None:
+                if existing.reference != reference:
+                    raise ReferenceViolation(
+                        "Artifact Effect identity is already bound to different content"
+                    )
+                return existing.reference
+            managed_path = self._copy_content(source, digest)
+            return self._record(
+                reference,
+                storage_path=managed_path,
+                created_by_effect=created_by_effect,
+                redacted=redacted,
+                managed=True,
+            )
     def put(
         self,
         path: Path,
@@ -744,63 +744,64 @@ class LocalArtifactStore:
     ) -> ArtifactRef:
         """Persist metadata for a verified external local ArtifactRef."""
 
-        path = self._path(reference.handle).resolve()
-        actual_digest, actual_size = self._digest(path)
-        if actual_digest != reference.digest:
-            raise ReferenceViolation("ArtifactRef digest does not match stored content")
-        if actual_size != reference.size:
-            raise ReferenceViolation("ArtifactRef size does not match stored content")
-        self._validate_version_metadata(
-            path,
-            reference,
-            actual_digest=actual_digest,
-            actual_size=actual_size,
-        )
-        effect_identity = ArtifactEffectBindingIdentity(
-            created_by_effect=created_by_effect,
-            kind=reference.kind,
-            target=reference.target,
-            run_id=reference.run_id,
-        )
-        existing = self.repository.find(effect_identity)
-        if existing is not None:
-            candidate = ArtifactRecord(
-                reference=reference,
-                storage_path=str(path),
+        with self._lock:
+            path = self._path(reference.handle).resolve()
+            actual_digest, actual_size = self._digest(path)
+            if actual_digest != reference.digest:
+                raise ReferenceViolation("ArtifactRef digest does not match stored content")
+            if actual_size != reference.size:
+                raise ReferenceViolation("ArtifactRef size does not match stored content")
+            self._validate_version_metadata(
+                path,
+                reference,
+                actual_digest=actual_digest,
+                actual_size=actual_size,
+            )
+            effect_identity = ArtifactEffectBindingIdentity(
+                created_by_effect=created_by_effect,
+                kind=reference.kind,
+                target=reference.target,
+                run_id=reference.run_id,
+            )
+            existing = self.repository.find(effect_identity)
+            if existing is not None:
+                candidate = ArtifactRecord(
+                    reference=reference,
+                    storage_path=str(path),
+                    created_by_effect=created_by_effect,
+                    redacted=False,
+                    managed=False,
+                    created_at=existing.created_at,
+                    last_access=existing.last_access,
+                    expires_at=existing.expires_at,
+                    released=existing.released,
+                )
+                if not existing.has_same_binding(candidate):
+                    raise ReferenceViolation(
+                        "Artifact Effect identity is already bound to different content"
+                    )
+                return existing.reference
+            for record in self.repository.records():
+                if record.managed:
+                    continue
+                try:
+                    same_path = Path(record.storage_path).resolve() == path
+                except OSError:
+                    same_path = record.storage_path == str(path)
+                if same_path and (
+                    record.reference.target != reference.target
+                    or record.reference.run_id != reference.run_id
+                ):
+                    raise ReferenceViolation(
+                        "External ArtifactRef local handle is already bound to another scope"
+                    )
+            return self._record(
+                reference,
+                storage_path=path,
                 created_by_effect=created_by_effect,
                 redacted=False,
                 managed=False,
-                created_at=existing.created_at,
-                last_access=existing.last_access,
-                expires_at=existing.expires_at,
-                released=existing.released,
             )
-            if not existing.has_same_binding(candidate):
-                raise ReferenceViolation(
-                    "Artifact Effect identity is already bound to different content"
-                )
-            return existing.reference
-        for record in self.repository.records():
-            if record.managed:
-                continue
-            try:
-                same_path = Path(record.storage_path).resolve() == path
-            except OSError:
-                same_path = record.storage_path == str(path)
-            if same_path and (
-                record.reference.target != reference.target
-                or record.reference.run_id != reference.run_id
-            ):
-                raise ReferenceViolation(
-                    "External ArtifactRef local handle is already bound to another scope"
-                )
-        return self._record(
-            reference,
-            storage_path=path,
-            created_by_effect=created_by_effect,
-            redacted=False,
-            managed=False,
-        )
 
     @staticmethod
     def _redact_value(value: object) -> object:
@@ -942,29 +943,29 @@ class LocalArtifactStore:
         return self.repository.release_run(run_id, at=float(self.clock()))
 
     def garbage_collect(self) -> dict[str, int]:
-        now = float(self.clock())
-        deleted_records = 0
-        deleted_content = 0
-        for record in self.repository.records():
-            if not record.expires_at or record.expires_at > now:
-                continue
-            if not self.repository.delete(record.reference):
-                continue
-            deleted_records += 1
-            if record.managed and self.repository.digest_reference_count(
-                record.reference.digest
-            ) == 0:
-                try:
-                    Path(record.storage_path).unlink()
-                except FileNotFoundError:
-                    pass
-                else:
-                    deleted_content += 1
-        return {
-            "deleted_records": deleted_records,
-            "deleted_content": deleted_content,
-        }
-
+        with self._lock:
+            now = float(self.clock())
+            deleted_records = 0
+            deleted_content = 0
+            for record in self.repository.records():
+                if not record.expires_at or record.expires_at > now:
+                    continue
+                if not self.repository.delete(record.reference):
+                    continue
+                deleted_records += 1
+                if record.managed and self.repository.digest_reference_count(
+                    record.reference.digest
+                ) == 0:
+                    try:
+                        Path(record.storage_path).unlink()
+                    except FileNotFoundError:
+                        pass
+                    else:
+                        deleted_content += 1
+            return {
+                "deleted_records": deleted_records,
+                "deleted_content": deleted_content,
+            }
     def status(self) -> dict[str, object]:
         records = self.repository.records()
         return {
