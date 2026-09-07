@@ -15,7 +15,14 @@ from .runtime import ResolvedSshCredentials
 
 def _timeout_output(value: bytes | str | None) -> str:
     # TimeoutExpired retains bytes even when subprocess.run uses text=True.
-    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+    text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value or ""
+    limit = 8192  # Captured diagnostic characters per stream; preserve both ends.
+    if len(text) <= limit:
+        return text
+    marker = "\n[timeout output truncated]\n"
+    head = (limit - len(marker)) // 2
+    tail = limit - len(marker) - head
+    return text[:head] + marker + text[-tail:]
 
 
 class OpenSshUnavailable(RuntimeError):

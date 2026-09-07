@@ -326,21 +326,10 @@ def local_credentials_status(content: dict[str, bytes]) -> dict[str, object]:
         values = reader.read_credentials_file(path)
     except (reader.CredentialFileError, OSError) as error:
         return dict(result, reason=str(error))
-    groups = {
-        'bmc_ssh': ('OPENUBMC_SSH_USER', 'OPENUBMC_SSH_PASSWORD'),
-        'redfish': ('REDFISH_USERNAME', 'REDFISH_PASSWORD'),
-        'os_ssh': ('OPENUBMC_OS_SSH_USER', 'OPENUBMC_OS_SSH_PASSWORD'),
-        'telnet': ('OPENUBMC_TELNET_USER', 'OPENUBMC_TELNET_PASSWORD'),
-    }
-    missing = []
-    for capability, keys in groups.items():
-        result['capabilities'][capability] = all(values.get(key) for key in keys)
-        selected = any(values.get(key) for key in keys)
-        if capability == 'os_ssh':
-            selected = selected or bool(values.get('OPENUBMC_OS_SSH_PORT'))
-        if selected:
-            missing.extend(key for key in keys if not values.get(key))
-    configured = any(result['capabilities'].values()) and not missing
+    completeness = reader.credential_completeness(values)
+    result['capabilities'] = completeness['capabilities']
+    missing = completeness['missing_keys']
+    configured = completeness['configured']
     return dict(result, configured=configured, status='configured' if configured else 'incomplete',
                 reason='local credentials are complete; remote authentication was not checked' if configured
                 else 'missing keys: ' + ', '.join(missing) if missing else 'no credential capability is configured')

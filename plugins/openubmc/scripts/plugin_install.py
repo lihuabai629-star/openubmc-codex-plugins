@@ -120,6 +120,15 @@ def disable_config(text: str, servers: set[str], skills: set[str], plugins: set[
     return after
 
 
+def removal_changes(before: bytes, after: bytes, links: list[dict]) -> dict:
+    original, migrated = tomllib.loads(before.decode()), tomllib.loads(after.decode())
+    original_skills = {row['path'] for row in original.get('skills', {}).get('config', []) if 'path' in row}
+    migrated_skills = {row['path'] for row in migrated.get('skills', {}).get('config', []) if 'path' in row}
+    return {'skills': sorted(original_skills - migrated_skills),
+            'mcp_servers': sorted(set(original.get('mcp_servers', {})) - set(migrated.get('mcp_servers', {}))),
+            'plugins': [], 'links': sorted(item['path'] for item in links)}
+
+
 def plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
          mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public') -> tuple[dict, bytes, bytes]:
     if mode not in {'remove', 'disable-only'}:
@@ -175,10 +184,11 @@ def plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
         after = disable_config(before.decode(), owned_servers, skill_files, plugins).encode()
     else:
         after = migration_config(before.decode(), owned_servers, targets).encode()
+        changes = removal_changes(before, after, links)
     record = {'schema': 'openubmc.plugin-migration.v1', 'home': str(home), 'codex_home': str(codex_root),
               'before_digest': digest(before), 'after_digest': digest(after), 'links': sorted(links, key=lambda item:item['path']),
               'config_existed': config.is_file(), 'status': 'prepared', 'mode': mode, 'changes': changes,
-              'ownership_state_digest': digest(state_bytes)}
+              'ownership_state_digest': digest(state_bytes), 'target_plugin': target_plugin}
     return record, before, after
 
 
@@ -193,10 +203,61 @@ def validate_ownership_state(home: Path, record: dict) -> None:
         raise ValueError('legacy installation ownership changed after migration was planned')
 
 
+def pending_migration(home: Path, codex_home: Path | None, mode: str, target_plugin: str):
+    pending = []
+    for path in journal_root(home).glob('*/transaction.json'):
+        record = json.loads(path.read_bytes())
+        if record.get('status') == 'prepared':
+            # A pending journal is bound to the Codex home selected when
+            # it was created.  Never replay another installation's
+            # configuration or links into this invocation's home.
+            if record.get('schema') != 'openubmc.plugin-migration.v1':
+                raise ValueError('invalid migration journal schema')
+            if record.get('home') != str(home) or record.get('codex_home') != str((codex_home or home/'.codex').resolve()):
+                raise ValueError('incomplete migration journal belongs to another home')
+            if record.get('mode', 'remove') != mode:
+                raise ValueError('incomplete migration uses another mode; reconcile that mode first')
+            if mode == 'disable-only' and record.get('target_plugin') != target_plugin:
+                raise ValueError('incomplete migration preserves a different target plugin')
+            root = path.parent
+            before_path, after_path = root/'before.toml', root/'after.toml'
+            if not before_path.is_file() or not after_path.is_file() or digest(before_path.read_bytes()) != record.get('before_digest') or digest(after_path.read_bytes()) != record.get('after_digest'):
+                raise ValueError('incomplete migration journal snapshot is invalid')
+            if mode == 'remove' and 'changes' not in record:
+                record['changes'] = removal_changes(before_path.read_bytes(), after_path.read_bytes(), record['links'])
+            pending.append((path.parent, record))
+    if len(pending) > 1:
+        raise ValueError('multiple incomplete migration journals require reconciliation')
+    return pending[0] if pending else None
+
+
+def validate_migration_links(record: dict) -> None:
+    for item in record['links']:
+        path = Path(item['path'])
+        if (path.is_symlink() and os.readlink(path) != item['target']) or (path.exists() and not path.is_symlink()):
+            raise ValueError('Skill path changed during migration: '+str(path))
+        if record.get('mode') == 'disable-only' and not path.is_symlink():
+            raise ValueError('Skill link disappeared during migration: '+str(path))
+
+
 def preview(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
             mode: str = 'disable-only', target_plugin: str = 'openubmc@openubmc-public') -> dict:
     try:
-        record, before, after = plan(home.resolve(), skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
+        home = home.resolve()
+        pending = pending_migration(home, codex_home, mode, target_plugin)
+        if pending:
+            root, record = pending
+            validate_ownership_state(home, record)
+            validate_migration_links(record)
+            config = (codex_home or home/'.codex').resolve()/'config.toml'
+            if config.is_symlink():
+                raise ValueError('Codex configuration was replaced by a symlink')
+            before = config.read_bytes() if config.is_file() else b''
+            if digest(before) not in {record['before_digest'], record['after_digest']}:
+                raise ValueError('Codex configuration changed during migration')
+            after = (root/'after.toml').read_bytes()
+        else:
+            record, before, after = plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
     except (ValueError, OSError) as error:
         return {'ok': False, 'mode': mode, 'conflicts': [str(error)], 'changed': False}
     return {'ok': True, 'mode': mode, 'preview': True, 'conflicts': [], 'changes': record['changes'],
@@ -210,28 +271,9 @@ def migrate(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
     journals.mkdir(parents=True, exist_ok=True, mode=0o700)
     with (journals/'migration.lock').open('a') as mutex:
         fcntl.flock(mutex, fcntl.LOCK_EX)
-        pending = []
-        for path in journals.glob('*/transaction.json'):
-            record = json.loads(path.read_bytes())
-            if record.get('status') == 'prepared':
-                # A pending journal is bound to the Codex home selected when
-                # it was created.  Never replay another installation's
-                # configuration or links into this invocation's home.
-                if record.get('schema') != 'openubmc.plugin-migration.v1':
-                    raise ValueError('invalid migration journal schema')
-                if record.get('home') != str(home) or record.get('codex_home') != str((codex_home or home/'.codex').resolve()):
-                    raise ValueError('incomplete migration journal belongs to another home')
-                root = path.parent
-                before_path, after_path = root/'before.toml', root/'after.toml'
-                if not before_path.is_file() or not after_path.is_file() or digest(before_path.read_bytes()) != record.get('before_digest') or digest(after_path.read_bytes()) != record.get('after_digest'):
-                    raise ValueError('incomplete migration journal snapshot is invalid')
-                pending.append((path.parent, record))
-        if len(pending) > 1:
-            raise ValueError('multiple incomplete migration journals require reconciliation')
+        pending = pending_migration(home, codex_home, mode, target_plugin)
         if pending:
-            root, record = pending[0]
-            if record.get('mode', 'remove') != mode:
-                raise ValueError('incomplete migration uses another mode; reconcile that mode first')
+            root, record = pending
             before, after = (root/'before.toml').read_bytes(), (root/'after.toml').read_bytes()
         else:
             record, before, after = plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
@@ -246,15 +288,12 @@ def migrate(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
             save(root/'transaction.json', record)
         validate_ownership_state(home, record)
         config = (codex_home or home/'.codex').resolve()/'config.toml'
+        if config.is_symlink():
+            raise ValueError('Codex configuration was replaced by a symlink')
         current = config.read_bytes() if config.is_file() else b''
         if digest(current) not in {record['before_digest'], record['after_digest']}:
             raise ValueError('Codex configuration changed during migration')
-        for item in record['links']:
-            path = Path(item['path'])
-            if (path.is_symlink() and os.readlink(path) != item['target']) or (path.exists() and not path.is_symlink()):
-                raise ValueError('Skill path changed during migration: '+str(path))
-            if mode == 'disable-only' and not path.is_symlink():
-                raise ValueError('Skill link disappeared during migration: '+str(path))
+        validate_migration_links(record)
         if current != after:
             write_atomic(config, after)
         for item in record['links'] if mode == 'remove' else []:

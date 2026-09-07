@@ -223,13 +223,6 @@ CREDENTIAL_KEY_ORDER = (
     "OPENUBMC_OS_SSH_PORT",
 )
 ALLOWED_CREDENTIAL_KEYS = frozenset(CREDENTIAL_KEY_ORDER)
-REQUIRED_CREDENTIAL_KEYS = (
-    "OPENUBMC_SSH_USER",
-    "OPENUBMC_SSH_PASSWORD",
-    "REDFISH_USERNAME",
-    "REDFISH_PASSWORD",
-)
-OS_CREDENTIAL_KEYS = ("OPENUBMC_OS_SSH_USER", "OPENUBMC_OS_SSH_PASSWORD")
 
 MARKER_START = "# >>> openUBMC environment setup >>>"
 MARKER_END = "# <<< openUBMC environment setup <<<"
@@ -2415,14 +2408,13 @@ def parse_credentials_value(value: str, *, line_number: int) -> str:
 
 
 def missing_credential_keys(values: dict[str, str]) -> list[str]:
-    groups = []
-    if any(values.get(key) for key in REQUIRED_CREDENTIAL_KEYS):
-        groups.append(REQUIRED_CREDENTIAL_KEYS)
-    if any(values.get(key) for key in (*OS_CREDENTIAL_KEYS, "OPENUBMC_OS_SSH_PORT")):
-        groups.append(OS_CREDENTIAL_KEYS)
-    if not groups:
-        groups.append(REQUIRED_CREDENTIAL_KEYS)
-    return [key for group in groups for key in group if not values.get(key)]
+    path = Path(__file__).resolve().parents[2] / "openubmc-target-runtime/openubmc_target_runtime/credential_file.py"
+    spec = importlib.util.spec_from_file_location("openubmc_credential_file", path)
+    if spec is None or spec.loader is None:
+        raise SetupError("credential support module is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.credential_completeness(values)["missing_keys"]
 
 
 def normalize_credentials(

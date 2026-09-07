@@ -1,5 +1,5 @@
 {
-  "content_digest": "d4a801788fa4eae390a092aa68f1b054b3b6c8e9aa6198050958a5f23e997807",
+  "content_digest": "bee7f1e91bd0d97021da6c2fe46d9b71462c5d39514786a48eaf289c28b1e8e5",
   "files": {
     ".codex-plugin/plugin.json": "533fcbe0fcc8e3ac9d841b91fd00ee60b4248943f9c283ff5992b5e74ba3b713",
     ".mcp.json": "eeb264188d744f1101b5371afe216e233cd14d58c38c2c8533362765cf7246c7",
@@ -16,11 +16,11 @@
     "openubmc-kb-mcp/src/tools.js": "185d8c5fcb8b1a659ca4e364bd9299a79fb9c40542d637835f09a4c592dbfcc7",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2",
     "scripts/install_plugin.py": "4c8ad00cb39683ed6d36ff7b91d687f53786b30c6984152f7dcea51eefa0b830",
-    "scripts/launch_runtime.py": "31dfefb65c5725ee6204cd4be584716fb8e68c293af94d4df809deda8b2cdadc",
+    "scripts/launch_runtime.py": "bfd296ea501e74c08d2b7e55c52dc0a8b404d0fbf5c574bd5642e768c717cedd",
     "scripts/plugin_admin.py": "55ea5870b94e0a53c2123e454d648659c4b48a9b6ac58ea736f8e3ca4f3206ee",
     "scripts/plugin_archive.py": "d38904d8e36ae03f17579b1a14a4e69fe07f930053e467007509858af587451d",
-    "scripts/plugin_install.py": "7a536f3870e3faf71d49034bd5e9ecf0be78cc35be3337f43fd757de34adf916",
-    "scripts/pluginctl.py": "64d67495254aab6a60f02b87d5baf221e4e4f516ff021926fb93ee4abe1acf34",
+    "scripts/plugin_install.py": "f090c6a6044e7cc8151c6ae5423b8031dbf0fa10f491bc6dabe2e61a8dacc06d",
+    "scripts/pluginctl.py": "f83be323ed5e8c6509427266ffca33d1dc2c3fdbfd23a357a73f51090cae5c0e",
     "skills/lua-component/SKILL.md": "16fa78b8ca9f127134758d7b6999a53ecaa2137c240f7f85fc6ee712152c8b67",
     "skills/lua-component/agents/openai.yaml": "08dc82afd1e8d0e14ccd1cedfaa9a5e5d23a320f8a8bfd9f24669092ebed2a63",
     "skills/lua-component/skill.json": "80bf5c44b4aaf2868cc9013093b5a5809b9f758027505465d9d62eab8e80ba58",
@@ -123,7 +123,7 @@
     "skills/openubmc-environment-setup/agents/openai.yaml": "b1dc43540955cdf15475b4a5ee5111b925898f9acde3d49ec5157e16dbc04272",
     "skills/openubmc-environment-setup/assets/hw_ibmc_bmcgo-0.7.51-py3-none-any.whl": "d8424a2e8a4549ffd5d574288ed7d9016b91b2ae0d5c2463387102250795ae1e",
     "skills/openubmc-environment-setup/scripts/client_config.py": "22bd321c5a4033b7ee0338a731e9e09db2649194e2233a1715ac115e544c7435",
-    "skills/openubmc-environment-setup/scripts/install_environment.py": "0af0870eac82c6a37a7899bb282eae24fd2926f7d273a98030540f3e67dd0a18",
+    "skills/openubmc-environment-setup/scripts/install_environment.py": "d540986a8bd9634d49eaf4a0967eff3f993265731f4c3dfcbc8ed281e1eda132",
     "skills/openubmc-environment-setup/skill.json": "36e5f480a1b3a28e1c2f233d2fcb926dac92f76fed3e4e44ca7bacb2a6f71738",
     "skills/openubmc-environment-setup/tests/test_bootstrap.py": "94498cd6432dcfcefa91d910e4f8ee0ada2c39a7c8d7dee3428208ca441f5cf6",
     "skills/openubmc-environment-setup/tests/test_client_config.py": "afc913b1640816e2a275d94fe4aee2960c5f8bcc37c422b7ede324e85f3bc5f5",
@@ -172,7 +172,7 @@
     "skills/openubmc-target-runtime/openubmc_target_runtime/composition.py": "a679b7a0f25cb541205f8d5dc518f9371ad5bd07625eae1fc8ce686d6c0eeb0d",
     "skills/openubmc-target-runtime/openubmc_target_runtime/context_runtime.py": "aa313af7c61c256c52bc81b0041f048bc6d40b7e07e542f2389305dcc665970a",
     "skills/openubmc-target-runtime/openubmc_target_runtime/contracts.py": "dbbe5954f8a47dadc861966fbf26e2b7386cddd17e49b53273e8aba1f7a40494",
-    "skills/openubmc-target-runtime/openubmc_target_runtime/credential_file.py": "8aa7100fc827eda3018a3d2a982e4f11bb8756c82c5383c453ce37343d7942c4",
+    "skills/openubmc-target-runtime/openubmc_target_runtime/credential_file.py": "2f6dda549a56d7a5d116d87cef34f810e623d6949c48d2689da50e2b8c89062b",
     "skills/openubmc-target-runtime/openubmc_target_runtime/delivery.py": "80b9d097c993683028004a03e450c737dff8772c0252fd13d49f58e958c55dcb",
     "skills/openubmc-target-runtime/openubmc_target_runtime/diagnosis_record.py": "d3741ce0546a97e3c55959e869b0cfd93979b58e21e51c722525b993a51a7f29",
     "skills/openubmc-target-runtime/openubmc_target_runtime/diagnostic_receipt.py": "950b0aa9026122e394233174c8edf7e4b0ade2ef6fa61ba9dd71613331fcb673",
@@ -191,7 +191,7 @@
     "skills/openubmc-target-runtime/openubmc_target_runtime/model_planning.py": "32d2486e88303b141aa533cb63b0acd7dbe9732948743dc93218bfc4d599f20e",
     "skills/openubmc-target-runtime/openubmc_target_runtime/mutation.py": "eaadfaed0b32b3eacb21ea0c4132e4784830f6ab6dcf28b0b148b8a66b003d8d",
     "skills/openubmc-target-runtime/openubmc_target_runtime/observation.py": "d6403f4713bfe2daf0f80d9bba0f42e70e69363c094f12093e55fbdab372190e",
-    "skills/openubmc-target-runtime/openubmc_target_runtime/openssh.py": "67dc5fe8fc9063fa0ecd551834b2708e0e956a7c64fd04b6361b2e5d1fdff525",
+    "skills/openubmc-target-runtime/openubmc_target_runtime/openssh.py": "42fdacee92cc75b2e174afedf536a64bdc6fe5ea652abeced6d19000cd8002a1",
     "skills/openubmc-target-runtime/openubmc_target_runtime/operation_contracts.py": "8e9004664b173e3d90045f2ce29cba39a5c451871bc960bccd01ee18efa53905",
     "skills/openubmc-target-runtime/openubmc_target_runtime/orchestration.py": "de00d65e43f66fd3df5e4650f8fb1db40126e12ef604f2381bcc8237cf7f5e23",
     "skills/openubmc-target-runtime/openubmc_target_runtime/redaction.py": "04ddbfbcb7de4ff0e0be54df313f8d4ec9d863eb5c8fe0b1e8978dc0a90ffafb",
@@ -255,6 +255,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "505975a933afe28572df6ab43e3f1138624850f1",
+  "source_commit": "944720795ef455e9db4ddfe55a8d3f422cadbb53",
   "version": "2.0.12"
 }

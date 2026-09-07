@@ -74,6 +74,15 @@ class CredentialCommandTests(unittest.TestCase):
         self.assertIn("OPENUBMC_OS_SSH_PASSWORD", output)
         self.assertFalse((self.home / ".config/openubmc/credentials.env").exists())
 
+    def test_partial_telnet_capability_is_not_reported_complete(self):
+        source = self.home / "import.env"
+        source.write_text("OPENUBMC_SSH_USER=operator\nOPENUBMC_SSH_PASSWORD=dummy-bmc-secret\nOPENUBMC_TELNET_USER=operator\n")
+        source.chmod(0o600)
+        result, output = self.run_command("--import-credentials", str(source))
+        self.assertNotEqual(result, 0)
+        self.assertIn("OPENUBMC_TELNET_PASSWORD", output)
+        self.assertNotIn("dummy-bmc-secret", output)
+
     def load_kb(self, password, client_secret):
         loader = (KB_ROOT / "src/config.js").as_uri()
         script = f"""

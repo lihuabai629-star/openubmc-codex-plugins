@@ -1,10 +1,10 @@
 {
   "name": "openubmc",
   "version": "2.0.12",
-  "source_commit": "505975a933afe28572df6ab43e3f1138624850f1",
-  "content_digest": "d4a801788fa4eae390a092aa68f1b054b3b6c8e9aa6198050958a5f23e997807",
-  "archive_sha256": "a8ad1328c4aa64e31ac03f5285b4bc17bbe0dda92c553f74526121ebf27a6f8c",
+  "source_commit": "944720795ef455e9db4ddfe55a8d3f422cadbb53",
+  "content_digest": "bee7f1e91bd0d97021da6c2fe46d9b71462c5d39514786a48eaf289c28b1e8e5",
+  "archive_sha256": "3e548d1220a61c8413ff01d249b0f3853218b68db9b47f3b874d38ac76d226f7",
   "runtime_baseline": "2.0.10",
   "status": "candidate",
-  "qualification": "pending"
+  "qualification": "local_behavior_and_cold_startup_passed"
 }

@@ -31,6 +31,7 @@ class PluginCredentialTests(unittest.TestCase):
                 ('malformed', 'dummy-doctor-secret', 0o600, False),
                 ('permissions', bmc, 0o644, False),
                 ('partial-os', bmc + 'OPENUBMC_OS_SSH_USER=operator\n', 0o600, False),
+                ('partial-telnet', bmc + 'OPENUBMC_TELNET_USER=operator\n', 0o600, False),
                 ('bmc-only', bmc, 0o600, True),
                 ('os-only', 'OPENUBMC_OS_SSH_USER=operator\nOPENUBMC_OS_SSH_PASSWORD=dummy-doctor-secret\n', 0o600, True),
             ]

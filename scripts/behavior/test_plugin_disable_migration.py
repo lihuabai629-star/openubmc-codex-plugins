@@ -1,4 +1,5 @@
 """Exercise packaged migration and native Codex enablement in an isolated home."""
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -137,6 +138,37 @@ class DisableMigrationTests(unittest.TestCase):
         self.assertEqual(self.config.read_bytes(), disabled)
         self.assertTrue(self.link.is_symlink())
 
+    def test_interrupted_migration_cannot_change_the_preserved_target(self):
+        wrapper = """
+import os, runpy, sys
+replace = os.replace
+config = sys.argv[1]
+def interrupt(source, destination):
+    if os.fspath(destination) == config:
+        os._exit(86)
+    return replace(source, destination)
+os.replace = interrupt
+sys.argv = sys.argv[2:]
+runpy.run_path(sys.argv[0], run_name='__main__')
+"""
+        result = subprocess.run([sys.executable, '-I', '-c', wrapper, str(self.config),
+                                 str(self.plugin/'scripts/pluginctl.py'), 'migrate', '--disable-only', '--home', str(self.home)],
+                                env=self.environment, capture_output=True, timeout=30)
+        self.assertEqual(result.returncode, 86)
+        preview = self.cli('migrate', '--preview', '--target-plugin', 'openubmc@personal', success=False)
+        self.assertTrue(preview['conflicts'])
+        self.cli('migrate', '--target-plugin', 'openubmc@personal', success=False)
+        self.assertEqual(self.config.read_text(), self.original)
+        self.link.unlink()
+        self.link.symlink_to(self.home/'changed-skill')
+        self.assertTrue(self.cli('migrate', '--preview', success=False)['conflicts'])
+        self.cli('migrate', '--disable-only', success=False)
+        self.link.unlink()
+        self.link.symlink_to(self.skill.parent)
+        self.assertTrue(self.cli('migrate', '--disable-only')['changed'])
+        skills, config = native_snapshot(self.home, self.environment)
+        self.assertTrue(config['plugins']['openubmc@openubmc-public']['enabled'])
+
     def test_ownership_conflict_blocks_preview_and_apply(self):
         original = self.original.replace('openubmc-target-runtime-mcp"', 'other-mcp"')
         self.config.write_text(original)
@@ -145,6 +177,47 @@ class DisableMigrationTests(unittest.TestCase):
         self.cli('migrate', '--disable-only', success=False)
         self.assertEqual(self.config.read_text(), original)
         self.assertTrue(self.link.is_symlink())
+
+    def test_legacy_pending_remove_preview_resume_and_restore(self):
+        # Persisted 2.0.11 journals had no mode, target_plugin, or changes fields.
+        after = ('model = "test"\n[mcp_servers.unrelated]\ncommand = "keep"\nenabled = false\n'
+                 '[plugins."openubmc@personal"]\nenabled = true\n'
+                 '[plugins."openubmc@openubmc-public"]\nenabled = true\n'
+                 '[plugins."other@personal"]\nenabled = true\n')
+        transaction = 'a' * 32
+        journal = self.home/'.local/share/openubmc/migrations'/transaction
+        journal.mkdir(parents=True)
+        (journal/'before.toml').write_text(self.original)
+        (journal/'after.toml').write_text(after)
+        record = {'schema': 'openubmc.plugin-migration.v1', 'transaction': transaction,
+                  'home': str(self.home), 'codex_home': str(self.home/'.codex'),
+                  'before_digest': hashlib.sha256(self.original.encode()).hexdigest(),
+                  'after_digest': hashlib.sha256(after.encode()).hexdigest(),
+                  'links': [{'path': str(self.link), 'target': str(self.skill.parent)}],
+                  'config_existed': True, 'status': 'prepared'}
+        (journal/'transaction.json').write_text(json.dumps(record))
+        saved = {path.name: path.read_bytes() for path in journal.iterdir()}
+        for current in (self.original, after):
+            with self.subTest(config_already_written=current == after):
+                self.config.write_text(current)
+                preview = self.cli('migrate', '--remove', '--preview')
+                self.assertEqual(preview['changes']['mcp_servers'], ['openubmc-target-runtime'])
+                self.assertEqual(preview['changes']['skills'], [str(self.skill.parent)])
+                self.assertEqual(preview['changes']['links'], [str(self.link)])
+                self.assertTrue(preview['would_change'])
+                self.assertEqual(self.config.read_text(), current)
+                self.assertTrue(self.link.is_symlink())
+                self.assertEqual({path.name: path.read_bytes() for path in journal.iterdir()}, saved)
+        applied = self.cli('migrate', '--remove')
+        self.assertEqual(applied['transaction'], transaction)
+        self.assertEqual(self.config.read_text(), after)
+        self.assertFalse(self.link.is_symlink())
+        self.cli('restore-legacy', '--transaction', transaction)
+        self.assertEqual(self.config.read_text(), self.original)
+        self.assertTrue(self.link.is_symlink())
+        self.assertTrue(self.skill.is_file())
+        for path in self.preserved:
+            self.assertEqual(path.read_bytes(), b'private-fixture-do-not-print')
 
     def test_restore_does_not_overwrite_later_configuration(self):
         applied = self.cli('migrate', '--disable-only')

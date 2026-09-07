@@ -70,6 +70,20 @@ class OpenSshTimeoutTests(unittest.TestCase):
                 self.assertIsInstance(result.stdout, str)
                 self.assertIn("timed out", result.stderr)
 
+    def test_timeout_keeps_bounded_diagnostics_with_a_truncation_marker(self) -> None:
+        self.external_program(b"start\n" + b"x" * 32768 + b"\nend", b"error\n" + b"y" * 32768)
+        for name, invoke in self.operations().items():
+            with self.subTest(operation=name):
+                result = invoke()
+                self.assertEqual(result.returncode, 124)
+                self.assertLessEqual(len(result.stdout), 8192)
+                self.assertLessEqual(len(result.stderr), 8192 + 128)
+                self.assertIn("truncated", result.stdout)
+                self.assertIn("truncated", result.stderr)
+                self.assertTrue(result.stdout.startswith("start\n"))
+                self.assertTrue(result.stdout.endswith("\nend"))
+                self.assertIn("timed out", result.stderr)
+
     def test_normal_completion_preserves_success_and_failure_results(self) -> None:
         for rc in (0, 7):
             self.external_program(b"output", b"diagnostic", timeout=False, rc=rc)
