@@ -55,6 +55,7 @@
     "scripts/_debug_dump.py",
     "scripts/_json_common.py",
     "scripts/_minimal_telnet.py",
+    "scripts/_plugin_entrypoint.py",
     "scripts/_preflight_checks.py",
     "scripts/_preflight_recommendations.py",
     "scripts/_remote_common.py",

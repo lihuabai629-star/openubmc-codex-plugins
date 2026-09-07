@@ -25,6 +25,7 @@ GROUPS = {
     'logs': ['test_bundle_extraction.ExtractArchiveTests'],
     'upgrade': ['test_upgrade_task_states.UpgradeTaskStateTests'],
     'migration': ['test_plugin_disable_migration.DisableMigrationTests'],
+    'python_entrypoints': ['test_plugin_python_entrypoints.PythonEntrypointTests'],
 }
 
 
@@ -78,6 +79,10 @@ def check(plugin: Path, report: dict) -> None:
         node = command(['node', '--test', str(ROOT/'behavior/config.test.mjs')], environment, cwd=home)
         count = re.search(r'# tests (\d+)', node.stdout)
         report['behavior']['kb_loader'] = {'passed': True, 'tests': int(count[1]) if count else None}
+        normal_python = {key: value for key, value in environment.items() if not key.startswith('PYTHON')}
+        command([sys.executable, str(plugin/'skills/openubmc-debug/scripts/target_runtime_cli.py'), '--help'],
+                normal_python, cwd=home)
+        report['ordinary_python_cli_before_mcp'] = True
         doctor = json.loads(command([*cli, 'doctor'], environment, cwd=home, timeout=90).stdout)
         if not doctor['startup_ready'] or doctor['credentials_configured']:
             raise ValueError('cold startup must succeed independently of absent credentials')

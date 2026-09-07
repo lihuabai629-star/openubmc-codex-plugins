@@ -345,7 +345,7 @@ def probe_server(command: str, content: dict[str, bytes], lock: dict) -> dict[st
     probe_env = node_environment()
     probe_env['OPENUBMC_MCP_FORMAL_RUN'] = '0'
     probe_env['OPENUBMC_MCP_PARENT_PID'] = str(os.getpid())
-    process = subprocess.Popen([sys.executable, '-I', str(ROOT/'scripts/pluginctl.py'), command],
+    process = subprocess.Popen([sys.executable, "-B", '-I', str(ROOT/'scripts/pluginctl.py'), command],
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, env=probe_env)
     try:

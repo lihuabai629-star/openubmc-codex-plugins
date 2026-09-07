@@ -3,6 +3,15 @@
 
 from __future__ import annotations
 
+if __name__ == '__main__':
+    import sys as _openubmc_sys
+    _openubmc_sys.dont_write_bytecode = True
+    import runpy as _openubmc_runpy
+    from pathlib import Path as _openubmc_Path
+    _openubmc_guard = _openubmc_Path(__file__).parent / '../../openubmc-debug/scripts/_plugin_entrypoint.py'
+    _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
+
+
 import argparse
 import ast
 import base64
@@ -801,7 +810,7 @@ def validate_release_source(root: Path, dry_run: bool) -> dict[str, object]:
         print(f"would validate release contract in {root}")
         return release_identity(root, source_mode="managed", dry_run=True)
     result = run_command(
-        [sys.executable, str(validator), "--release-contract-only"],
+        [sys.executable, "-B", str(validator), "--release-contract-only"],
         cwd=root,
     )
     if result.returncode != 0:
@@ -892,7 +901,7 @@ def release_identity(
             "immutable": managed,
         }
     result = run_command(
-        [sys.executable, str(verifier), "verify", "--root", str(root)],
+        [sys.executable, "-B", str(verifier), "verify", "--root", str(root)],
         cwd=root,
     )
     if result.returncode != 0:
@@ -1092,6 +1101,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import os
 from pathlib import Path
 import runpy
@@ -1240,6 +1250,20 @@ if snapshot_entrypoint.exists():
 else:
     snapshot_entrypoint.write_bytes(ENTRYPOINT_CONTENT)
 snapshot_entrypoint.chmod(0o400)
+
+# Carry the already-verified inventory to Python children. Derive it from
+# captured bytes, never from a fresh scan that could accept intervening drift.
+snapshot_files = dict(COMPOSITION_FILES)
+for relative, content in RUNTIME_CONTENT.items():
+    snapshot_files["installed-runtime/openubmc_target_runtime/" + relative] = hashlib.sha256(content).hexdigest()
+snapshot_files[entrypoint_relative.as_posix()] = hashlib.sha256(ENTRYPOINT_CONTENT).hexdigest()
+receipt = {{"schema": "openubmc.runtime-snapshot.v1", "root": str(snapshot_root.resolve()),
+           "source_commit": SOURCE_COMMIT, "runtime_content_digest": EXPECTED_DIGEST,
+           "mcp_entrypoint_digest": actual_entrypoint_digest, "files": snapshot_files}}
+receipt_path = snapshot_root / ".openubmc-runtime-snapshot.pending"
+receipt_path.write_text(json.dumps(receipt, sort_keys=True), encoding="utf-8")
+receipt_path.chmod(0o400)
+receipt_path.replace(snapshot_root / ".openubmc-runtime-snapshot.json")
 PACKAGE_ROOT = snapshot_package
 MCP_ENTRYPOINT = snapshot_entrypoint
 

@@ -92,4 +92,3 @@ class FakeRedfishTransport:
     @staticmethod
     def close_session(_session) -> None:
         return None
-

@@ -2,7 +2,7 @@
   "files": {
     "behavior/config.test.mjs": "20d6ea453ad6fb37a93ae4587c427353e34b1b3c6940815b4c9da79f90b751ce",
     "behavior/plugin_fixture.py": "b2a1039dca2ee7cfb5b2f83c04b6b47d5b03df4614ee7430852999381eb32b95",
-    "behavior/redfish_fixture.py": "2f4e067afd49f6b4716e438a9e36df48a114dcb6ee17864fdccd58769f17c9b7",
+    "behavior/redfish_fixture.py": "ec5883c8fc3cbfc8718e91c2508834391c9d26addbf6978369d29f56e41b6145",
     "behavior/test_artifact_retention.py": "8661bb3733a157841b9d2f16177808cce393f871428edc432b5dd962696a4408",
     "behavior/test_bundle_extraction.py": "32e9fcfdf52e0808876b8dcb621e3f02b71ffa39902fb63612ddf05e242b48a5",
     "behavior/test_credential_commands.py": "879d31480aef97d36c54c4a6b1d59b1e0a50d9f924c7664a2b5fe36cce4cc0b4",
@@ -10,10 +10,11 @@
     "behavior/test_openssh_timeouts.py": "f20e2ee205cde4e6a35afdff2f7beb0dd1556c5dff285f23ec83c304452c7fd6",
     "behavior/test_plugin_credentials.py": "4c7f40454f8aa33766546afa50fd5dcb882b9b5765b2e126d2dafe451e301c32",
     "behavior/test_plugin_disable_migration.py": "73102645dad831643bedadfab8e823f1dea2807a88b0bfe4c08e902fe3166266",
+    "behavior/test_plugin_python_entrypoints.py": "4c0d1fdef8d0110c3d3c76b7c8677c4c6d4488487918d9d815f928d994e1f21b",
     "behavior/test_upgrade_task_states.py": "3fba0983ea5a074822c3857bdf5e690e35ca3c99870aba4bd9c79b4e09cbdeba",
-    "check_behavior.py": "4234894fbc431e4b6b8a1d4c0b7acdc181641e1f99b9ec9646048f375e43f569",
+    "check_behavior.py": "a4487d1a066c22ab701df4a8bc685430280f1d220c42a7868602c06150cfbdd7",
     "host/package-lock.json": "3d456708625217a8fe548dda38925d1882444a2f40ec7209a5968e5d5d615b4c",
     "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5"
   },
-  "source_commit": "944720795ef455e9db4ddfe55a8d3f422cadbb53"
+  "source_commit": "e8e15f2a31b542baa4d2f4c9079cca950c440f62"
 }

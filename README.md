@@ -43,6 +43,8 @@ The helper disables owned legacy entries, retains files, links, credentials and 
 
 ## Dependency recovery
 
+For Python integrations, follow the packaged [entrypoint and import guide](plugins/openubmc/PYTHON.md).
+
 Use `codex plugin list --json` to identify the installed version. The plugin directory is under `${CODEX_HOME:-$HOME/.codex}/plugins/cache/openubmc-public/openubmc/<version>`.
 
 ```bash
