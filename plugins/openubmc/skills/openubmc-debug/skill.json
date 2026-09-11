@@ -39,6 +39,7 @@
     "references/busctl-access.md",
     "references/components.md",
     "references/diagnostic-contract.md",
+    "references/diagnostic-advice.md",
     "references/evidence-workflow.md",
     "references/file-access.md",
     "references/knowledge-routing.md",
@@ -73,15 +74,18 @@
     "scripts/collect_logs.py",
     "scripts/compare_remote.py",
     "scripts/doctor.py",
+    "scripts/diagnostic_advice.py",
     "scripts/mdbctl_remote.py",
     "scripts/package_skill.py",
     "scripts/preflight_checks.py",
     "scripts/preflight_recommendations.py",
     "scripts/preflight_remote.py",
     "scripts/read_remote_file.py",
+    "scripts/source_trace.py",
     "scripts/target_runtime_cli.py",
     "scripts/target_runtime_mcp.py",
-    "scripts/workflow_remote.py"
+    "scripts/workflow_remote.py",
+    "scripts/systemd_observation.py"
   ],
   "keywords": [
     "openubmc",

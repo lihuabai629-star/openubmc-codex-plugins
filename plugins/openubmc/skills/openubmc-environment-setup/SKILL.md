@@ -1,6 +1,6 @@
 ---
 name: openubmc-environment-setup
-description: Inspect and repair an installed openUBMC Codex plugin, configure private BMC and knowledge-base credentials, and explain required local tools on Linux or WSL.
+description: "Configure or repair an installed openUBMC plugin on Linux/WSL: 新电脑配置、配置密钥、默认 BMC 账号密码、按 IP 覆盖、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, required tools, migration, and installation health; device diagnosis belongs to openubmc-debug."
 ---
 
 # openUBMC plugin environment
@@ -20,25 +20,64 @@ Linux, Python 3.12 with pip, Node.js 20+ with npm, Git and Codex are the require
 
 ## Private credentials
 
-Use the bundled credential helper with hidden terminal input for BMC/OS credentials:
+### Reuse existing configuration
 
-```bash
-python3 -I <plugin-root>/skills/openubmc-environment-setup/scripts/install_environment.py credentials
+Run `pluginctl.py doctor` first. Its `credentials` report includes local capabilities and
+`active_revision`; `remote_authentication=not_checked` is a local readiness result. The Runtime
+prefers the selected structured `credentials.json` source, including its activated revision, over
+retained legacy defaults. An absent logical source file does not mean its active snapshot is absent.
+
+Use `observe`/`execute` for authorized target work; the Runtime resolves credentials locally. If a
+local target/purpose/transport lookup itself needs diagnosis, use the public task-bound resolver:
+
+```python
+import json
+import sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, "<plugin-root>/skills/openubmc-target-runtime")
+from openubmc_target_runtime import CredentialResolver
+
+resolver = CredentialResolver()
+lookup = {"task_id": "local-credential-check", "host": "<BMC IP>",
+          "purpose": "bmc", "transport": "redfish"}
+selected = resolver.resolve_local(**lookup)
+reused = resolver.resolve_local(**lookup)
+print(json.dumps({"configured": selected.credentials is not None,
+                  "cache_reused": reused.cache_hit,
+                  "active_revision": resolver.configuration_revision(lookup["task_id"]),
+                  "remote_authentication": "not_checked"}))
 ```
 
-Select the resulting mode-0600 credentials file through `OPENUBMC_CREDENTIALS_FILE` when needed. Never put credential values in command arguments, logs or ordinary documentation.
+Replace only the plugin root, authorized target, purpose (`bmc` or `os`), and transport (`ssh` or
+`redfish`). This checks local resolution and cache reuse without connecting. Keep the resolved
+credential object in local memory; print only readiness metadata. `CredentialResolver.resolve_local`
+selects and pins the activated snapshot. Direct `LocalCredentialSource.resolve`, reading the logical
+file, or calling a legacy loader bypasses that selection and cannot establish Runtime readiness.
+An exact IP override selects a complete record; authentication failure never falls back to a default.
 
-BMC credentials can be configured alone. Leave the optional OS username empty to skip OS SSH; a selected capability needs both username and password.
+### Change or check an account
 
-Knowledge-base authentication also requires the user's authorized OAuth application configuration. Import a private JSON file containing `username`, `password` and `clientSecret`, with `clientId`, `redirectUri` and service URLs when the application uses non-default values:
+When the user needs to enter or change BMC/OS, KB or Conan credentials, open the local browser page:
 
 ```bash
-python3 -I <plugin-root>/skills/openubmc-environment-setup/scripts/install_environment.py credentials --kb --kb-config <private-kb-config.json>
+python3 -I <plugin-root>/scripts/pluginctl.py configure
 ```
 
-Use `credentials --kb` for interactive entry with hidden password and clientSecret prompts. Enter at the clientSecret prompt keeps an existing secret. Both entry routes validate the local configuration with the KB loader before saving. Existing application settings and secret whitespace are preserved.
+Keep the page process alive while the user edits. The page displays the Linux/WSL environment and exact local source, separates global BMC/OS defaults from IP overrides, and supports explicit import while retaining the original file. Secret fields support keep, replace and remove; values stay in the local page and Runtime. Ask for missing target or account context only, never ask the user to paste a password or application secret into chat.
 
-Keep that file mode 0600. The plugin does not distribute an OAuth client secret. Missing credentials leave the knowledge MCP available for status checks; they do not prevent Runtime startup. `doctor` proves local package and MCP startup readiness, not BMC or knowledge-service access.
+Saving creates a private revision; **Save and activate** selects it for subsequent Runtime/KB requests. Existing requests keep their original account. With an already authorized target, append `--target <ip> --purpose bmc|os --transport ssh|redfish`; activation then runs that bounded connection check. Without a target, saving performs no device probe. The page also offers explicit checks for selected targets and configured KB/Conan services. Report their actual status: saved and active do not mean verified.
+
+SSH checks preserve strict host identity verification, Redfish checks verify TLS, and no check retries a rejected IP override with global credentials. Conan authenticates only an existing named remote and uses the native per-user token cache. KB requires the user's authorized OAuth application settings; interactive authentication requirements remain visible as such. The plugin supplies no shared OAuth client secret.
+
+These strict checks are distinct from historical Runtime transport bindings that may permit
+insecure TLS. A strict-check failure remains unverified. Report the certificate or endpoint trust
+problem; never silently retry the check with TLS verification disabled or reinterpret it as missing
+credentials. If insecure transport is already explicitly authorized, report any connection result
+within that scope with certificate verification disabled: it does not qualify certificate validation
+or replace the strict check. Reuse that authorization without asking again; it does not change the
+check policy.
+
+For a machine without an accessible browser, the existing `install_environment.py credentials` hidden-input helper remains available. A headless page can be started with `configure --no-browser`; open its session URL in the same machine's browser. Use the WSL environment containing the installed plugin and credentials.
 
 ## Lifecycle
 
@@ -47,3 +86,5 @@ For a legacy loose installation or `openubmc@personal`, use `pluginctl.py migrat
 Use `codex plugin list` to identify the installed marketplace and `codex plugin remove openubmc@<marketplace>` to uninstall. For a Git marketplace, refresh with `codex plugin marketplace upgrade <marketplace>` and reinstall with `codex plugin add openubmc@<marketplace>`. Start a new Codex task after a version change.
 
 For an archive installation managed by `install_plugin.py`, use its `plugin_admin.py audit` and recorded rollback entries. Do not apply archive-administration commands to an installation managed only by the native marketplace. Credentials and durable Runtime records survive plugin removal.
+
+Runtime cache files under `__pycache__` are ignored by package verification. They are derived by Python during MCP startup and cannot invalidate a verified release; packaged files and dependency caches remain hash checked.

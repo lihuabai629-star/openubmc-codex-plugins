@@ -41,6 +41,7 @@ from create_build_plan import (
     skill_digest,
     workspace_identity,
 )
+import completed_evidence
 from run_bmcgo_checked import (
     DEFAULT_FAILURE_PATTERNS,
     DEFAULT_IGNORE_PATTERNS,
@@ -264,7 +265,11 @@ def prepare_local_lock_root() -> None:
 
 def expected_output_resources(plan: dict[str, object]) -> list[dict[str, str]]:
     if plan.get("mode") != "product-artifact":
-        return []
+        if not completed_evidence.enabled(plan):
+            return []
+        return sorted((output_resource_lock(role, Path(path))
+                       for role, path in plan["expectations"]["outputs"].items()),
+                      key=lambda item: (item["role"], item["path"]))
     expectations = plan.get("expectations", {})
     resources = (
         (
@@ -1009,6 +1014,7 @@ def normalized_rc(process_rc: int | None, failure_count: int = 0) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--plan", required=True)
+    parser.add_argument("--fresh", action="store_true", help="execute a new Attempt even when local completed evidence can be reused")
     parser.add_argument(
         "--run-root",
         help="compatibility assertion; must equal the run root frozen in the Plan",
@@ -1077,10 +1083,27 @@ def main(argv: list[str] | None = None) -> int:
         workspaces_before = verify_workspaces(plan)
         input_locks_before = verify_input_locks(plan)
 
+        environment = os.environ.copy()
+        planned_environment = plan.get("environment", {})
+        environment["PATH"] = str(planned_environment.get("PATH", environment.get("PATH", "")))
+        if planned_environment.get("community"):
+            environment["OPENUBMC_COMMUNITY_NAME"] = str(planned_environment["community"])
+        if planned_environment.get("conan_home"):
+            environment["CONAN_HOME"] = str(planned_environment["conan_home"])
+        completed = None if args.fresh else completed_evidence.find_completed(attempts_root, plan, plan_sha256, environment)
+        if completed is not None:
+            completed_path, completed_state = completed
+            result = {key: completed_state[key] for key in
+                      ("plan_id", "attempt_id", "status", "rc", "finished_at", "command_path", "log_path")}
+            result.update({"attempt_root": str(completed_path.parent), "state_path": str(completed_path), "reused": True})
+            print(json.dumps(result, ensure_ascii=False, sort_keys=True))
+            return 0
+
         attempt_id = uuid.uuid4().hex
         attempt_root = attempts_root / attempt_id
         attempt_root.mkdir(mode=0o700)
         state_path = attempt_root / "state.json"
+        completed_evidence.begin(state_path, plan)
         command_path = attempt_root / "command.json"
         log_path = attempt_root / "build.log"
         command = plan["command"]
@@ -1121,18 +1144,6 @@ def main(argv: list[str] | None = None) -> int:
             signum: signal.signal(signum, handle_signal)
             for signum in (signal.SIGINT, signal.SIGTERM)
         }
-
-        environment = os.environ.copy()
-        planned_environment = plan.get("environment", {})
-        environment["PATH"] = str(
-            planned_environment.get("PATH", environment.get("PATH", ""))
-        )
-        if planned_environment.get("community"):
-            environment["OPENUBMC_COMMUNITY_NAME"] = str(
-                planned_environment["community"]
-            )
-        if planned_environment.get("conan_home"):
-            environment["CONAN_HOME"] = str(planned_environment["conan_home"])
 
         state["launch_requested_at"] = now()
         atomic_write_json(state_path, state)
@@ -1294,6 +1305,8 @@ def main(argv: list[str] | None = None) -> int:
             os.close(child_pidfd)
             child_pidfd = None
 
+        completed_evidence.seal(state_path, state, plan, environment)
+
         result = {
             "plan_id": plan_id,
             "attempt_id": attempt_id,
@@ -1303,6 +1316,8 @@ def main(argv: list[str] | None = None) -> int:
             "state_path": str(state_path),
             "command_path": str(command_path),
             "log_path": str(log_path),
+            "finished_at": state["finished_at"],
+            "reused": False,
         }
         print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0 if state["status"] == "succeeded" else int(state["rc"] or 1)

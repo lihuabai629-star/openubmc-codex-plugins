@@ -2518,7 +2518,17 @@ class EnvironmentSetupTests(unittest.TestCase):
             },
         )
         self.assertEqual(probe.returncode, 0, probe.stderr)
-        self.assertEqual(probe.stdout, f"|||{credentials}|")
+        self.assertEqual(probe.stdout, "||||")
+
+        for selected in (str(credentials), str(self.home / 'private-selected.env')):
+            with self.subTest(explicit_source=selected):
+                preserved = subprocess.run(
+                    ['bash', '-c', '. "$1"; . "$1"; printf %s "$OPENUBMC_CREDENTIALS_FILE"', 'probe', str(env_file)],
+                    capture_output=True, text=True, check=False,
+                    env={'HOME': str(self.home), 'PATH': '/usr/bin:/bin', 'OPENUBMC_CREDENTIALS_FILE': selected},
+                )
+                self.assertEqual(preserved.returncode, 0, preserved.stderr)
+                self.assertEqual(preserved.stdout, selected)
 
         combined_output = first_output + second_output
         for secret in ("fixture-bmc-password", "fixture-os-password"):

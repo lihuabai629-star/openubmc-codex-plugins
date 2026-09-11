@@ -1,0 +1,145 @@
+{
+  "archive_sha256": "8340ee4f2c6046d724f213bfa84b56d8a368a21cc1618bd9048607f748dce976",
+  "bytecode_restart": {
+    "generated_cache_count": 144,
+    "mcp_health": {
+      "kb": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "stderr": "",
+        "tools": [
+          "openubmc_kb_list",
+          "openubmc_kb_query",
+          "openubmc_kb_status"
+        ]
+      },
+      "runtime": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "stderr": "",
+        "tools": [
+          "execute",
+          "observe"
+        ]
+      }
+    },
+    "verified_after_restart": true
+  },
+  "codex": "codex-cli 0.153.4",
+  "content_digest": "1cb355e8fd92ac28665c2a7dc81db2ded3d46fe6f1c240cddf6263147e9372fd",
+  "deterministic_archive": true,
+  "external_state_preserved": true,
+  "files": 258,
+  "mcp_health": {
+    "kb": {
+      "ok": true,
+      "server": {
+        "name": "openubmc-kb-mcp-server",
+        "version": "1.3.0"
+      },
+      "stderr": "",
+      "tools": [
+        "openubmc_kb_list",
+        "openubmc_kb_query",
+        "openubmc_kb_status"
+      ]
+    },
+    "runtime": {
+      "ok": true,
+      "server": {
+        "name": "openubmc-target-runtime",
+        "version": "openubmc.target-runtime.v1"
+      },
+      "stderr": "",
+      "tools": [
+        "execute",
+        "observe"
+      ]
+    }
+  },
+  "native_codex_exec": {
+    "executable_sha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+    "invocations": 2,
+    "network_scope": "loopback",
+    "restart_verified": true,
+    "runs": [
+      {
+        "active_requests": 0,
+        "codex_pid": 1569999,
+        "exit_reason": "client-terminated",
+        "runtime_pid": 1570144,
+        "session_id": "52097d07bcc34170afdf060ca77f1cfe",
+        "skills_visible_outside_source": [
+          "openubmc-debug",
+          "openubmc-build",
+          "openubmc-upgrade",
+          "openubmc-environment-setup"
+        ],
+        "source_commit": "a1fa7aa223a1ef87fae3492678f462af57140025",
+        "tool_names": [
+          "mcp__openubmc_kb__openubmc_kb_list",
+          "mcp__openubmc_kb__openubmc_kb_query",
+          "mcp__openubmc_kb__openubmc_kb_status",
+          "mcp__openubmc_target_runtime__execute",
+          "mcp__openubmc_target_runtime__observe"
+        ],
+        "validated_calls": [
+          "observe",
+          "execute"
+        ]
+      },
+      {
+        "active_requests": 0,
+        "codex_pid": 1570239,
+        "exit_reason": "client-terminated",
+        "runtime_pid": 1570365,
+        "session_id": "52097d07bcc34170afdf060ca77f1cfe",
+        "skills_visible_outside_source": [
+          "openubmc-debug",
+          "openubmc-build",
+          "openubmc-upgrade",
+          "openubmc-environment-setup"
+        ],
+        "source_commit": "a1fa7aa223a1ef87fae3492678f462af57140025",
+        "tool_names": [
+          "mcp__openubmc_kb__openubmc_kb_list",
+          "mcp__openubmc_kb__openubmc_kb_query",
+          "mcp__openubmc_kb__openubmc_kb_status",
+          "mcp__openubmc_target_runtime__execute",
+          "mcp__openubmc_target_runtime__observe"
+        ],
+        "validated_calls": [
+          "observe",
+          "execute"
+        ]
+      }
+    ],
+    "transport": "local-hermetic-responses"
+  },
+  "native_install": true,
+  "native_uninstall": true,
+  "ok": true,
+  "reinstall": true,
+  "schema": "openubmc.codex-plugin.qualification.v1",
+  "skills": [
+    "openubmc-build",
+    "openubmc-debug",
+    "openubmc-developer",
+    "openubmc-dt-testing",
+    "openubmc-environment-setup",
+    "openubmc-live-patch",
+    "openubmc-log-analyzer",
+    "openubmc-lua-component",
+    "openubmc-publish",
+    "openubmc-qemu-testing",
+    "openubmc-upgrade"
+  ],
+  "source_commit": "a1fa7aa223a1ef87fae3492678f462af57140025",
+  "version": "2.0.13"
+}

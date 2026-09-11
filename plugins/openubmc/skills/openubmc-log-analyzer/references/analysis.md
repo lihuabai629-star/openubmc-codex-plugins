@@ -168,3 +168,29 @@
 - 新日志文件含义不清楚
 - 同事不知道某类问题应该先看哪个日志
 - 需要记录某个日志的直接证据和辅助证据边界
+
+## Local resource limits
+
+`extract_archive` accepts at most 10,000 members, 512 MiB of declared output
+(including hard-link targets), and 576 MiB of decompressed tar data by default.
+The stream limit also covers extended headers. Exceeding a limit removes the
+partial extraction directory and returns `extract_budget_exceeded`. Hard links
+must refer to an earlier regular file. Sparse members are rejected because their
+expanded extents can disagree with their declared size. Existing path and tar
+data filters apply. Member paths, including resolved link paths, are limited to
+128 components so failure cleanup remains bounded.
+
+`analyze_bundle` scans at most 64 MiB of decompressed log data, 512 files, and
+20,000 directory entries, with a 64 KiB maximum line. Limits apply across selected
+log types. Symbolic links are not followed during directory discovery. Evidence
+retention is bounded both within each file and across rotations, preserving the
+existing ranking rules. Public Python callers can lower or raise the limits via
+`scan_max_bytes`, `scan_max_files`, `discovery_max_entries`, and `max_line_bytes`.
+
+Always inspect `coverage.complete` and `coverage.reasons`. Byte, file, discovery,
+and line limits or read failures make analysis incomplete; evidence collected
+before the stop remains available. An empty evidence list with incomplete coverage
+cannot exclude a fault. `scanned_bytes` counts decompressed bytes consumed, and
+`scanned_files` counts opened files. Reaching the exact byte limit is conservatively
+reported as incomplete when EOF has not been observed. Completeness covers only
+the log types selected for the supplied problem, not every file in the bundle.

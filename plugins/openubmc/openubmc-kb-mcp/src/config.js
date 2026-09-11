@@ -1,6 +1,8 @@
-import { readFile } from "node:fs/promises";
+import { activeConfiguration, readConfigurationJson } from "./configuration.js";
 import { homedir } from "node:os";
+import { isIP } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import { requestTimeoutMs } from "./http/request-lifetime.js";
 
 const DEFAULTS = Object.freeze({
   lightragUrl: "https://discuss.openubmc.cn/rag",
@@ -32,7 +34,8 @@ function normalizeUrl(value, field) {
 function normalizeLightRagUrl(value) {
   const normalized = normalizeUrl(value, "lightragUrl");
   const url = new URL(normalized);
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  const loopback = ["localhost", "[::1]"].includes(url.hostname)
+    || (isIP(url.hostname) === 4 && url.hostname.startsWith("127."));
   if (url.protocol !== "https:" && !loopback) {
     throw new Error("lightragUrl must use HTTPS unless it points to a loopback address");
   }
@@ -68,13 +71,11 @@ export async function loadConfig(
   { allowMissingCredentials = false } = {}
 ) {
   const absolutePath = resolve(path);
-  let parsed;
-  try {
-    parsed = JSON.parse(await readFile(absolutePath, "utf8"));
-  } catch (error) {
-    if (error?.code === "ENOENT" && allowMissingCredentials) parsed = {};
-    else throw new Error(`Unable to load MCP configuration at ${absolutePath}: ${error.message}`);
-  }
+  const active = await activeConfiguration(absolutePath);
+  let parsed = await readConfigurationJson(active.path, {
+    privateFile: active.revision !== null,
+    missing: allowMissingCredentials && active.revision === null
+  }) || {};
 
   parsed = { ...DEFAULTS, ...parsed };
   const username = credentialValue(parsed, "username", "OPENUBMC_KB_USERNAME");
@@ -102,10 +103,12 @@ export async function loadConfig(
   const oauthBaseUrl = normalizeUrl(parsed.oauthBaseUrl, "oauthBaseUrl");
   return Object.freeze({
     ...parsed,
+    requestTimeoutMs: requestTimeoutMs(parsed.requestTimeoutMs),
     username,
     password,
     credentialsConfigured: Boolean(username && password && clientSecret),
     configPath: absolutePath,
+    configurationRevision: active.revision,
     clientSecret,
     lightragUrl: normalizeLightRagUrl(parsed.lightragUrl),
     userCenterUrl: normalizeUrl(parsed.userCenterUrl, "userCenterUrl"),

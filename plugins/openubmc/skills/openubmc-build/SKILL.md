@@ -1,6 +1,6 @@
 ---
 name: openubmc-build
-description: Validate or package openUBMC components and products with bmcgo, immutable build plans, checked attempts, and locally finalized Conan/HPM evidence. Use for local compile/gen/test, component Conan packages, product HPM builds, or build-failure diagnosis. Do not use for live-target diagnosis, firmware upload, activation, or runtime file replacement.
+description: "Build and test openUBMC components or firmware: 编译组件、生成代码、运行测试、打 HPM 包、构建失败。Use for bingo/bmcgo compile, gen, test, component Conan packaging, or product HPM builds with verified local evidence. Route firmware upload and activation to openubmc-upgrade, live symptoms to openubmc-debug, and package uploads to openubmc-publish."
 ---
 
 # openUBMC Build

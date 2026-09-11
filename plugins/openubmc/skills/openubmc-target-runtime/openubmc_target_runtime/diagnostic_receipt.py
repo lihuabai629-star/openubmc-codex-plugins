@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+import copy
+from datetime import datetime, timezone
 from enum import Enum
 import hashlib
 import json
+import re
 
 from .capabilities import CAPABILITY_ALIASES
 from .comparison_receipt import build_comparison_receipt
@@ -20,6 +23,9 @@ DIAGNOSTIC_RECEIPT_SCHEMA = f"{RUNTIME_API_VERSION}/diagnostic-receipt-v1"
 DIAGNOSTIC_RECEIPT_MAX_BYTES = 32 * 1024
 DIAGNOSTIC_RECEIPT_MAX_PREVIEW_RESULTS = 64
 DIAGNOSTIC_RECEIPT_MAX_STORED_RESULTS = 1024
+_ADVICE_SCHEMA = "openubmc-debug.diagnostic-advice.v1"
+_ADVICE_MAX_BYTES = 16 * 1024
+_ADVICE_STAGES = ("hardware_discovery", "mdb", "northbound")
 _DIAGNOSIS_FIELDS = (
     "symptom",
     "root_cause",
@@ -584,6 +590,8 @@ class DiagnosticReceipt:
     compacted_results: DiagnosticCompactedResultSet | None = None
     schema: str = DIAGNOSTIC_RECEIPT_SCHEMA
     content_compacted: bool = False
+    diagnostic_advice: Mapping[str, object] | None = None
+    diagnostic_advice_omitted: str = ""
 
     @classmethod
     def from_public_dict(
@@ -648,6 +656,12 @@ class DiagnosticReceipt:
             ),
             schema=str(value.get("schema") or DIAGNOSTIC_RECEIPT_SCHEMA),
             content_compacted=value.get("content_compacted") is True,
+            diagnostic_advice=_stored_diagnostic_advice(value.get("diagnostic_advice"), raw_evidence),
+            diagnostic_advice_omitted=(
+                str(value.get("diagnostic_advice_omitted", ""))
+                if value.get("diagnostic_advice_omitted") in {"projection_budget", "persistence_budget"}
+                else ""
+            ),
         )
         validation_gaps = receipt._validation_gaps()
         if not validation_gaps:
@@ -816,6 +830,10 @@ class DiagnosticReceipt:
             result["content_compacted"] = True
         if self.compacted_results is not None:
             result["compacted_results"] = self.compacted_results.to_public_dict()
+        if self.diagnostic_advice is not None:
+            result["diagnostic_advice"] = copy.deepcopy(dict(self.diagnostic_advice))
+        if self.diagnostic_advice_omitted:
+            result["diagnostic_advice_omitted"] = self.diagnostic_advice_omitted
         return result
 
     def status_for_agent_acceptance(self) -> DiagnosticStatus:
@@ -905,10 +923,14 @@ class DiagnosticReceipt:
             receipt_id=_bounded_text(self.receipt_id, 128),
             operation=_bounded_text(self.operation, 128),
             content_compacted=True,
+            diagnostic_advice=None,
+            diagnostic_advice_omitted=("projection_budget" if self.diagnostic_advice else self.diagnostic_advice_omitted),
         )
     def bounded_for_persistence(self) -> "DiagnosticReceipt":
         if len(_json_bytes(self.to_public_dict())) <= DIAGNOSTIC_RECEIPT_MAX_BYTES:
             return self
+        if self.diagnostic_advice is not None:
+            return replace(self, diagnostic_advice=None, diagnostic_advice_omitted="persistence_budget").bounded_for_persistence()
         stored_results = self.results[:DIAGNOSTIC_RECEIPT_MAX_STORED_RESULTS]
         preview_limit = min(
             DIAGNOSTIC_RECEIPT_MAX_PREVIEW_RESULTS,
@@ -1637,6 +1659,18 @@ def _structured_results(
     telnet = _mapping(lanes.get("telnet"))
     files = _mapping(telnet.get("files"))
     results: list[dict[str, object]] = []
+    from .systemd_contract import systemd_unit_summaries
+    for selector_id, child in _mapping(runtime_result.get("systemd")).items():
+        child = _mapping(child)
+        results.append({
+            "result_id": "systemd-" + str(selector_id), "kind": "systemd",
+            "request": ", ".join(str(name) for name in child.get("requested", [])),
+            "status": "available" if child.get("complete") is True else "unavailable",
+            "value": {"boot_id": child.get("boot_id"), "gaps": child.get("gaps", []),
+                "units": systemd_unit_summaries(child)},
+            "observed_at": child.get("completed_at") or value.get("observed_at"),
+            "evidence_ids": evidence_ids,
+        })
     result_id_counts: dict[str, int] = {}
     for index, path in enumerate(plan.files, start=1):
         base_result_id, kind = {
@@ -2138,6 +2172,206 @@ def _diagnostic_capabilities(value: Mapping[str, object]) -> Mapping[str, object
     return aggregate
 
 
+def _advice_pointer(document: object, pointer: object) -> object:
+    if (not isinstance(pointer, str) or not pointer.startswith("/") or len(pointer) > 512
+            or pointer.count("/") > 16 or re.search(r"~(?![01])", pointer)):
+        raise ValueError("invalid advice pointer")
+    current = document
+    for segment in pointer[1:].split("/"):
+        segment = segment.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, list):
+            if not re.fullmatch(r"0|[1-9][0-9]*", segment):
+                raise ValueError("invalid advice array index")
+            current = current[int(segment)]
+        elif isinstance(current, Mapping):
+            current = current[segment]
+        else:
+            raise ValueError("advice pointer does not resolve")
+    return current
+
+
+def _stored_diagnostic_advice(raw: object, evidence: object) -> dict[str, object] | None:
+    """Read optional advisory metadata independently of diagnostic truth/coverage."""
+    if not isinstance(raw, Mapping) or raw.get("schema") != _ADVICE_SCHEMA:
+        return None
+    try:
+        if (len(json.dumps(raw, ensure_ascii=False, allow_nan=False).encode()) > _ADVICE_MAX_BYTES
+                or raw.get("status") != "advisory" or raw.get("rule_version") != 1
+                or set(raw) - {"schema", "rule_version", "status", "target", "device", "snapshot", "facts",
+                               "hypotheses", "next_observations", "fault_chain", "source_bindings"}):
+            return None
+        facts, hypotheses, proposed = raw["facts"], raw["hypotheses"], raw["next_observations"]
+        if (not isinstance(facts, list) or len(facts) > 24 or not isinstance(hypotheses, list)
+                or len(hypotheses) != 3 or not isinstance(proposed, list) or len(proposed) > 1):
+            return None
+        evidence_ids = {item.get("evidence_id") for item in evidence if isinstance(item, Mapping)}
+        if not evidence_ids:
+            return None
+        refs = []
+        for fact in facts:
+            reference = fact["evidence_ref"]
+            if (fact.get("stage") not in _ADVICE_STAGES or fact.get("status") not in {"observed", "unknown"}
+                    or not isinstance(reference, Mapping)
+                    or not isinstance(reference.get("evidence_ids"), list)
+                    or not reference["evidence_ids"] or not set(reference["evidence_ids"]) <= evidence_ids
+                    or (type(fact.get("present")) is not bool if fact["status"] == "observed" else fact.get("present") is not None)):
+                return None
+            refs.append(reference)
+        patterns = {
+            "hardware_not_discovered": (False, False, False),
+            "mdb_not_created": (True, False, False),
+            "northbound_not_published": (True, True, False),
+        }
+        if {candidate.get("id") for candidate in hypotheses} != set(patterns):
+            return None
+        selected = {fact["stage"]: fact for fact in facts if fact["target"] == raw["target"]}
+        for candidate in hypotheses:
+            supporting, contradicting = [], []
+            for stage, expected in zip(_ADVICE_STAGES, patterns[candidate["id"]]):
+                fact = selected.get(stage, {})
+                if fact.get("status") == "observed":
+                    destination = supporting if fact["present"] is expected else contradicting
+                    destination.append(fact["evidence_ref"])
+            status = "contradicted" if contradicting else "fulfilled" if len(supporting) == 3 else "unknown"
+            if (candidate.get("status") != status or candidate.get("supporting_refs") != supporting
+                    or candidate.get("contradicting_refs") != contradicting):
+                return None
+        from .semantic_runtime import ObservationQuery
+        for suggestion in proposed:
+            if suggestion.get("stage") not in _ADVICE_STAGES or suggestion["query"].get("target") != raw["target"]:
+                return None
+            ObservationQuery.from_query(suggestion["query"])
+            stage = suggestion["stage"]
+            if selected.get(stage, {}).get("status") == "observed":
+                return None
+            index = _ADVICE_STAGES.index(stage)
+            remaining = {item["id"] for item in hypotheses if item["status"] != "contradicted"}
+            expected = {
+                "present": [name for name, values in patterns.items() if name in remaining and values[index]],
+                "absent": [name for name, values in patterns.items() if name in remaining and not values[index]],
+            }
+            if not all(expected.values()) or suggestion.get("expected_outcomes") != expected:
+                return None
+        projected = copy.deepcopy(dict(raw))
+        # ComparisonReceipt owns comparison provenance. The helper's standalone
+        # chain is not persisted as Runtime advice without that separate binding.
+        projected.pop("fault_chain", None)
+        return projected
+    except (ValueError, TypeError, KeyError, AttributeError, RecursionError):
+        return None
+
+
+def _advice_source_current(source: Mapping[str, object], reference: Mapping[str, object],
+                           at: datetime, max_age: int) -> bool:
+    body = _mapping(source.get("raw")) if source.get("schema") == f"{RUNTIME_API_VERSION}/observation-source-v1" else source
+    freshness = _mapping(_mapping(body.get("result")).get("freshness", body.get("freshness")))
+    observed = source.get("observed_at") or freshness.get("observed_at")
+    if observed != reference.get("observed_at") or not isinstance(observed, str):
+        return False
+    observed_at = datetime.fromisoformat(observed.replace("Z", "+00:00"))
+    if (observed_at.tzinfo is None or not 0 <= (at - observed_at).total_seconds() <= max_age
+            or not (body.get("ok") is True or body.get("status") == "complete")
+            or freshness.get("status") not in {"fresh", "live", "complete"}
+            or freshness.get("complete", True) is not True
+            or any(freshness.get(name) for name in ("stale_evidence", "lost_dimensions", "unavailable_dimensions"))):
+        return False
+    if "valid_until" in freshness:
+        expires = datetime.fromisoformat(str(freshness["valid_until"]).replace("Z", "+00:00"))
+        if expires.tzinfo is None or at >= expires:
+            return False
+    if body is not source and (source.get("reusable") is not True
+                               or type(source.get("fresh_until")) not in {int, float}
+                               or at.timestamp() >= source["fresh_until"]):
+        return False
+    for pointer in (reference["device_pointer"] + "/_", reference["value_pointer"]):
+        tokens = pointer[1:].split("/")
+        ancestors = [source, *(_advice_pointer(source, "/" + "/".join(tokens[:length]))
+                              for length in range(1, len(tokens)))]
+        for node in ancestors:
+            if isinstance(node, Mapping) and (
+                node.get("ok", True) is not True or node.get("content_complete", True) is not True
+                or node.get("status") in {"partial", "stale", "unavailable", "not_checked", "failed", "unknown"}
+                or any(item is not False for key, item in node.items() if key.endswith("truncated"))
+            ):
+                return False
+    return True
+
+
+def _project_diagnostic_advice(
+    capture: Mapping[str, object], raw: object, evidence: Sequence[Mapping[str, object]],
+) -> dict[str, object] | None:
+    """Bind helper source pointers to the actual operation payload before persistence."""
+    if not isinstance(raw, Mapping):
+        return None
+    try:
+        if len(json.dumps(raw, ensure_ascii=False, allow_nan=False).encode()) > _ADVICE_MAX_BYTES:
+            return None
+        advice = copy.deepcopy(dict(raw))
+        bindings = advice["source_bindings"]
+        if not isinstance(bindings, list) or not 1 <= len(bindings) <= 8:
+            return None
+        sources = {}
+        for binding in bindings:
+            pointer = binding["source_pointer"]
+            if pointer != "" and not re.fullmatch(r"(?:/result)?/targets/(?:0|[1-9][0-9]*)/result", pointer):
+                return None
+            source = capture if pointer == "" else _advice_pointer(capture, pointer)
+            if (not isinstance(source, Mapping) or "sha256:" + _fingerprint(source) != binding["source_digest"]
+                    or binding["source_id"] in sources):
+                return None
+            sources[binding["source_id"]] = (binding, source)
+        snapshot = advice["snapshot"]
+        at = datetime.fromisoformat(snapshot["at"].replace("Z", "+00:00"))
+        max_age = snapshot["max_age_seconds"]
+        if (at.tzinfo is None or type(max_age) is not int or not 1 <= max_age <= 900
+                or not 0 <= (datetime.now(timezone.utc) - at).total_seconds() <= max_age
+                or snapshot.get("scope") != "captured_snapshot"):
+            return None
+        references = {}
+        for fact in advice["facts"]:
+            reference = fact["evidence_ref"]
+            binding, source = sources[reference["source_id"]]
+            if reference["source_digest"] != binding["source_digest"]:
+                return None
+            identity = _advice_pointer(source, reference["device_pointer"])
+            observed = _advice_pointer(source, reference["value_pointer"])
+            if not reference["value_pointer"].startswith(reference["device_pointer"] + "/"):
+                return None
+            if fact["target"] != (source.get("ip") or _mapping(source.get("scope")).get("target")):
+                return None
+            if fact["status"] == "observed":
+                if not _advice_source_current(source, reference, at, max_age):
+                    return None
+                source_epoch = source.get("target_epoch")
+                if "target_epoch" not in source:
+                    targets = _mapping(_mapping(_mapping(source.get("result")).get("runtime")).get("status")).get("targets", [])
+                    matched = [item for item in targets if isinstance(item, Mapping)
+                               and _mapping(item.get("target")).get("host") == fact["target"]] if isinstance(targets, list) else []
+                    source_epoch = _mapping(matched[0].get("epochs")).get("target_epoch") if len(matched) == 1 else None
+                if (type(observed) is not bool or observed is not fact["present"]
+                        or not isinstance(identity, Mapping)
+                        or any(identity.get(key) != item for key, item in advice["device"].items())
+                        or type(reference.get("target_epoch")) is not int or reference["target_epoch"] < 0
+                        or reference.get("target_epoch") != source_epoch
+                        or reference.get("target_epoch") != snapshot["target_epochs"].get(fact["target"])):
+                    return None
+            references[_fingerprint(reference)] = {
+                **reference, "source_pointer": binding["source_pointer"],
+                "evidence_ids": [item["evidence_id"] for item in evidence if item.get("evidence_id")],
+            }
+        def bind(value: object) -> object:
+            if isinstance(value, Mapping):
+                if "source_id" in value and "device_pointer" in value:
+                    return copy.deepcopy(references[_fingerprint(value)])
+                return {key: bind(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [bind(item) for item in value]
+            return value
+        return _stored_diagnostic_advice(bind(advice), evidence)
+    except (ValueError, TypeError, KeyError, IndexError, AttributeError, RecursionError):
+        return None
+
+
 def build_diagnostic_receipt(
     operation: str,
     value: Mapping[str, object],
@@ -2154,6 +2388,9 @@ def build_diagnostic_receipt(
         name in arguments for name in _DIAGNOSTIC_REQUEST_FIELDS
     ):
         return None
+    raw_advice = value.get("diagnostic_advice")
+    # Advisory metadata must not affect evidence completeness or comparison authority.
+    value = {key: item for key, item in value.items() if key != "diagnostic_advice"}
     reference_ids = [
         _bounded_text(reference.get("evidence_id"), 128)
         for reference in evidence_refs[:8]
@@ -2331,4 +2568,7 @@ def build_diagnostic_receipt(
     receipt["receipt_id"] = "diagnostic-" + _fingerprint(
         {"arguments": _bounded_public(arguments), **receipt}
     )[:24]
+    advice = _project_diagnostic_advice(value, raw_advice, references)
+    if advice is not None:
+        receipt["diagnostic_advice"] = advice
     return DiagnosticReceipt.from_public_dict(receipt).bounded_for_persistence()

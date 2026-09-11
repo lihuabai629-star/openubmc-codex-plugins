@@ -76,13 +76,10 @@ def _parse_value(value: str, *, line_number: int) -> str:
     return cooked
 
 
-def read_credentials_file(
-    path: Path,
-    *,
-    allowed_keys: frozenset[str] = ALLOWED_CREDENTIAL_KEYS,
-    max_bytes: int = CREDENTIALS_FILE_MAX_BYTES,
-) -> dict[str, str]:
-    """Read one regular, current-user credential file without following links."""
+def read_private_text(
+    path: Path, *, max_bytes: int = CREDENTIALS_FILE_MAX_BYTES,
+) -> str:
+    """Read bounded current-user private text without following links."""
 
     normalized = Path(os.path.abspath(os.fspath(path.expanduser())))
     if normalized.is_symlink():
@@ -148,6 +145,12 @@ def read_credentials_file(
             "credentials file must contain valid UTF-8 text"
         ) from None
 
+    return content
+
+
+def parse_credentials_text(
+    content: str, *, allowed_keys: frozenset[str] = ALLOWED_CREDENTIAL_KEYS,
+) -> dict[str, str]:
     parsed: dict[str, str] = {}
     for line_number, raw_line in enumerate(content.splitlines(), start=1):
         line = raw_line.strip()
@@ -172,6 +175,14 @@ def read_credentials_file(
             )
         parsed[key] = parsed_value
     return parsed
+
+
+def read_credentials_file(
+    path: Path, *, allowed_keys: frozenset[str] = ALLOWED_CREDENTIAL_KEYS,
+    max_bytes: int = CREDENTIALS_FILE_MAX_BYTES,
+) -> dict[str, str]:
+    """Read and parse one current-user legacy credential file."""
+    return parse_credentials_text(read_private_text(path, max_bytes=max_bytes), allowed_keys=allowed_keys)
 
 
 def selected_credentials_path(
@@ -210,6 +221,7 @@ def load_selected_credentials_file(
     environ: Mapping[str, str] | None = None,
     *,
     env_names: Sequence[str] = (
+        "OPENUBMC_CREDENTIALS_CONFIG",
         GENERAL_CREDENTIALS_FILE_ENV,
         DEBUG_CREDENTIALS_FILE_ENV,
     ),
@@ -217,5 +229,29 @@ def load_selected_credentials_file(
 ) -> dict[str, str]:
     path = selected_credentials_path(environ, env_names=env_names)
     if path is None:
-        return {}
+        source = os.environ if environ is None else environ
+        config_home = source.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+        standard = Path(config_home) / "openubmc" / "credentials.env"
+        if not (standard.exists() or standard.is_symlink()):
+            return {}
+        path = standard
     return read_credentials_file(path, allowed_keys=allowed_keys)
+
+
+def selected_credential_value(
+    values: Mapping[str, str], names: Sequence[str], *, environ: Mapping[str, str] | None = None,
+) -> str | None:
+    """Preserve a Runtime-selected whole record over ambient legacy defaults."""
+    source = os.environ if environ is None else environ
+    if values.get('__runtime_selected__') == '1':
+        for name in names:
+            if name in values:
+                return values[name]
+    for layer in (source, values):
+        choices = [layer[name] for name in names if name in layer]
+        if len(set(choices)) > 1:
+            from .credentials import CredentialConfigurationError
+            raise CredentialConfigurationError('credentials_conflict', 'Credential aliases disagree at the same priority')
+        if choices:
+            return choices[0]
+    return None

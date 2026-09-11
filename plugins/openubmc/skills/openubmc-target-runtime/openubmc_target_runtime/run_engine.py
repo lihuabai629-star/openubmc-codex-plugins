@@ -11,6 +11,7 @@ import math
 import time
 from typing import Protocol
 
+from .component_validation import assess_components, ComponentValidationError
 from .artifact_store import LocalArtifactStore
 from .effect_activity import active_operation
 from .semantic_runtime import (
@@ -361,6 +362,8 @@ def _validation_payload_properties() -> dict[str, object]:
         "dependency_readiness": _dependency_readiness_schema(),
         "validation_results": _validation_result_schema(),
         "hardware_coverage": _hardware_coverage_schema(),
+        "change_impact": {"type": "object"},
+        "component_validation": {"type": "array", "items": {"type": "object"}},
     }
 
 
@@ -461,7 +464,9 @@ def gate_input_schema(
         "properties": {
             "status": {
                 "type": "string",
-                "enum": ["completed", "failed", "cancelled"],
+                "enum": ["completed", "failed", "cancelled"] + (
+                    ["partial"] if phase_type in {"developer.change", "build.artifact"} else []
+                ),
             },
             "summary": _string_schema(),
             "payload": {
@@ -1570,6 +1575,50 @@ class RunEngine:
             if artifact_ref.version:
                 payload["product_version"] = artifact_ref.version
         if gate.name in {"developer.change", "build.artifact"}:
+            cycle_id = _text(
+                _mapping(projection.get("current_gate")).get("workflow_cycle_id")
+                or projection.get("workflow_cycle_id")
+                or "cycle-1"
+            )
+            prior_impact = next(
+                (
+                    record["change_impact"]
+                    for record in reversed(list(projection.get("phase_records", [])))
+                    if isinstance(record, Mapping)
+                    and record.get("workflow_cycle_id") == cycle_id
+                    and record.get("phase_type") in {"developer.change", "build.artifact"}
+                    and "change_impact" in record
+                ),
+                None,
+            )
+            prior_rows = next(
+                (
+                    record.get("component_validation", [])
+                    for record in reversed(list(projection.get("phase_records", [])))
+                    if isinstance(record, Mapping)
+                    and record.get("workflow_cycle_id") == cycle_id
+                    and record.get("phase_type") == gate.name
+                    and record.get("status") == "partial"
+                    and record.get("change_impact") == prior_impact
+                ),
+                [],
+            )
+            if status == "partial" and (
+                not payload.get("component_validation")
+                or payload.get("change_impact", prior_impact) is None
+            ):
+                raise GateConflict("partial response requires component evidence and impact")
+            try:
+                payload.update(
+                    assess_components(
+                        payload,
+                        prior_impact=prior_impact,
+                        prior_rows=prior_rows,
+                        completed=status == "completed",
+                    )
+                )
+            except ComponentValidationError as exc:
+                raise GateConflict(str(exc)) from exc
             assessment_payload = dict(payload)
             diagnostic_receipt = latest_diagnostic_receipt(projection)
             allowed_hardware_evidence_ids = (

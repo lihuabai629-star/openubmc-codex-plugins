@@ -1,11 +1,12 @@
 {
-  "archive_sha256": "594b40918ce870844245665866e0a7486e6ac6f3b637396d3780aa53e56baa7e",
-  "content_digest": "eb606b02f7e0283268682fb34f1323e183727750ebf7c3e5f0eb45fad1bff1fd",
+  "archive_sha256": "8340ee4f2c6046d724f213bfa84b56d8a368a21cc1618bd9048607f748dce976",
+  "content_digest": "1cb355e8fd92ac28665c2a7dc81db2ded3d46fe6f1c240cddf6263147e9372fd",
   "name": "openubmc",
   "qualification": "repository-native-and-public-behavior-passed",
-  "release_tag": "v2.0.12",
-  "runtime_baseline": "2.0.10",
-  "source_commit": "e8e15f2a31b542baa4d2f4c9079cca950c440f62",
+  "release_scope": "codex-plugin",
+  "release_tag": "v2.0.13",
+  "source_commit": "a1fa7aa223a1ef87fae3492678f462af57140025",
   "status": "released",
-  "version": "2.0.12"
+  "version": "2.0.13",
+  "workflow_release_baseline": "2.0.10"
 }

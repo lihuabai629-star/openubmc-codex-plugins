@@ -41,21 +41,21 @@ def run_git_status(path: Path) -> list[str]:
 
 
 def is_component(path: Path) -> bool:
-    return (path / "mds" / "service.json").is_file() or (path / "conanfile.py").is_file()
+    return (path / "mds" / "service.json").is_file() or (
+        path / "conanfile.py"
+    ).is_file()
 
 
 def needs_generation(entries: list[str]) -> bool:
-    contract_markers = (
-        "/mds/",
-        "mds/service.json",
-        "mds/model.json",
-        "mds/types.json",
-        "mds/ipmi.json",
-        "json/intf/",
-        "json/path/",
-        "/proto/",
-    )
-    return any(any(marker in entry for marker in contract_markers) for entry in entries)
+    for entry in entries:
+        entry = entry[3:] if len(entry) >= 3 and entry[0] == " " and entry[2] == " " else entry
+        parts = Path(entry.strip()).parts
+        if "mds" in parts or "proto" in parts:
+            return True
+        if any(left == "json" and right in {"intf", "path"}
+               for left, right in zip(parts, parts[1:])):
+            return True
+    return False
 
 
 def component_dirs(root: Path) -> list[Path]:
@@ -99,14 +99,48 @@ def read_paths(paths: list[str] | None, paths_from: str | None) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Detect changed openUBMC components")
     parser.add_argument("--root", default=".", help="workspace or component root")
-    parser.add_argument("--path", action="append", help="known changed file/dir path; repeatable")
-    parser.add_argument("--paths-from", help="file with known changed paths, or '-' for stdin")
+    parser.add_argument(
+        "--path", action="append", help="known changed file/dir path; repeatable"
+    )
+    parser.add_argument(
+        "--paths-from", help="file with known changed paths, or '-' for stdin"
+    )
+    parser.add_argument(
+        "--impact",
+        action="store_true",
+        help="report task impact from an explicit dependency graph",
+    )
+    parser.add_argument("--dependency-graph", type=Path)
     parser.add_argument("--json", action="store_true", help="emit JSON")
     args = parser.parse_args()
 
     root = Path(args.root).resolve()
     results = []
     known_paths = read_paths(args.path, args.paths_from)
+    if args.impact:
+        if not known_paths or args.dependency_graph is None:
+            parser.error("--impact requires explicit task paths and --dependency-graph")
+        from component_impact import analyze
+
+        try:
+            report = analyze(
+                root,
+                known_paths,
+                args.dependency_graph,
+                component_for_path=component_for_path,
+                needs_generation=needs_generation,
+            )
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            RecursionError,
+            subprocess.SubprocessError,
+        ) as error:
+            parser.error(str(error))
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0
     if known_paths:
         grouped: dict[Path, list[str]] = {}
         unknown: list[str] = []

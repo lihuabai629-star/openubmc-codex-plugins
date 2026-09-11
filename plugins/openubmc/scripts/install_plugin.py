@@ -16,9 +16,11 @@ import copy
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -65,11 +67,39 @@ def rename(source: Path, destination: Path) -> None:
     sync_directory(destination.parent)
 
 
+def cancel_installation(_signum, _frame) -> None:
+    raise ValueError('Plugin installation cancelled')
+
+
 def command(argv: list[str], env: dict[str, str]) -> str:
-    result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=240)
-    if result.returncode:
-        raise ValueError('command failed: '+str(argv[:3])+': '+result.stderr[-2000:])
-    return result.stdout
+    timeout = float(env.get('OPENUBMC_PLUGIN_INSTALL_TIMEOUT_SEC', '600'))
+    if not math.isfinite(timeout) or timeout <= 0:
+        raise ValueError('Installation command timeout must be finite and positive')
+    process = subprocess.Popen(argv, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               text=True, start_new_session=True)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except BaseException as error:
+        # Allow pluginctl to stop its separately owned pip/npm process group and
+        # remove staging before escalating the outer command's process group.
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=5)
+        if isinstance(error, subprocess.TimeoutExpired):
+            raise ValueError('Installation command timed out: ' + str(argv[:3])) from None
+        raise
+    if process.returncode:
+        raise ValueError('command failed: '+str(argv[:3])+': '+stderr[-2000:])
+    return stdout
 
 
 def file_bytes(path: Path) -> bytes:
@@ -339,6 +369,8 @@ def run() -> int:
     parser.add_argument('--home', type=Path, default=Path.home())
     parser.add_argument('--codex-home', type=Path)
     args = parser.parse_args()
+    signal.signal(signal.SIGTERM, cancel_installation)
+    signal.signal(signal.SIGINT, cancel_installation)
     home = args.home.resolve()
     codex = (args.codex_home or home/'.codex').resolve()
     print(json.dumps(activate(args.archive, args.sha256.lower(), home, codex), sort_keys=True))

@@ -1274,10 +1274,6 @@ sys.pycache_prefix = _fresh_pycache_root.name
 
 os.environ["OPENUBMC_MCP_SOURCE_COMMIT"] = SOURCE_COMMIT
 
-config_root = Path(os.environ.get("XDG_CONFIG_HOME") or (Path.home() / ".config"))
-credentials = config_root / "openubmc" / "credentials.env"
-if credentials.is_file():
-    os.environ.setdefault("OPENUBMC_CREDENTIALS_FILE", str(credentials))
 sys.path.insert(0, str(PACKAGE_ROOT.parent))
 sys.path.insert(0, str(MCP_ENTRYPOINT.parent))
 runpy.run_path(str(MCP_ENTRYPOINT), run_name="__main__")
@@ -2040,19 +2036,14 @@ def render_env(tool_dirs: Iterable[str]) -> str:
     lines.extend(
         (
             "",
-            '_openubmc_credentials="${XDG_CONFIG_HOME:-$HOME/.config}/openubmc/credentials.env"',
-            'if _openubmc_private_file "${_openubmc_credentials}"; then',
-            '    export OPENUBMC_CREDENTIALS_FILE="${_openubmc_credentials}"',
-            'elif [ "${OPENUBMC_CREDENTIALS_FILE:-}" = "${_openubmc_credentials}" ]; then',
-            "    unset OPENUBMC_CREDENTIALS_FILE",
-            "fi",
+            '# Runtime discovers standard target sources; preserve explicit selectors.',
             '_openubmc_kb_config="${XDG_CONFIG_HOME:-$HOME/.config}/openubmc/kb-mcp.json"',
             'if _openubmc_private_file "${_openubmc_kb_config}"; then',
             '    export OPENUBMC_KB_CONFIG="${_openubmc_kb_config}"',
             'elif [ "${OPENUBMC_KB_CONFIG:-}" = "${_openubmc_kb_config}" ]; then',
             "    unset OPENUBMC_KB_CONFIG",
             "fi",
-            "unset _openubmc_credentials _openubmc_kb_config _openubmc_meta _openubmc_uid _openubmc_mode",
+            "unset _openubmc_kb_config _openubmc_meta _openubmc_uid _openubmc_mode",
             "unset -f _openubmc_private_file 2>/dev/null || true",
             "",
         )

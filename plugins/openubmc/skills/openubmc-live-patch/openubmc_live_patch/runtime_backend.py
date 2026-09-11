@@ -48,6 +48,7 @@ from openubmc_target_runtime import (  # noqa: E402
     TaskAuthorizationPolicy,
     effect_recovery_mode,
     load_selected_credentials_file,
+    selected_credential_value,
     mutation_recovery_route,
 )
 
@@ -113,6 +114,8 @@ def _default_credential_loader(
             return explicit
         selector = _argument_text(arguments, selector_name)
         names = ((selector,) if selector else ()) + defaults
+        if values.get("__runtime_selected__") == "1":
+            return selected_credential_value(values, (selector,) if selector else defaults) or ""
         for name in names:
             value = os.environ.get(name, values.get(name, ""))
             if value:
@@ -142,7 +145,7 @@ def _default_credential_loader(
             "user": ssh_user,
             "password": ssh_password,
             "port": int(arguments.get("ssh_port", 22)),
-            "identity_file": _argument_text(arguments, "ssh_identity_file"),
+            "identity_file": _argument_text(arguments, "ssh_identity_file") or values.get("OPENUBMC_SSH_IDENTITY_FILE", ""),
         },
         "telnet": {
             "user": telnet_user,

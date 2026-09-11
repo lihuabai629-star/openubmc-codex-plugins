@@ -164,3 +164,16 @@ second upload.
 Stop on TLS, authentication, discovery, hash, or target-origin failure. Do not
 fall back to SSH, Telnet, a copied upload URI, or a second upload. Rollback
 needs a separate explicit authorization and artifact identity.
+
+### Task diagnostics
+
+The monitor retains `TaskState`, `TaskStatus` and standard `Messages` fields after
+sanitization. `Completed` with `Warning` remains visible alongside fresh firmware
+version verification. Missing or malformed message data is reported explicitly;
+an absent message does not imply an `OK` task status.
+
+Task diagnostics are saved with the upgrade operation before terminal failure is
+raised. Message collections exceeding the inline evidence budget are preserved in
+a redacted ArtifactRef bound to the target, task and operation. The artifact index
+persists across Runtime restarts. The inline receipt points to the full evidence;
+large message collections are not silently discarded.

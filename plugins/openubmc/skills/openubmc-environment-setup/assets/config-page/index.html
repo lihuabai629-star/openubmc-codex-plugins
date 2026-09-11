@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>openUBMC 本机配置</title>
+    <link rel="stylesheet" href="/page.css" />
+    <script src="/page.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <span class="brand">openUBMC</span>
+      <h1>本机配置</h1>
+      <span class="local">仅在本机保存</span
+      ><button type="button" id="finish">完成配置</button>
+    </header>
+    <div class="workspace">
+      <aside>
+        <nav aria-label="配置类别">
+          <button data-tab="targets" aria-current="page">BMC 与 OS</button
+          ><button data-tab="kb">知识库</button
+          ><button data-tab="conan">Conan</button>
+        </nav>
+        <section class="environment">
+          <h2>当前环境</h2>
+          <p id="environment"></p>
+          <p id="location"></p>
+          <p>在 WSL 中打开的页面，配置保存在该 WSL 环境。</p>
+        </section>
+      </aside>
+      <main>
+        <div class="section-heading">
+          <div>
+            <h2 id="title">BMC 与 OS</h2>
+            <p id="subtitle">先填写常用账号，再为不同设备设置 IP 覆盖。</p>
+          </div>
+          <span id="saved-state" class="badge">未保存</span>
+        </div>
+        <p id="notice" role="status" aria-live="polite"></p>
+        <form id="editor">
+          <div id="fields"></div>
+          <div class="actions">
+            <button type="button" id="import" class="quiet">导入已有配置</button
+            ><span class="spacer"></span
+            ><button type="button" id="save">保存</button
+            ><button type="button" id="activate" class="primary">
+              保存并生效
+            </button>
+          </div>
+        </form>
+        <section class="connection">
+          <h2>连接检查</h2>
+          <p id="check-description">
+            检查只访问你指定的目标。未填写 IP 时不会连接设备。
+          </p>
+          <div id="check-fields"></div>
+          <button type="button" id="check">检查连接</button>
+          <div id="check-results" aria-live="polite"></div>
+        </section>
+        <details>
+          <summary>配置位置</summary>
+          <p id="source-path"></p>
+        </details>
+      </main>
+    </div>
+    <footer>关闭此页面不会删除配置，也不会停止已有的开发任务。</footer>
+  </body>
+</html>

@@ -58,7 +58,11 @@ def directory_files(root: Path) -> dict[str, bytes]:
 
 
 def verify_directory(root: Path) -> dict:
-    return verify_content(directory_files(root))
+    files = directory_files(root)
+    locked = json.loads(files['plugin-lock.json']).get('files', {})
+    files = {name: content for name, content in files.items()
+             if name in locked or not (name.endswith('.pyc') and '__pycache__' in PurePosixPath(name).parts)}
+    return verify_content(files)
 
 
 def read_archive(path: Path, expected_sha256: str) -> tuple[dict, dict[str, bytes]]:

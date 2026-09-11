@@ -97,6 +97,10 @@ def reusable_selector_fragments(
     prior: Mapping[str, object],
 ) -> tuple[tuple[tuple[ObservationQuery, Mapping[str, object]], ...], tuple[ObservationSelector, ...]]:
     """Partition an evidence plan into exact reusable values and missing values."""
+    # A systemd selector owns one boot/invocation window. Value-by-value cache
+    # reconstruction cannot retain that window, so recollect the whole query.
+    if any(item.kind == "systemd" for item in query.selectors):
+        return (), query.selectors
     prior_selectors = {(item.selector_id, item.kind): item for item in prior_query.selectors}
     lanes = _mapping(_mapping(_mapping(prior.get("result")).get("lanes")).get("ssh"))
     prior_mdb = {}
@@ -166,6 +170,11 @@ def selected_scope_complete(
     ssh = _mapping(lanes.get("ssh"))
     mdb_index = 0
     for selector in query.selectors:
+        if selector.kind == "systemd":
+            child = _mapping(_mapping(result.get("systemd")).get(selector.selector_id))
+            if child.get("complete") is not True or child.get("requested") != list(selector.names):
+                return False
+            continue
         if selector.kind == "capability":
             if not capability_selector_complete(capabilities, selector.names):
                 return False
@@ -329,6 +338,7 @@ def aggregate_observation_partitions(
     selected_capabilities: dict[str, object] = {}
     merged_lanes: dict[str, object] = {}
     merged_ssh: dict[str, object] = {}
+    merged_systemd: dict[str, object] = {}
     partition_records: list[dict[str, object]] = []
     timing_fragments: dict[
         tuple[str, str], list[Mapping[str, object]]
@@ -337,6 +347,7 @@ def aggregate_observation_partitions(
     selected_capability_keys = {
         CAPABILITY_ALIASES[name]
         for selector in query.selectors
+        if selector.kind == "capability"
         for name in selector.names
     }
     missing_selected_capability_facts: set[str] = set()
@@ -358,10 +369,12 @@ def aggregate_observation_partitions(
             raw_gaps.extend(gaps)
         result = _mapping(raw.get("result"))
         partition_records.append(_partition_record(partition_query, raw, result))
+        merged_systemd.update(copy.deepcopy(dict(_mapping(result.get("systemd")))))
         capabilities = _mapping(result.get("capabilities"))
         partition_selected_capability_keys = {
             CAPABILITY_ALIASES[name]
             for selector in partition_query.selectors
+            if selector.kind == "capability"
             for name in selector.names
         }
         for name, value in capabilities.items():
@@ -427,6 +440,8 @@ def aggregate_observation_partitions(
     merged_capabilities.update(selected_capabilities)
     merged_result["capabilities"] = merged_capabilities
     merged_result["lanes"] = merged_lanes
+    if merged_systemd:
+        merged_result["systemd"] = merged_systemd
     merged_result["collection_partitions"] = partition_records
     aggregate["result"] = merged_result
     aggregate["ok"] = all_ok

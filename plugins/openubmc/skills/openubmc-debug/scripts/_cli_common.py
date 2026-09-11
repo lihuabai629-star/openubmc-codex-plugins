@@ -229,6 +229,15 @@ def resolve_value(
     credentials: Mapping[str, str] | None = None,
 ) -> str:
     file_values = load_credentials_file() if credentials is None else credentials
+    if file_values.get("__runtime_selected__") == "1":
+        from _target_runtime_adapter import _load_runtime_module
+        _load_runtime_module()
+        from openubmc_target_runtime.credential_file import selected_credential_value
+        if not env_name and default_value:
+            return default_value
+        selected = selected_credential_value(file_values, (env_name,) if env_name else fallback_env_names)
+        if selected is not None:
+            return selected
     if env_name:
         found, value = _value_from_sources(env_name, file_values)
         if not found:
@@ -347,7 +356,7 @@ def resolve_debug_credentials(
             credentials=credential_values,
         ),
         "port": _arg_value(args, "ssh_port", 22),
-        IDENTITY_FILE_KEY: _arg_value(args, "ssh_identity_file"),
+        IDENTITY_FILE_KEY: _arg_value(args, "ssh_identity_file") or credential_values.get("OPENUBMC_SSH_IDENTITY_FILE", ""),
     }
     telnet = {
         "user": "",

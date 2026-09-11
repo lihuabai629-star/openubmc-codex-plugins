@@ -26,7 +26,13 @@
     "scripts/install_environment.py",
     "tests/test_client_config.py",
     "tests/test_install_environment.py",
-    "tests/test_bootstrap.py"
+    "tests/test_bootstrap.py",
+    "scripts/config_page.py",
+    "scripts/config_checks.py",
+    "assets/config-page/index.html",
+    "assets/config-page/page.css",
+    "assets/config-page/page.js",
+    "tests/test_config_page.py"
   ],
   "keywords": [
     "openubmc",
@@ -39,5 +45,8 @@
     "wsl",
     "docker"
   ],
-  "categories": ["setup", "environment"]
+  "categories": [
+    "setup",
+    "environment"
+  ]
 }

@@ -4,7 +4,7 @@ Use this reference only after the normal evidence path has narrowed the problem 
 
 ## Systemd and Skynet Startup
 
-- Capture `systemctl status <service>` and `journalctl -u <service> -n 100`; inspect the actual unit's `ExecStart`, `config.cfg`, dependencies, resource limits, and `src/service/main.lua`.
+- With an already authorized read-only host interface, capture `systemctl status <service>` and `journalctl -u <service> -n 100`; inspect the actual unit's `ExecStart`, `config.cfg`, dependencies, resource limits, and `src/service/main.lua`. The built-in diagnostic collector has no systemd command lane; without that external interface, report the current unit state and its cause as unverified.
 - For a component that did not start, trace `config:set_start(...)`, `config:include_app(...)`, `MODULE_NAME`, configured thread count, `sd_bus` setup, and the service entrypoint. Do not infer a missing component or an acceptable thread count without source or runtime evidence.
 
 ## MDB and D-Bus

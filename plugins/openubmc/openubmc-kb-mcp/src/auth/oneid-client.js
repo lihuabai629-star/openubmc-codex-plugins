@@ -1,6 +1,8 @@
+import { readResponseText } from "../http/read-response.js";
 import { constants, publicEncrypt, randomBytes } from "node:crypto";
 import { CookieJar } from "../http/cookie-jar.js";
 import { createTokenOwner, FileTokenStore } from "./token-store.js";
+import { waitForRequest } from "../http/request-lifetime.js";
 
 const TOKEN_EXPIRY_MARGIN_MS = 180_000;
 const DEFAULT_TOKEN_LIFETIME_SECONDS = 3600;
@@ -9,6 +11,7 @@ export class CaptchaRequiredError extends Error {
   constructor() {
     super("openUBMC login requires an interactive CAPTCHA; knowledge-base access was blocked");
     this.name = "CaptchaRequiredError";
+    this.code = "KB_INTERACTION_REQUIRED";
   }
 }
 
@@ -17,7 +20,7 @@ function unwrap(value) {
 }
 
 async function responseJson(response, operation) {
-  const text = await response.text();
+  const text = await readResponseText(response, 256 * 1024);
   let value;
   try { value = text ? JSON.parse(text) : {}; } catch { value = {}; }
   if (!response.ok) {
@@ -82,7 +85,8 @@ export class OneIdClient {
     else await this.tokenStore.clear();
   }
 
-  async getAccessToken() {
+  async getAccessToken(options = {}) {
+    options.signal?.throwIfAborted();
     const configured = this.config.credentialsConfigured
       ?? Boolean(this.config.username && this.config.password);
     if (!configured) {
@@ -92,50 +96,71 @@ export class OneIdClient {
       error.code = "KB_CREDENTIALS_MISSING";
       throw error;
     }
-    await this.loadCachedToken();
+    await waitForRequest(this.loadCachedToken(), options.signal);
+    options.signal?.throwIfAborted();
     if (this.token?.accessToken && this.now() < this.token.expiresAt - TOKEN_EXPIRY_MARGIN_MS) {
       return this.token.accessToken;
     }
     if (!this.tokenPromise) {
-      const pending = this.obtainToken();
+      const pending = { controller: new AbortController(), waiters: 0, settled: false };
       this.tokenPromise = pending;
-      pending.finally(() => {
+      pending.promise = this.obtainToken({ signal: pending.controller.signal });
+      pending.promise.finally(() => {
+        pending.settled = true;
         if (this.tokenPromise === pending) this.tokenPromise = undefined;
       }).catch(() => {});
     }
-    return this.tokenPromise;
+    const pending = this.tokenPromise;
+    pending.waiters += 1;
+    try {
+      return await waitForRequest(pending.promise, options.signal);
+    } finally {
+      pending.waiters -= 1;
+      if (!pending.waiters && !pending.settled) {
+        if (this.tokenPromise === pending) this.tokenPromise = undefined;
+        pending.controller.abort(options.signal?.reason);
+      }
+    }
   }
 
-  async obtainToken() {
+  async obtainToken({ signal } = {}) {
+    signal?.throwIfAborted();
     const previous = this.token;
     if (previous?.refreshToken) {
       try {
-        const refreshed = await this.refreshAccessToken(previous.refreshToken);
+        const refreshed = await this.refreshAccessToken(previous.refreshToken, { signal });
+        signal?.throwIfAborted();
         this.token = refreshed;
         await this.tokenStore.save(refreshed);
         return refreshed.accessToken;
-      } catch {
+      } catch (error) {
+        if (signal?.aborted) throw signal.reason;
+        if (error?.code === "KB_RESPONSE_TOO_LARGE") throw error;
         this.token = previous;
       }
     }
 
-    const authenticated = await this.authenticate();
+    const authenticated = await this.authenticate({ signal });
+    signal?.throwIfAborted();
     this.token = authenticated;
     await this.tokenStore.save(authenticated);
     return authenticated.accessToken;
   }
 
   async request(url, options = {}) {
+    options.signal?.throwIfAborted();
     const headers = new Headers(options.headers || {});
     const cookie = this.jar.header(url);
     if (cookie) headers.set("cookie", cookie);
     const response = await this.fetch(url, { ...options, headers });
+    options.signal?.throwIfAborted();
     this.jar.store(url, response);
     return response;
   }
 
-  async authenticate() {
+  async authenticate({ signal } = {}) {
     const checkResponse = await this.request(`${this.config.userCenterUrl}/oneid/captcha/checkLogin`, {
+      signal,
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ account: this.config.username })
@@ -143,7 +168,7 @@ export class OneIdClient {
     const check = unwrap(await responseJson(checkResponse, "CAPTCHA check"));
     if (check?.need_captcha_verification) throw new CaptchaRequiredError();
 
-    const keyResponse = await this.request(`${this.config.userCenterUrl}/oneid/public/key?community=openubmc`);
+    const keyResponse = await this.request(`${this.config.userCenterUrl}/oneid/public/key?community=openubmc`, { signal });
     const keyData = unwrap(await responseJson(keyResponse, "public-key request"));
     const publicKey = keyData?.rsa?.publicKey ?? keyData?.publicKey ?? keyData;
     if (typeof publicKey !== "string" || !publicKey.includes("PUBLIC KEY")) throw new Error("OneID public key response is invalid");
@@ -162,6 +187,7 @@ export class OneIdClient {
       state: "mcp-login"
     }).toString();
     const loginResponse = await this.request(`${this.config.userCenterUrl}/oneid/login`, {
+      signal,
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -193,6 +219,7 @@ export class OneIdClient {
       state
     }).toString();
     const authorizationResponse = await this.request(authorizationUrl, {
+      signal,
       headers: {
         ...(ssoToken ? { token: ssoToken } : {}),
         origin: this.config.userCenterUrl,
@@ -216,6 +243,7 @@ export class OneIdClient {
       client_secret: this.config.clientSecret
     });
     const tokenResponse = await this.request(this.config.tokenEndpoint, {
+      signal,
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: tokenBody.toString()
@@ -224,7 +252,7 @@ export class OneIdClient {
     return tokenFromResponse(token, this.now);
   }
 
-  async refreshAccessToken(refreshToken) {
+  async refreshAccessToken(refreshToken, { signal } = {}) {
     const tokenBody = new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -232,6 +260,7 @@ export class OneIdClient {
       client_secret: this.config.clientSecret
     });
     const tokenResponse = await this.request(this.config.tokenEndpoint, {
+      signal,
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
       body: tokenBody.toString()
