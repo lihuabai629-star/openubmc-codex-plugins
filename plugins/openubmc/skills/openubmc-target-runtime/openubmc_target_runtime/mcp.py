@@ -19,6 +19,7 @@ import time
 from typing import Protocol, TypeVar
 import uuid
 
+from .configuration import configuration_request
 from .contracts import (
     RUNTIME_API_VERSION,
     CredentialSelector,
@@ -76,6 +77,7 @@ from .session_outcome import (
     SessionOutcomeService,
 )
 from .credential_file import load_selected_credentials_file
+from .runtime import CredentialResolver
 from .lifecycle import OperationContext, TaskRunRegistry
 from .mcp_lifecycle import McpProcessLifecycle
 from .mutation import (
@@ -158,6 +160,7 @@ _INTERNAL_TASK_ARGUMENTS = frozenset(
         "_task_delivery_strategy",
         "_task_authorized_exceptions",
         "_credential_values",
+        "_credential_values_by_target",
     }
 )
 _DOMAIN_TO_TOOL = DEFAULT_OPERATION_CONTRACTS.domain_to_entry_operation()
@@ -306,6 +309,7 @@ class _OrchestratedMcpTask:
         self._resources: dict[int, object] = {}
         self._resource_tools: dict[str, object] = {}
         self._credential_values: dict[str, str] | None = None
+        self._credential_resolver = CredentialResolver()
         self._credential_parse_count = 0
         self._workflow_summaries: list[dict[str, object]] = []
         self._mutation_outcomes: OrderedDict[str, DomainOutcome[object]] = OrderedDict()
@@ -631,7 +635,7 @@ class _OrchestratedMcpTask:
                     raw, arguments, "ssh_password_env"
                 ),
                 identity_file=ssh_identity_source,
-                environ=os.environ,
+                environ=self._credential_resolver.source_environment(self.task_id),
             )
             telnet_selector = CredentialSelector.for_telnet(
                 user=self._selector_arguments(raw, arguments, "telnet_user"),
@@ -639,7 +643,7 @@ class _OrchestratedMcpTask:
                 password_env=self._selector_arguments(
                     raw, arguments, "telnet_password_env"
                 ),
-                environ=os.environ,
+                environ=self._credential_resolver.source_environment(self.task_id),
             )
             redfish_selector = CredentialSelector.for_redfish(
                 user=self._selector_arguments(raw, arguments, "redfish_user"),
@@ -649,7 +653,7 @@ class _OrchestratedMcpTask:
                 password_env=self._selector_arguments(
                     raw, arguments, "redfish_password_env"
                 ),
-                environ=os.environ,
+                environ=self._credential_resolver.source_environment(self.task_id),
             )
             selectors = (ssh_selector, telnet_selector, redfish_selector)
             policy_name = self._selector_arguments(
@@ -1185,7 +1189,13 @@ class _OrchestratedMcpTask:
         merged.pop("role", None)
         merged = self._project_domain_arguments(tool_name, merged)
         if tool_name in _CREDENTIAL_VALUE_TOOLS:
-            merged["_credential_values"] = self.credential_values()
+            if self._credential_values is None and merged.get("targets") and self._credential_resolver.uses_structured_source(self.task_id):
+                merged["_credential_values_by_target"] = {
+                    str(item["ip"]): self.credential_values({**merged, **item}, tool_name=tool_name)
+                    for item in merged["targets"]
+                }
+            else:
+                merged["_credential_values"] = self.credential_values(merged, tool_name=tool_name)
         if tool_name in {"live_patch_run", "upgrade_run"}:
             merged["_task_intent"] = (
                 self.orchestration.intent.original_intent.value
@@ -1209,10 +1219,37 @@ class _OrchestratedMcpTask:
         merged.pop(CONTEXT_WORKFLOW_STEP_ARGUMENT, None)
         return merged
 
-    def credential_values(self) -> dict[str, str]:
+    def refresh_credentials(self) -> None:
+        """Called under TaskRunRegistry's operation lock, before adapter use."""
         with self._lock:
+            if not self._credential_resolver.refresh_local_revision(self.task_id):
+                return
+            resources = list(self._resource_tools.items())
+            self._resource_tools.clear()
+            self._resources.clear()
+            self._credential_values = None
+            seen = set()
+            for tool_name, resource in resources:
+                backend = self.tool_backends[tool_name]
+                if id(backend) not in seen:
+                    seen.add(id(backend))
+                    backend.close_task(resource)
+
+    def credential_values(self, arguments: Mapping[str, object] | None = None, *, tool_name: str = "debug_collect") -> dict[str, str]:
+        with self._lock:
+            if self._credential_values is None and arguments and arguments.get("ip") and self._credential_resolver.uses_structured_source(self.task_id):
+                transports = ("redfish",) if tool_name == "upgrade_run" else ("ssh",)
+                if tool_name == "log_bundle_collect":
+                    selected = str(arguments.get("transport", "auto"))
+                    if selected == "auto" and arguments.get("remote_command"):
+                        selected = "ssh"
+                    transports = (selected,) if selected in {"ssh", "redfish"} else ("ssh", "redfish")
+                return self._credential_resolver.resolve_local_values(
+                    task_id=self.task_id, host=str(arguments["ip"]), arguments=arguments,
+                    transports=transports,
+                )
             if self._credential_values is None:
-                self._credential_values = load_selected_credentials_file()
+                self._credential_values = self._credential_resolver.resolve_legacy_values(task_id=self.task_id, loader=load_selected_credentials_file)
                 self._credential_parse_count += 1
             return dict(self._credential_values)
 
@@ -3023,6 +3060,7 @@ class RuntimeMcpService:
     def tool_definitions(self) -> list[dict[str, object]]:
         return self.interface_catalog.tool_definitions()
 
+    @configuration_request()
     def call_exposed_tool(
         self,
         name: str,
@@ -3091,17 +3129,18 @@ class RuntimeMcpService:
                 debug_backend = self.backend.tool_backends.get(operation)
                 specialized = getattr(debug_backend, "observe_query", None)
                 if operation == "debug_collect" and callable(specialized):
+                    def observe_with_credentials(task, context):
+                        task.refresh_credentials()
+                        backend, resource = task.resource_for("debug_collect")
+                        local_arguments = dict(observed_arguments)
+                        local_arguments["_credential_values"] = task.credential_values(local_arguments)
+                        return backend.observe_query(resource, local_arguments, context)
+
                     return self.registry.execute(
                         task_id=sdk_context.task_id,
                         operation_id=sdk_context.operation_id,
                         timeout_seconds=sdk_context.timeout_seconds,
-                        callback=lambda task, context: (
-                            lambda backend, resource: backend.observe_query(
-                                resource,
-                                observed_arguments,
-                                context,
-                            )
-                        )(*task.resource_for("debug_collect")),
+                        callback=observe_with_credentials,
                     )
             specialized = getattr(self.backend, "observe_query", None)
             if operation == "debug_collect" and callable(specialized):
@@ -3123,6 +3162,8 @@ class RuntimeMcpService:
                 f"operation catalog handler became unavailable: {descriptor.name}"
             )
         def invoke_and_authenticate(task, context):
+            if isinstance(task, _OrchestratedMcpTask):
+                task.refresh_credentials()
             raw = callback(task, bounded_arguments, context)
             if operation != "upgrade_batch" or not isinstance(raw, Mapping):
                 return raw
@@ -3148,6 +3189,7 @@ class RuntimeMcpService:
         )
         return value
 
+    @configuration_request()
     def call_tool(
         self,
         name: str,
@@ -3791,12 +3833,13 @@ class JsonRpcMcpEndpoint:
         if message.get("jsonrpc") != "2.0" or not isinstance(method, str):
             return self._error(message_id, -32600, "invalid JSON-RPC request")
         if method == "initialize":
-            requested = (
-                params.get("protocolVersion")
-                if isinstance(params, Mapping)
-                else None
-            )
-            protocol = requested if isinstance(requested, str) else MCP_PROTOCOL_VERSION
+            if not isinstance(params, Mapping):
+                return self._error(message_id, -32602, "initialize params must be an object")
+            requested = params.get("protocolVersion", MCP_PROTOCOL_VERSION)
+            if not isinstance(requested, str) or not requested.strip():
+                return self._error(message_id, -32602, "protocolVersion must be a non-empty string")
+            # Only this protocol is implemented; unknown versions negotiate it.
+            protocol = MCP_PROTOCOL_VERSION
             return self._response(
                 message_id,
                 {

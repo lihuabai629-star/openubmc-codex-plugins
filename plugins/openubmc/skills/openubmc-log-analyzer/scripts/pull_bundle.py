@@ -12,11 +12,15 @@ if __name__ == '__main__':
 
 
 import argparse
+import bz2
 import datetime as dt
+import fnmatch
 import getpass
 import gzip
+import heapq
 import ipaddress
 import json
+import lzma
 import os
 import pathlib
 import re
@@ -29,7 +33,8 @@ import sys
 import tarfile
 import tempfile
 import time
-from dataclasses import dataclass
+import zlib
+from dataclasses import dataclass, field
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
@@ -49,6 +54,8 @@ DEFAULT_REDFISH_BUNDLE_DIR = "/tmp"
 DEFAULT_ANALYSIS_MAX_FILES = 8
 DEFAULT_ANALYSIS_MAX_LINES = 3
 DEFAULT_ANALYSIS_MAX_PATHS = 10
+DEFAULT_EXTRACT_MAX_MEMBERS = 10_000
+DEFAULT_EXTRACT_MAX_BYTES = 512 * 1024 * 1024
 LOG_TIMESTAMP_RE = re.compile(
     r"(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)"
 )
@@ -443,13 +450,13 @@ def select_logs_for_problem(problem: str, reference_data: dict[str, object], *, 
     return selected
 
 
-def iter_rotated_file_candidates(target: pathlib.Path) -> list[pathlib.Path]:
+def iter_rotated_file_candidates(target: pathlib.Path, budget: AnalysisBudget | None = None) -> list[pathlib.Path]:
     parent = target.parent
     if not parent.exists():
         return []
     candidates: list[tuple[int, str, pathlib.Path]] = []
     prefix = f"{target.name}."
-    for sibling in parent.iterdir():
+    for sibling in iter_directory(parent, budget):
         if not sibling.is_file():
             continue
         name = sibling.name
@@ -465,34 +472,121 @@ def iter_rotated_file_candidates(target: pathlib.Path) -> list[pathlib.Path]:
     return [path for _, _, path in sorted(candidates, key=lambda item: (item[0], item[1]))]
 
 
-def expand_log_paths(bundle_root: pathlib.Path, path_patterns: list[object]) -> list[pathlib.Path]:
+def iter_directory(directory: pathlib.Path, budget: AnalysisBudget | None = None):
+    budget = budget or AnalysisBudget()
+    try:
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                if budget.discovered_entries >= budget.max_entries:
+                    budget.reasons.add("discovery_entries_exceeded")
+                    return
+                budget.discovered_entries += 1
+                # Local analysis must not traverse links outside the supplied bundle.
+                if not entry.is_symlink():
+                    yield pathlib.Path(entry.path)
+                else:
+                    budget.reasons.add("symlink_skipped")
+    except OSError:
+        budget.reasons.add("path_read_failed")
+
+
+def iter_matching_paths(root: pathlib.Path, parts: tuple[str, ...], budget: AnalysisBudget):
+    pending = [(root, parts)]
+    while pending:
+        directory, remaining = pending.pop()
+        if not remaining:
+            if directory.is_file():
+                yield directory
+            continue
+        part, *tail = remaining
+        if part in ("..", "/"):
+            budget.reasons.add("unsafe_reference_path")
+            continue
+        if part == "**":
+            pending.append((directory, tuple(tail)))
+        for child in iter_directory(directory, budget):
+            if part == "**" and child.is_dir():
+                pending.append((child, remaining))
+            elif fnmatch.fnmatchcase(child.name, part):
+                if not tail or child.is_dir():
+                    pending.append((child, tuple(tail)))
+
+
+
+def expand_log_paths(bundle_root: pathlib.Path, path_patterns: list[object],
+                     budget: AnalysisBudget | None = None) -> list[pathlib.Path]:
+    budget = budget or AnalysisBudget()
     matches: list[pathlib.Path] = []
     seen: set[pathlib.Path] = set()
     for raw_pattern in path_patterns:
         if not isinstance(raw_pattern, str) or not raw_pattern:
             continue
+        target = bundle_root / raw_pattern
+        try:
+            safe = target.resolve().is_relative_to(bundle_root.resolve())
+        except (OSError, RuntimeError):
+            safe = False
+        if not safe:
+            budget.reasons.add("unsafe_reference_path")
+            continue
         if not any(char in raw_pattern for char in "*?["):
             exact_target = bundle_root / raw_pattern
-            for candidate in iter_rotated_file_candidates(exact_target):
+            for candidate in iter_rotated_file_candidates(exact_target, budget):
                 if candidate not in seen:
                     matches.append(candidate)
                     seen.add(candidate)
             continue
-        for candidate in sorted(bundle_root.glob(raw_pattern)):
+        for candidate in sorted(iter_matching_paths(bundle_root, pathlib.PurePath(raw_pattern).parts, budget)):
             if not candidate.is_file():
                 continue
-            for path in iter_rotated_file_candidates(candidate) or [candidate]:
+            for path in iter_rotated_file_candidates(candidate, budget) or [candidate]:
                 if path not in seen:
                     matches.append(path)
                     seen.add(path)
     return matches
 
 
-def iter_text_lines(path: pathlib.Path):
+@dataclass
+class AnalysisBudget:
+    max_bytes: int = 64 * 1024 * 1024
+    max_line_bytes: int = 64 * 1024
+    max_files: int = 512
+    max_entries: int = 20_000
+    discovered_entries: int = 0
+    scanned_bytes: int = 0
+    scanned_files: int = 0
+    reasons: set[str] = field(default_factory=set)
+
+    def receipt(self) -> dict[str, object]:
+        return {"complete": not self.reasons, "reasons": sorted(self.reasons),
+                "scanned_bytes": self.scanned_bytes, "scanned_files": self.scanned_files,
+                "discovered_entries": self.discovered_entries}
+
+
+def iter_text_lines(path: pathlib.Path, budget: AnalysisBudget | None = None):
+    budget = budget or AnalysisBudget()
+    if budget.scanned_files >= budget.max_files:
+        budget.reasons.add("scan_files_exceeded")
+        return
     opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "rt", encoding="utf-8", errors="ignore") as handle:
-        for line in handle:
-            yield line.rstrip("\n")
+    with opener(path, "rb") as handle:
+        budget.scanned_files += 1
+        while True:
+            remaining = budget.max_bytes - budget.scanned_bytes
+            if remaining <= 0:
+                budget.reasons.add("scan_bytes_exceeded")
+                return
+            line = handle.readline(min(remaining, budget.max_line_bytes + 1))
+            budget.scanned_bytes += len(line)
+            if not line:
+                return
+            if len(line) > budget.max_line_bytes:
+                budget.reasons.add("line_bytes_exceeded")
+                return
+            if len(line) == remaining and not line.endswith(b"\n"):
+                budget.reasons.add("scan_bytes_exceeded")
+                return
+            yield line.decode("utf-8", errors="ignore").rstrip("\r\n")
 
 
 def collect_evidence_lines(
@@ -502,16 +596,24 @@ def collect_evidence_lines(
     max_lines: int,
     since: dt.datetime | None = None,
     until: dt.datetime | None = None,
+    budget: AnalysisBudget | None = None,
 ) -> list[dict[str, object]]:
     if max_lines <= 0:
         return []
     normalized_terms = [normalize_text(term) for term in match_terms if term]
     fallback_terms = ["error", "failed", "exception", "failure", "失败", "告警", "crash"]
-    strong_matches: list[dict[str, object]] = []
-    keyword_matches: list[dict[str, object]] = []
-    fallback_matches: list[dict[str, object]] = []
+    strong_matches: list[tuple] = []
+    keyword_matches: list[tuple] = []
+    fallback_matches: list[tuple] = []
+
+    def retain(matches: list[tuple], evidence: dict[str, object]) -> None:
+        candidate = (evidence["_timestamp_sort"], evidence["line_number"], evidence)
+        if len(matches) < max_lines:
+            heapq.heappush(matches, candidate)
+        elif candidate[:2] > matches[0][:2]:
+            heapq.heapreplace(matches, candidate)
     try:
-        for line_number, line in enumerate(iter_text_lines(file_path), start=1):
+        for line_number, line in enumerate(iter_text_lines(file_path, budget), start=1):
             if is_low_signal_line(line):
                 continue
             stripped_line = line.strip()
@@ -537,20 +639,19 @@ def collect_evidence_lines(
                 evidence_line["timestamp"] = parsed_datetime.isoformat()
 
             if normalized_terms and has_keyword_match and has_fallback_match:
-                strong_matches.append(evidence_line)
+                retain(strong_matches, evidence_line)
                 continue
             if normalized_terms and has_keyword_match:
-                keyword_matches.append(evidence_line)
+                retain(keyword_matches, evidence_line)
                 continue
             if has_fallback_match:
-                fallback_matches.append(evidence_line)
-    except OSError:
-        return []
-    if strong_matches:
-        return strip_internal_evidence_fields(sort_evidence_lines(strong_matches)[:max_lines])
-    if keyword_matches:
-        return strip_internal_evidence_fields(sort_evidence_lines(keyword_matches)[:max_lines])
-    return strip_internal_evidence_fields(sort_evidence_lines(fallback_matches)[:max_lines])
+                retain(fallback_matches, evidence_line)
+    except (OSError, EOFError, zlib.error):
+        if budget is None:
+            raise
+        budget.reasons.add("file_read_failed")
+    selected = strong_matches or keyword_matches or fallback_matches
+    return strip_internal_evidence_fields(sort_evidence_lines([item[2] for item in selected]))
 
 
 def analyze_bundle(
@@ -562,7 +663,15 @@ def analyze_bundle(
     max_lines: int = DEFAULT_ANALYSIS_MAX_LINES,
     since: dt.datetime | None = None,
     until: dt.datetime | None = None,
+    scan_max_bytes: int = 64 * 1024 * 1024,
+    max_line_bytes: int = 64 * 1024,
+    scan_max_files: int = 512,
+    discovery_max_entries: int = 20_000,
 ) -> dict[str, object]:
+    if min(scan_max_bytes, max_line_bytes, scan_max_files, discovery_max_entries) < 1:
+        raise BundlePullError("invalid_request", "Analysis resource limits must be positive")
+    budget = AnalysisBudget(max_bytes=scan_max_bytes, max_line_bytes=max_line_bytes,
+                            max_files=scan_max_files, max_entries=discovery_max_entries)
     reference = reference_data or load_reference_data()
     selected_logs = select_logs_for_problem(problem, reference, max_files=max_files)
     analyzed_logs: list[dict[str, object]] = []
@@ -570,7 +679,7 @@ def analyze_bundle(
     total_evidence_lines = 0
 
     for item in selected_logs:
-        existing_paths = expand_log_paths(bundle_root, list(item.get("paths", [])))
+        existing_paths = expand_log_paths(bundle_root, list(item.get("paths", [])), budget)
         existing_paths = sorted(
             existing_paths,
             key=lambda path: (-score_path_for_problem(path, problem), rotation_rank(path.name), str(path)),
@@ -594,6 +703,7 @@ def analyze_bundle(
                 max_lines=max_lines,
                 since=since,
                 until=until,
+                budget=budget,
             ):
                 candidate_evidence.append(
                     {
@@ -602,14 +712,15 @@ def analyze_bundle(
                         "_timestamp_sort": evidence_timestamp_sort_value(evidence_line),
                     }
                 )
-        candidate_evidence.sort(
-            key=lambda evidence_line: (
-                -int(evidence_line.get("_score", 0)),
-                -float(evidence_line.get("_timestamp_sort", float("-inf"))),
-                str(evidence_line.get("path", "")),
-                -int(evidence_line.get("line_number", 0)),
+            candidate_evidence.sort(
+                key=lambda evidence_line: (
+                    -int(evidence_line.get("_score", 0)),
+                    -float(evidence_line.get("_timestamp_sort", float("-inf"))),
+                    str(evidence_line.get("path", "")),
+                    -int(evidence_line.get("line_number", 0)),
+                )
             )
-        )
+            del candidate_evidence[max_lines:]
         evidence_lines = [
             {key: value for key, value in evidence_line.items() if not key.startswith("_")}
             for evidence_line in candidate_evidence[:max_lines]
@@ -637,7 +748,10 @@ def analyze_bundle(
         "problem": problem,
         "selected_logs": analyzed_logs,
         "summary": summary,
+        "coverage": budget.receipt(),
     }
+    if budget.reasons:
+        result["summary"] += " Analysis is incomplete; unscanned content cannot exclude further problems."
     if since or until:
         result["time_window"] = {
             "since": since.isoformat() if since else "",
@@ -1434,10 +1548,17 @@ def run_redfish_bundle_flow(
 
 
 def ensure_safe_member_path(destination: pathlib.Path, member_name: str) -> None:
-    target_path = (destination / member_name).resolve()
+    if len(pathlib.PurePosixPath(member_name).parts) > 128:
+        raise BundlePullError("extract_budget_exceeded", "Archive path depth exceeds 128 components")
+    try:
+        target_path = (destination / member_name).resolve()
+    except (OSError, RuntimeError) as exc:
+        raise BundlePullError("extract_failed", "Archive member path cannot be resolved safely") from exc
     destination_root = destination.resolve()
     if not target_path.is_relative_to(destination_root):
         raise BundlePullError("extract_failed", f"Unsafe archive member path: {member_name}")
+    if len(target_path.relative_to(destination_root).parts) > 128:
+        raise BundlePullError("extract_budget_exceeded", "Resolved archive path depth exceeds 128 components")
 
 
 def locate_bundle_root(extract_dir: pathlib.Path) -> pathlib.Path:
@@ -1450,7 +1571,43 @@ def locate_bundle_root(extract_dir: pathlib.Path) -> pathlib.Path:
     raise BundlePullError("bundle_layout_invalid", "Extracted bundle does not contain dump_info/")
 
 
-def extract_archive(archive_path: pathlib.Path, extract_parent: pathlib.Path) -> ExtractionResult:
+class BoundedArchiveReader:
+    """Cap decompressed tar bytes before extended headers are parsed."""
+
+    def __init__(self, stream, limit: int):
+        self.stream = stream
+        self.remaining = limit
+
+    def read(self, size: int) -> bytes:
+        data = self.stream.read(min(size, self.remaining + 1))
+        if len(data) > self.remaining:
+            raise BundlePullError("extract_budget_exceeded", "Decompressed archive stream budget exceeded")
+        self.remaining -= len(data)
+        return data
+
+
+def open_archive_stream(path: pathlib.Path):
+    with path.open("rb") as stream:
+        magic = stream.read(6)
+    if magic.startswith(b"\x1f\x8b"):
+        return gzip.open(path, "rb")
+    if magic.startswith(b"BZh"):
+        return bz2.open(path, "rb")
+    if magic.startswith(b"\xfd7zXZ\x00"):
+        return lzma.open(path, "rb")
+    return path.open("rb")
+
+
+def extract_archive(
+    archive_path: pathlib.Path,
+    extract_parent: pathlib.Path,
+    *,
+    max_members: int = DEFAULT_EXTRACT_MAX_MEMBERS,
+    max_bytes: int = DEFAULT_EXTRACT_MAX_BYTES,
+    max_stream_bytes: int = 576 * 1024 * 1024,
+) -> ExtractionResult:
+    if min(max_members, max_bytes, max_stream_bytes) < 1:
+        raise BundlePullError("invalid_request", "Archive resource limits must be positive")
     bundle_name = archive_path.name
     if bundle_name.endswith(".tar.gz"):
         bundle_name = bundle_name[: -len(".tar.gz")]
@@ -1459,15 +1616,33 @@ def extract_archive(archive_path: pathlib.Path, extract_parent: pathlib.Path) ->
     extract_parent.mkdir(parents=True, exist_ok=True)
     extract_dir = pathlib.Path(tempfile.mkdtemp(prefix=bundle_name + "-", dir=extract_parent))
     try:
-        with tarfile.open(archive_path, "r:*") as archive:
-            for member in archive.getmembers():
+        with open_archive_stream(archive_path) as stream, tarfile.open(
+            fileobj=BoundedArchiveReader(stream, max_stream_bytes), mode="r|"
+        ) as archive:
+            total_bytes = 0
+            member_sizes: dict[str, int] = {}
+            for count, member in enumerate(archive, start=1):
+                if member.sparse is not None:
+                    raise BundlePullError("extract_failed", "Sparse archive members are not supported for log extraction")
+                size = max(0, member.size)
+                if member.islnk():
+                    if member.linkname not in member_sizes:
+                        raise BundlePullError("extract_failed", "Archive hard link must refer to an earlier regular file")
+                    size = member_sizes[member.linkname]
+                if member.isfile() or member.islnk():
+                    member_sizes[member.name] = size
+                total_bytes += size
+                if count > max_members or total_bytes > max_bytes:
+                    raise BundlePullError("extract_budget_exceeded", "Archive member or expanded-byte budget exceeded")
                 ensure_safe_member_path(extract_dir, member.name)
-            archive.extractall(extract_dir, filter="data")
+                archive.extract(member, extract_dir, filter="data")
         return ExtractionResult(extract_dir=extract_dir, bundle_root=locate_bundle_root(extract_dir))
-    except (BundlePullError, tarfile.TarError, OSError) as exc:
+    except (BundlePullError, tarfile.TarError, OSError, EOFError, lzma.LZMAError, zlib.error, RecursionError) as exc:
         shutil.rmtree(extract_dir)
         if isinstance(exc, BundlePullError):
             raise
+        if isinstance(exc, RecursionError):
+            raise BundlePullError("extract_budget_exceeded", "Archive extended-header nesting limit exceeded") from exc
         raise BundlePullError("extract_failed", f"Failed to extract {archive_path}: {exc}") from exc
 
 

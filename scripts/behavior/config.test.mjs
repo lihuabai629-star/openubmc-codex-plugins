@@ -37,6 +37,17 @@ test("loads and normalizes a complete local configuration", async () => {
   assert.equal(config.tokenCachePath, join(dirname(path), "private", "token.json"));
 });
 
+test("loads a bounded total request deadline and rejects invalid durations", async () => {
+  const defaults = await loadConfig(await configFile(valid));
+  assert.equal(defaults.requestTimeoutMs, 120_000);
+  const selected = await loadConfig(await configFile({ ...valid, requestTimeoutMs: 1500 }));
+  assert.equal(selected.requestTimeoutMs, 1500);
+  for (const value of [0, -1, 1.5, "1000", null, 900001]) {
+    const path = await configFile({ ...valid, requestTimeoutMs: value });
+    await assert.rejects(() => loadConfig(path), /requestTimeoutMs/);
+  }
+});
+
 test("preserves exact file and environment secrets while normalizing usernames", async () => {
   const fields = ["OPENUBMC_KB_USERNAME", "OPENUBMC_KB_PASSWORD", "OPENUBMC_KB_CLIENT_SECRET"];
   const previous = fields.map(field => process.env[field]);

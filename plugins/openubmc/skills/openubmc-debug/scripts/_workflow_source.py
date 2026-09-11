@@ -531,5 +531,12 @@ def search_source_terms(
         "scanned_files": scanned_files,
         "incomplete_path_count": len(incomplete_paths),
         "incomplete_paths": incomplete_paths[:_SOURCE_INCOMPLETE_PATH_LIMIT],
+        "trace_candidates": [
+            {"symbol": term, "helper": "source_trace.py"}
+            for term in unique_terms[:20]
+            if len(term) <= 200
+            and re.fullmatch(r"[A-Za-z_]\w*(?:[.:][A-Za-z_]\w*)*", term)
+            and per_term[term]["returned"]
+        ],
         "error": "; ".join(errors),
     }

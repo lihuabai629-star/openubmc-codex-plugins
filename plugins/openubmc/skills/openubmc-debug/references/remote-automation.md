@@ -23,52 +23,48 @@ Skill directory merely to run a helper.
 
 ## Explicit credentials
 
-Internal development behavior is enabled by default. Helpers accept direct `--ssh-password`,
-`--telnet-password`, and `--os-ssh-password` values, default SSH host-key verification to
-`insecure`, allow sensitive path/member reads, and skip result redaction.
+Use the Runtime's existing current-user credential selection before requesting new account data.
+`observe` and `execute` resolve credentials locally. For a local configuration problem, load
+`openubmc-environment-setup` and use its packaged doctor or public `CredentialResolver.resolve_local`
+example. It reports readiness without exposing secrets or claiming successful authentication.
 
-The Skill contains no username, password, token, key, or credentials-file default. Use one user-supplied source:
+The Runtime selects an explicit configured source, otherwise the standard `openubmc/credentials.json`
+under `XDG_CONFIG_HOME` (or `~/.config`), then an existing legacy `credentials.env`, then legacy
+ambient defaults. An activated structured source can exist even when its logical base file does
+not. Honor `active_revision`: the resolver pins its source/snapshot for a task and the Runtime
+refreshes it at a public request boundary. Direct `LocalCredentialSource.resolve`, a file-existence
+check, or a legacy loader bypasses activated-source selection and cannot prove credentials missing.
 
-- explicit username plus password environment-variable name
-- standard `OPENUBMC_SSH_*`, `OPENUBMC_TELNET_*`, or `OPENUBMC_OS_*` environment variables
-- SSH key/agent with an explicit user when required
-- `OPENUBMC_CREDENTIALS_FILE` pointing to a user-selected mode-0600 file
-- the compatibility alias `OPENUBMC_DEBUG_CREDENTIALS_FILE` for an existing debug-only setup
-- an explicitly declared isolated test fixture
+For structured records, exact IP overrides select a complete record before the corresponding
+purpose/transport default. BMC and OS purposes and SSH and Redfish transports are independent;
+use OS credentials only for an explicit OS target. A rejected IP override is an authentication
+failure, not permission to retry with a different default account. Repeated lookups reuse the
+Runtime's task/target/purpose/transport cache; keep credential values in local Runtime memory.
 
-Resolution order is an explicit `--*-password-env` selector, then the standard password environment variable, then an empty value for key/agent or an intentionally credential-free test target. For a selected name, an explicit environment export takes precedence over the credentials-file mapping. Non-secret usernames and ports may still be CLI arguments. A credentials file is parsed only when one of the two file selectors is explicitly set. If both selectors are set, they must resolve to the same path or parsing fails before any value is returned.
+`OPENUBMC_CREDENTIALS_CONFIG`, `OPENUBMC_CREDENTIALS_FILE`, and
+`OPENUBMC_DEBUG_CREDENTIALS_FILE` are source selectors. Supplied selectors must agree. Preserve
+existing legacy files and environment settings; do not export structured records into ambient
+password variables or replace them with ad hoc legacy parsing. Explicit per-operation selectors
+retain their legacy source family and should be used only when that account selection is intended.
 
-Password-value flags are accepted directly.
-
-```bash
-export OPENUBMC_SSH_USER='<user>'
-export OPENUBMC_SSH_PASSWORD='<secret>'
-export OPENUBMC_TELNET_USER='<user>'
-export OPENUBMC_TELNET_PASSWORD='<secret>'
-python "$HOME/.agents/skills/openubmc-debug/scripts/preflight_remote.py" --ip <ip> --json --compact-json
-```
-
-For an explicit file:
-
-```bash
-export OPENUBMC_CREDENTIALS_FILE='<private-credentials-file>'
-python "$HOME/.agents/skills/openubmc-debug/scripts/preflight_remote.py" --ip <ip> --json --compact-json
-```
-
-The file uses one `KEY=VALUE` entry per non-comment line. Its allowlist is the documented `OPENUBMC_SSH_*`, `OPENUBMC_TELNET_*`, and `OPENUBMC_OS_*` access keys plus `REDFISH_USERNAME` and `REDFISH_PASSWORD`. `REDFISH_BASE_URL` is target metadata and must remain an ordinary environment variable, not a credentials-file entry. The same file may be selected by openubmc-upgrade, which reads only the Redfish pair; Build does not read either credentials-file selector and does not manage remote credentials.
-
-Single- or double-quoted values are accepted only when the quotes are balanced. The file must exist, contain valid UTF-8, be a regular non-symlink file owned by the current user, have mode 0600 or stricter, and be no larger than 64 KiB. The loader opens it non-blocking and rechecks the byte limit while reading, so FIFOs, device files, size races, and oversized inputs fail closed instead of hanging or consuming unbounded memory.
-
-Because selecting this file is explicit, configuration errors fail fast: missing files, malformed lines or quotes, unknown keys, and conflicting duplicate keys are errors rather than ignored input. Identical duplicate entries are harmless. Validation is atomic: the loader returns a mapping only after the whole file passes, never writes `os.environ`, and identifies only the class/line of an error. Each resolver call parses the currently selected file, so changing selectors in one process cannot inherit values from an earlier file. Environment exports remain unchanged and take precedence over matching file keys. `doctor.py` merges the mapping only for credential-presence reporting; it does not export file values.
-
-Internal development mode accepts direct credential arguments. Commands, diagnostic results, and debug dumps preserve collected values instead of applying an automatic masking pass. Prefer environment-variable selectors or the credentials file when they make repeated use more convenient; they are not mandatory safety gates.
-
-When a machine-readable Debug result records credential provenance, use a source category
-such as `user_supplied: environment`, `credential_helper: credentials_file`, or
-`credential_helper: ssh_identity_or_agent`. Keep provenance separate from collected evidence; the
-doctor and raw dump may still expose the exact configured values or paths needed for diagnosis.
+For credentials missing, invalid, or conflicting, report the Runtime's bounded reason and use the
+configuration page to repair the selected source. Keep passwords, key contents, and raw resolved
+credential objects out of command arguments, model context, logs, and receipts. A successful local
+lookup establishes neither remote authentication nor authority for a target mutation.
 
 ## Transport security and local dependencies
+
+Distinguish the configured Redfish transport from the strict configuration checker. Historical
+internal BMC transport bindings may permit insecure TLS; the configuration checker's Redfish
+connection verifies certificates. Preserve the selected check policy: a strict-check failure
+remains unverified. Never silently retry that check with `verify=False`, an insecure TLS option,
+or another credential record. Correct certificate trust or the matching endpoint before retrying
+the strict check.
+
+An existing explicit authorization for insecure transport can be reused within its original
+scope without another confirmation. Report that transport's actual result with certificate
+verification disabled; it does not qualify certificate validation or replace a failed strict
+check. A historical transport default does not broaden a task's explicit validation boundary.
 
 SSH-backed lanes require the local `ssh` executable. `sshpass` is conditional on password
 authentication; key/agent authentication does not need it. `rg` is conditional on local source
@@ -243,12 +239,12 @@ without limiting the number of targets that may be requested.
 Treat matching target bindings, credential selectors, artifact identities, delivery strategy, and
 task-level authorization as reusable Case facts. A direct user request to apply/live-patch,
 upgrade, or rollback authorizes that named mutation and is projected onto internal gates without a
-second confirmation. Apply or upgrade authorization never implies rollback. Insecure TLS and the
-Live Patch exceptions `force_path`, `no_backup`, and `no_remount` are frozen task facts. Internal
-BMC workflows authorize insecure TLS by default and may explicitly set it to `false` for a trusted
-certificate; Live Patch exceptions remain explicit. A Case that already carries the matching facts
-must not ask again. Stop automatic advancement when a mutation outcome is unknown, or when recovery
-requires a rollback that was not separately authorized.
+second confirmation. Apply or upgrade authorization never implies rollback. The selected TLS
+policy and the Live Patch exceptions `force_path`, `no_backup`, and `no_remount` are frozen task
+facts. Reuse matching authorization only within its original scope; the transport-security rules
+above keep strict checks distinct from historical insecure transport. Live Patch exceptions remain
+explicit. Stop automatic advancement when a mutation outcome is unknown, or when recovery requires
+a rollback that was not separately authorized.
 
 The local stdio server persists the material TaskContext under the Target Runtime state directory.
 Reconnecting with the same task ID restores the typed intent, target bindings/selectors, at most 16

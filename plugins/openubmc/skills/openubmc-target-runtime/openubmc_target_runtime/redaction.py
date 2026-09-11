@@ -66,10 +66,17 @@ def is_secret_key(value: object) -> bool:
     )
 
 
-def redact_text(value: object) -> str:
+def redact_text(value: object, *, secret_values: tuple[str, ...] = ()) -> str:
     """Redact common inline secret forms while preserving selector names."""
 
     text = str(value or "")
+    for secret in sorted(set(secret_values), key=len, reverse=True):
+        if secret:
+            text = text.replace(secret, "<redacted>")
+    text = re.sub(
+        r"(?i)(--(?:password|passwd|passphrase|secret|token|api-key)\s+)(?:\"[^\"]*\"|'[^']*'|\S+)",
+        r"\1<redacted>", text,
+    )
     text = _PRIVATE_KEY.sub("<private-key-redacted>", text)
     text = _AUTHORIZATION_HEADER.sub("Authorization: <redacted>", text)
     text = _SECRET_ASSIGNMENT.sub(

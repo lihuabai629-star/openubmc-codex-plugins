@@ -42,6 +42,10 @@ Object/alarm collection remains a CLI or explicit compatibility path until its s
 available behind `observe`. Use `execute` when the task needs change-boundary verification or a
 multi-surface causal conclusion.
 
+After collection, use the diagnostic-advice reference from the Skill index to compare bounded Drive
+hypotheses against captured facts, select a discriminating `ObservationQuery`, or inspect an
+opt-in hardware → MDB → northbound fault-chain summary.
+
 ## Contents
 
 - Source root resolution

@@ -43,6 +43,7 @@ LOCAL_LOCK_ROOT = Path("/tmp") / f"openubmc-build-{os.getuid()}"
 EXECUTION_CONTRACT_FILES = (
     "scripts/check_dependency_delta.py",
     "scripts/check_rootfs_access.py",
+    "scripts/completed_evidence.py",
     "scripts/create_build_plan.py",
     "scripts/finalize_product_attempt.py",
     "scripts/run_bmcgo_checked.py",
@@ -533,6 +534,12 @@ def main(argv: list[str] | None = None) -> int:
         metavar="NAME=UID:GID[:SUP...]=/PATH[,/PATH...]",
     )
     parser.add_argument("--conan-home")
+    parser.add_argument("--reuse-evidence", choices=("compile", "official-ut"),
+                        help="reuse completed local evidence with frozen toolchain inputs and outputs")
+    parser.add_argument("--evidence-input", action="append", default=[], type=parse_workspace,
+                        metavar="NAME=PATH", help="frozen local input file; toolchain is required for reuse")
+    parser.add_argument("--evidence-output", action="append", default=[], type=parse_workspace,
+                        metavar="NAME=PATH", help="local result file whose identity is required for reuse")
     parser.add_argument(
         "--allowed-dependency-change",
         action="append",
@@ -557,6 +564,12 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         output_path = Path(args.output).resolve()
+        if args.reuse_evidence and args.mode not in {"validate", "component-package"}:
+            raise BuildPlanError("evidence_reuse_mode_unsupported", "only local validate/component-package evidence may be reused")
+        if (args.evidence_input or args.evidence_output) and not args.reuse_evidence:
+            raise BuildPlanError("evidence_reuse_not_declared", "evidence files require --reuse-evidence")
+        if args.reuse_evidence and ("toolchain" not in dict(args.evidence_input) or not args.evidence_output):
+            raise BuildPlanError("evidence_reuse_inputs_incomplete", "reuse requires a toolchain input and at least one evidence output")
         if args.hpm_key_file and args.mode != "product-artifact":
             raise BuildPlanError("hpm_key_requires_product_mode", "--hpm-key-file requires product-artifact mode")
         run_root = Path(args.run_root).resolve() if args.run_root else output_path.parent
@@ -689,6 +702,19 @@ def main(argv: list[str] | None = None) -> int:
             "umask": "022" if args.mode == "product-artifact" else current_umask(),
             "PATH": os.environ.get("PATH", ""),
         }
+        if args.reuse_evidence:
+            if len(dict(args.evidence_input)) != len(args.evidence_input) or len(dict(args.evidence_output)) != len(args.evidence_output):
+                raise ValueError("duplicate_evidence_role")
+            locks.update({name: file_identity(path) for name, path in args.evidence_input})
+            outputs = {name: str(path.resolve()) for name, path in args.evidence_output}
+            if any(Path(path) == output_path or Path(path).is_relative_to(run_root / "plans")
+                   or Path(path).is_relative_to(run_root / "locks") for path in outputs.values()):
+                raise ValueError("evidence_output_overwrites_evidence")
+            if set(outputs.values()) & {str(item["path"]) for item in locks.values()}:
+                raise ValueError("evidence_output_overwrites_input")
+            expectations["outputs"] = outputs
+            output_resources = sorted((output_resource_lock(role, Path(path)) for role, path in outputs.items()),
+                                      key=lambda item: (item["role"], item["path"]))
         if args.mode == "product-artifact":
             assert manifest_root is not None
             assert artifact_path is not None
@@ -904,6 +930,8 @@ def main(argv: list[str] | None = None) -> int:
                 "executable": command_executable_identity(command, cwd),
             },
         }
+        if args.reuse_evidence:
+            plan["evidence_reuse"] = {"kind": args.reuse_evidence, "scope": "local-only"}
         plan["plan_id"] = semantic_plan_id(plan)
         plan, reused = write_plan_immutable(output_path, plan)
     except BuildPlanError as exc:

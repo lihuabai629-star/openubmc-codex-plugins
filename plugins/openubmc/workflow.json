@@ -1,6 +1,6 @@
 {
   "schema_version": "openubmc-agent-workflow.v1",
-  "version": "2.0.12",
+  "version": "2.0.13",
   "integrated_baseline": "ceb46e8ca5542a4273128b1a4aa8606b2f5eaee0",
   "profiles": {
     "full": [

@@ -1,7 +1,7 @@
 import * as z from "zod/v4";
+import { boundedReceipt } from "./output-budget.js";
 
 
-const QUERY_RESPONSE_LIMIT = 24000;
 const READ_ONLY_ANNOTATIONS = Object.freeze({
   readOnlyHint: true,
   destructiveHint: false,
@@ -14,26 +14,10 @@ const OUTPUT_SCHEMA = {
   error: z.object({
     code: z.string(),
     message: z.string(),
-    retryable: z.boolean()
+    retryable: z.boolean(),
+    recovery: z.string().optional()
   }).optional()
 };
-
-
-function boundedQueryResult(value) {
-  if (!value || typeof value !== "object" || typeof value.response !== "string") {
-    return value;
-  }
-  const originalChars = value.response.length;
-  const truncated = originalChars > QUERY_RESPONSE_LIMIT;
-  return {
-    ...value,
-    response: truncated
-      ? value.response.slice(0, QUERY_RESPONSE_LIMIT)
-      : value.response,
-    response_chars: originalChars,
-    truncated
-  };
-}
 
 
 function markdown(name, value) {
@@ -44,7 +28,7 @@ function markdown(name, value) {
     return [
       value?.response || "No knowledge-base context returned.",
       references ? `\nReferences\n\n${references}` : "",
-      value?.truncated ? `\nResponse truncated at ${QUERY_RESPONSE_LIMIT} characters.` : ""
+      value?.truncated ? `\nIncomplete context: ${value.truncation_reasons.join(", ")}.` : ""
     ].filter(Boolean).join("\n");
   }
   if (name === "openubmc_kb_status") {
@@ -69,34 +53,76 @@ function markdown(name, value) {
 }
 
 
-function textResult(name, value, responseFormat) {
+function textResult(name, source, responseFormat) {
+  return boundedReceipt(name, source, value => {
   const structuredContent = { ok: true, result: value };
   return {
     content: [{
       type: "text",
       text: responseFormat === "markdown"
-        ? markdown(name, value)
+        ? markdown(name, value) + (name !== "openubmc_kb_query" && value.truncated
+          ? `\nIncomplete context: ${value.truncation_reasons.join(", ")}.` : "")
         : JSON.stringify(structuredContent, null, 2)
     }],
     structuredContent
   };
+  });
 }
 
 
 export function errorResult(error) {
-  const message = error instanceof Error ? error.message : "Unknown MCP tool error";
-  const code = typeof error?.code === "string" ? error.code : "KB_TOOL_FAILED";
+  const failures = {
+    KB_CONFIGURATION_INVALID: ["The activated local KB configuration is invalid.", false,
+      "Repair and activate the local configuration before retrying."],
+    KB_CREDENTIALS_MISSING: ["Knowledge-base credentials are not configured.", false,
+      "Configure credentials in the local private KB configuration."],
+    KB_INTERACTION_REQUIRED: ["Knowledge-base authentication requires human interaction.", false,
+      "Complete interactive authentication locally before retrying."],
+    KB_AUTHENTICATION_FAILED: ["Knowledge-base authentication failed.", false,
+      "Check the local account credentials and authentication configuration."],
+    KB_PERMISSION_DENIED: ["Knowledge-base access was denied.", false,
+      "Check that the configured account has permission for this operation."],
+    KB_RATE_LIMITED: ["The upstream service rate limit was reached.", true,
+      "Wait before retrying this read-only request."],
+    KB_SERVICE_UNAVAILABLE: ["The upstream service is temporarily unavailable.", true,
+      "Retry this read-only request after the service recovers."],
+    KB_NETWORK_ERROR: ["The knowledge-base connection was interrupted.", true,
+      "Check connectivity and retry this read-only request."],
+    KB_RESPONSE_INVALID: ["The upstream response has an invalid field shape.", false,
+      "Check knowledge-base service compatibility before retrying."],
+    KB_RESPONSE_TOO_LARGE: ["The upstream response exceeded the byte budget.", false,
+      "Narrow the query or reduce the requested page size before retrying."],
+    KB_TIMEOUT: ["The knowledge-base request exceeded its total deadline.", true,
+      "Check the upstream service before retrying this read-only request."],
+    KB_CANCELLED: ["The knowledge-base request was cancelled.", false,
+      "Start a new request only if the task still needs this information."],
+    KB_TOOL_FAILED: ["The knowledge-base request failed.", false,
+      "Inspect local diagnostics before deciding whether to retry."]
+  };
+  const statusCodes = {
+    401: "KB_AUTHENTICATION_FAILED", 403: "KB_PERMISSION_DENIED",
+    429: "KB_RATE_LIMITED", 502: "KB_SERVICE_UNAVAILABLE",
+    503: "KB_SERVICE_UNAVAILABLE", 504: "KB_SERVICE_UNAVAILABLE"
+  };
+  const statusCode = Object.hasOwn(statusCodes, error?.status) ? statusCodes[error.status] : undefined;
+  const networkCode = ["ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EAI_AGAIN",
+    "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_HEADERS_TIMEOUT", "UND_ERR_BODY_TIMEOUT", "UND_ERR_SOCKET"]
+    .includes(error?.cause?.code) ? "KB_NETWORK_ERROR" : undefined;
+  const code = Object.hasOwn(failures, error?.code)
+    ? error.code : statusCode || networkCode || "KB_TOOL_FAILED";
+  const [message, retryable, recovery] = failures[code];
   const structuredContent = {
     ok: false,
     error: {
       code,
       message,
-      retryable: !["KB_CREDENTIALS_MISSING"].includes(code)
+      retryable,
+      recovery
     }
   };
   return {
     isError: true,
-    content: [{ type: "text", text: `${code}: ${message}` }],
+    content: [{ type: "text", text: `${code}: ${message}\n${recovery}` }],
     structuredContent
   };
 }
@@ -123,12 +149,12 @@ export function createTools(client) {
         response_format: responseFormat
       },
       outputSchema: OUTPUT_SCHEMA,
-      handler: async input => {
+      handler: async (input, options) => {
         if (typeof input?.query !== "string" || input.query.trim() === "") {
           throw new Error("query must be a non-empty string");
         }
         const normalized = { ...input, query: input.query.trim() };
-        const result = boundedQueryResult(await client.query(normalized));
+        const result = await client.query(normalized, options);
         return textResult("openubmc_kb_query", result, input.response_format);
       }
     },
@@ -139,9 +165,9 @@ export function createTools(client) {
       annotations: READ_ONLY_ANNOTATIONS,
       inputSchema: { response_format: responseFormat },
       outputSchema: OUTPUT_SCHEMA,
-      handler: async input => textResult(
+      handler: async (input, options) => textResult(
         "openubmc_kb_status",
-        await client.status(),
+        await client.status(options),
         input.response_format
       )
     },
@@ -159,9 +185,9 @@ export function createTools(client) {
         response_format: responseFormat
       },
       outputSchema: OUTPUT_SCHEMA,
-      handler: async input => textResult(
+      handler: async (input, options) => textResult(
         "openubmc_kb_list",
-        await client.list(input),
+        await client.list(input, options),
         input.response_format
       )
     }
@@ -190,12 +216,17 @@ export function registerTools(server, client, processLifecycle = null) {
       }
       const invoke = async () => {
         try {
-          return await handler(input);
+          return await handler(input, { signal: extra.signal });
         } catch (error) {
           return errorResult(error);
         }
       };
-      return invoke();
+      processLifecycle?.beginRequest?.();
+      try {
+        return await invoke();
+      } finally {
+        processLifecycle?.endRequest?.();
+      }
     });
   }
 }

@@ -442,6 +442,17 @@ class ObservationSelector:
                 field=f"selectors[{index - 1}].id",
                 limit={"unit": "UTF-8 bytes", "maximum": SELECTOR_ID_MAX_BYTES},
             )
+        if kind == "systemd":
+            from .systemd_contract import validate_systemd_names
+            try:
+                if "queries" in value or not isinstance(value.get("names"), list):
+                    raise ValueError('systemd requires names and cannot contain queries')
+                validate_systemd_names(value.get("names"))
+            except ValueError as error:
+                raise AgentPreflightError(
+                    str(error), field=f"selectors[{index - 1}].names",
+                ) from None
+            return cls(selector_id=selector_id, kind=kind, names=tuple(value["names"]))
         if kind == "capability":
             if "queries" in value:
                 raise AgentPreflightError(
@@ -592,7 +603,7 @@ class ObservationSelector:
                         },
                     )
             return cls(selector_id=selector_id, kind=kind, queries=queries)
-        supported = ("capability", "mdb")
+        supported = ("capability", "mdb", "systemd")
         raise AgentPreflightError(
             f"selectors[{index - 1}].kind has unsupported selector kind "
             f"{kind or '<empty>'!r}; supported kinds: " + ", ".join(supported),
@@ -720,6 +731,12 @@ class ObservationQuery:
             ObservationSelector.from_value(_mapping(value), index)
             for index, value in enumerate(raw_selectors, start=1)
         )
+        if sum(selector.kind == "systemd" for selector in selectors) > 1:
+            raise AgentPreflightError(
+                "combine service IDs in one systemd selector per observation",
+                reason=PreflightReason.TOO_MANY_ITEMS, field="selectors",
+                limit={"maximum_systemd_selectors": 1},
+            )
         selector_ids = [selector.selector_id for selector in selectors]
         if len(set(selector_ids)) != len(selector_ids):
             duplicate_index = next(
@@ -827,6 +844,12 @@ class ObservationQuery:
             }
 
         for selector in self.selectors:
+            if selector.kind == "systemd":
+                if current:
+                    batches.append(current)
+                    current = []
+                batches.append([selector])
+                continue
             for value in selector.values:
                 fragment = selector.with_values((value,))
                 if (
@@ -1224,9 +1247,9 @@ def _validate_gate_response_shape(response: Mapping[str, object]) -> None:
     raw_status = response.get("status")
     raw_summary = response.get("summary")
     status = raw_status.strip().lower() if isinstance(raw_status, str) else ""
-    if status not in {"completed", "failed", "cancelled"}:
+    if status not in {"completed", "failed", "cancelled", "partial"}:
         raise AgentGatewayError(
-            "response status must be completed, failed, or cancelled"
+            "response status must be completed, failed, cancelled, or partial"
         )
     if not isinstance(raw_summary, str) or not raw_summary.strip():
         raise AgentGatewayError("response summary must be a non-empty string")

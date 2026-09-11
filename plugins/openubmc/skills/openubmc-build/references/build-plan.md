@@ -63,6 +63,10 @@ Product Plan creation fails when `build/<community>.lock` is missing. Do not ren
 
 Product Plans automatically treat Manifest `output/` and `temp/` as planned mutable paths so normal in-checkout build products do not trigger workspace contamination. Add `--mutable-path manifest=<relative-path>` only for another command-owned output subtree; source and configuration paths remain frozen.
 
+`--hpm-key-file <absolute-path>` selects required containment verification for the supported
+openUBMC PICMG/ext4 package format. The file is a private frozen Plan input; the runner and
+finalizer reject drift. Omit it for a local-only build whose HPM cannot yet be qualified.
+
 ## Execute an Attempt
 
 ```bash
@@ -105,6 +109,39 @@ If a deterministic build may reproduce identical bytes, preserve and move aside 
 
 An Attempt with no terminal state is `interrupted` evidence, not a successful build.
 
-`--hpm-key-file <absolute-path>` selects required containment verification for the supported
-openUBMC PICMG/ext4 package format. The file is a private frozen Plan input; the runner and
-finalizer reject drift. Omit it for a local-only build whose HPM cannot yet be qualified.
+## Reuse completed local evidence
+
+For a local compile or official UT command with fully identified inputs, add these
+options when creating its `validate` or `component-package` Plan:
+
+```bash
+--reuse-evidence official-ut \
+--evidence-input toolchain=<absolute-toolchain-file> \
+--evidence-input dependencies=<absolute-resolved-dependency-lock> \
+--evidence-output report=<absolute-result-file>
+```
+
+Use `compile` for compilation evidence. Repeat `--evidence-input NAME=PATH` for
+the command's additional compiler, script, profile, and dependency files. The
+`toolchain` role and at least one result file are required. A toolchain lock must
+pin the environment actually used by the command; a label for a mutable image or
+an unobserved remote environment does not establish that identity. Omit reuse
+when dependencies cannot be completely identified. Source inputs remain covered
+by the bound checkout identities, and result paths inside a checkout still need
+their existing `--mutable-path` declarations. Never declare credential files as
+evidence inputs.
+
+The normal Attempt command reuses the latest completed evidence only when the
+Plan, executable, source, input files, execution environment, command record,
+checked log, and all result files still match. Output files receive the same
+host-local resource locks used for product outputs. Environment equality uses a
+private keyed proof bound to the current host boot; environment values and the
+private key are absent from receipts. Missing or changed outputs, changed environment, invalid private proof,
+or a later failed/interrupted Attempt cause real execution. Frozen source, tool,
+or input drift still requires a new Plan.
+
+A reused receipt keeps the original Attempt ID, paths, and `finished_at`, with
+`reused: true`. It creates no new successful Attempt. Add `--fresh` to the runner
+to execute again. Plans without `--reuse-evidence` retain the normal retry behavior.
+Product finalization, publication, remote checks, and real-device verification
+always require their own execution and fresh acceptance evidence.

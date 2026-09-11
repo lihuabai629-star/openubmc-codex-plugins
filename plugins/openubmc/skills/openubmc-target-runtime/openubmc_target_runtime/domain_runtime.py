@@ -281,6 +281,7 @@ class RuntimeDomainExecution:
             "_task_delivery_strategy",
             "_task_authorized_exceptions",
             "_credential_values",
+            "_credential_values_by_target",
         ):
             canonical.pop(internal_name, None)
         validate_boolean_argument_types(descriptor, canonical)

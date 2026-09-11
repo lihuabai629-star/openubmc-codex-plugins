@@ -1,6 +1,6 @@
 ---
 name: openubmc-debug
-description: Diagnose, compare, and verify openUBMC runtime issues by correlating local source or configuration, northbound interfaces, live MDB/D-Bus objects and alarms, logs or files, and optional OS-host evidence. Use for a supplied BMC IP, a runtime symptom, comparison of live targets, a diagnostic handoff, or post-upgrade verification. Keep remote work read-only and route implementation, build, upgrade, or live mutation to their owning skills.
+description: "Diagnose openUBMC/BMC runtime problems: 设备不识别、传感器异常、告警、服务启动失败、接口报错、两台 BMC 对比。Use for live target symptoms, a supplied BMC IP, diagnostic handoff, or post-upgrade verification; correlate source, MDB/D-Bus, Redfish, logs, and optional OS evidence. Remote diagnosis is read-only; route implementation, builds, upgrades, and file replacement to their owning skills."
 ---
 
 # openUBMC Runtime Debug
@@ -9,8 +9,8 @@ description: Diagnose, compare, and verify openUBMC runtime issues by correlatin
 
 Own read-only runtime diagnosis and post-change verification. Infer whether the request is:
 
-- `diagnose`: explain and localize a current or reproduced symptom;
-- `verify_delivery`: verify requested behavior on the deployed target.
+- diagnosis: explain and localize a current or reproduced symptom;
+- delivery verification: verify requested behavior on the deployed target.
 
 Accept prose or a concise handoff; do not require a transport envelope. Keep diagnosis separate
 from implementation:
@@ -25,14 +25,16 @@ from implementation:
 
 Use the default `openubmc-target-runtime` MCP through its semantic Agent Interface:
 
+- For current systemd service failures, use a `systemd` selector with literal `.service` names
+  or `["failed"]` discovery; see the Agent semantic interface reference below.
 - Call `observe` for an exact read-only question. Declare only the selectors needed for the
   answer. A narrow MDB or capability query should complete in one call and return an inline
   `ObservationReceipt`.
-- Treat one answer as one observation: combine related capability and MDB selectors needed for
+- Treat one answer as one observation: combine related capability, MDB and systemd selectors needed for
   the answer in the same `observe` call. Do not run a separate capability preflight; the internal
   Observation Adapter performs it.
 - Call `execute` when work can cross diagnosis, source change, build, live patch, upgrade,
-  recovery, verification, or acceptance phases.
+  recovery, verification, or acceptance phases, including a read-only diagnosis Run.
 - A build-upgrade Run that requires exact Drive convergence may carry a bounded
   `hardware_acceptance.devices` declaration in its Debug entry arguments. It is validated
   before mutation but applied only to post-upgrade `debug_collect`: missing, unhealthy,
@@ -61,8 +63,25 @@ Use the default `openubmc-target-runtime` MCP through its semantic Agent Interfa
   bounded `summary` as citable visible evidence. Raw Evidence bytes do not need a separate read.
   `projection_truncated` and `content_compacted` describe the display; determine source
   completeness from the receipt's `truncated`, `content_complete`, freshness, coverage, and gaps.
-- Do not use compatibility or operator operations from the default Agent profile. Load the Agent
-  Gateway reference only when continuation, recovery, profiles, or Runtime mechanics matter.
+- Do not use compatibility or operator operations from the default Agent profile.
+
+For a read-only diagnosis, replace the target and purpose in this complete `execute` Action:
+
+```json
+{
+  "kind": "start",
+  "intent": "diagnosis-only",
+  "target": "<BMC IP>",
+  "purpose": "Explain the reported service failure using read-only evidence",
+  "deadline": 60
+}
+```
+
+Put the symptom and requested conclusion in `purpose`. `diagnose` is not an accepted intent;
+`symptom` is not an Action field. Omit a delivery strategy for diagnosis-only work. The deadline
+is the caller wait bound, greater than zero and at most 120 seconds. Before adding collection
+arguments or continuing the Run, read the Agent Gateway reference. A valid start proves no
+diagnostic conclusion; only current evidence and an accepted diagnosis can support completion.
 
 ## Diagnostic workflow
 
@@ -144,6 +163,7 @@ Read only the directly relevant one-hop references:
 - Agent semantic interface and Runtime continuation: `references/agent-gateway.md`
 - Remote credentials, preflight, helpers, concurrency, and target automation: `references/remote-automation.md`
 - Evidence selection and correlation: `references/evidence-workflow.md`
+- Hypothesis-directed Drive diagnosis and fault-chain comparison: `references/diagnostic-advice.md`
 - Combined snapshot details: `references/workflow.md`
 - Structured result fields: `references/diagnostic-contract.md`
 - Focused mechanism checks: `references/mechanism-debugging.md`

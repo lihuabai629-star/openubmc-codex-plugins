@@ -27,6 +27,7 @@
     "references/redfish-upgrade.md",
     "requirements-containment.txt",
     "scripts/check_dependency_delta.py",
+    "scripts/component_impact.py",
     "scripts/check_rootfs_access.py",
     "scripts/create_build_plan.py",
     "scripts/detect_changed_components.py",
@@ -39,7 +40,8 @@
     "scripts/verify_hpm_containment.py",
     "scripts/verify_product_artifact.py",
     "scripts/write_artifact_metadata.py",
-    "skill.json"
+    "skill.json",
+    "scripts/completed_evidence.py"
   ],
   "keywords": [
     "openubmc",

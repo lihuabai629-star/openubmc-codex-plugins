@@ -86,6 +86,26 @@ Distinguish these evidence levels:
 
 A definition hit alone cannot establish root cause.
 
+When a symbol hit leaves the caller or owner unresolved, inspect bounded Lua
+references using the installed Debug helper:
+
+```bash
+python <debug-skill>/scripts/source_trace.py --source-root <repository> --symbol <qualified-symbol>
+```
+
+Use a qualified symbol to narrow duplicate terminal names. The result binds
+declarations, direct call candidates, callback registration candidates and value
+references to exact file bytes and the observed Git revision. Generated paths
+including `gen/` are marked. `source.dirty` compares only inspected Lua bytes
+with raw committed blobs; it is not a whole-worktree status. `incomplete` and
+`gaps` preserve unreadable files, limits, unsupported
+languages and unresolved dispatch; increase scope only when the missing evidence
+is needed. The helper reads Lua syntax without executing project code. Aliases,
+dynamic table lookups and runtime registration require direct inspection or
+CodeGraph corroboration. Static references do not prove that a call executed;
+retain the runtime instance, time and state evidence before accepting an owner
+or causal path.
+
 ## Remote object evidence
 
 Capture the exact service, object path, interface, member/property, method signature, state, and target clock. Prefer `mdbctl` for model-oriented exploration and `busctl` for precise D-Bus semantics. Treat business-error text as failure even when the shell exit code is zero.

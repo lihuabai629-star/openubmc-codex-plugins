@@ -638,6 +638,13 @@ class LogBundleRuntimeLease:
             label: str,
             default_value: str = "",
         ) -> str:
+            if file_credentials.get("__runtime_selected__") == "1":
+                from openubmc_target_runtime.credential_file import selected_credential_value
+                if direct_explicit and direct_value:
+                    return direct_value
+                selected = selected_credential_value(file_credentials, (env_name,) if env_name else fallback_env_names)
+                if selected is not None:
+                    return selected
             if env_name:
                 if env_name in os.environ:
                     return os.environ[env_name]
@@ -649,12 +656,10 @@ class LogBundleRuntimeLease:
                 )
             if direct_explicit and direct_value:
                 return direct_value
-            for fallback in fallback_env_names:
-                if fallback in os.environ:
-                    return os.environ[fallback]
-            for fallback in fallback_env_names:
-                if fallback in file_credentials:
-                    return file_credentials[fallback]
+            from openubmc_target_runtime.credential_file import selected_credential_value
+            selected = selected_credential_value(file_credentials, fallback_env_names)
+            if selected is not None:
+                return selected
             return direct_value or default_value
 
         def resolve_runtime_secret(
@@ -709,6 +714,7 @@ class LogBundleRuntimeLease:
             )
 
         def load_ssh(_selector):
+            identity_file = str(getattr(args, "ssh_identity_file", "")) or file_credentials.get("OPENUBMC_SSH_IDENTITY_FILE", "")
             user = resolve_runtime_value(
                 direct_value=str(getattr(args, "ssh_user", "")),
                 direct_explicit=bool(
@@ -724,13 +730,13 @@ class LogBundleRuntimeLease:
                 env_name=str(getattr(args, "ssh_password_env", "")),
                 fallback_env_names=("OPENUBMC_SSH_PASSWORD",),
                 label="SSH 密码",
-                allow_empty=bool(getattr(args, "ssh_identity_file", "")),
+                allow_empty=bool(identity_file),
             )
             return runtime.ResolvedSshCredentials(
                 user=user,
                 password=password,
                 port=int(getattr(args, "ssh_port", 22)),
-                identity_file=str(getattr(args, "ssh_identity_file", "")),
+                identity_file=identity_file,
             )
 
         resolver = runtime.CredentialResolver(

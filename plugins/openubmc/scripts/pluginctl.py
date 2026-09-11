@@ -31,7 +31,7 @@ def _cancel_dependency_process(_signum, _frame):
     raise DependencyCancelled('Dependency preparation cancelled')
 
 
-def prepare_for_start(content: dict[str, bytes]) -> None:
+def prepare_for_start(content: dict[str, bytes], capability: str) -> None:
     """Keep first-use downloads owned by the MCP client's lifetime on Linux."""
     parent = os.getppid()
     if sys.platform != 'linux' or parent <= 1:
@@ -51,7 +51,7 @@ def prepare_for_start(content: dict[str, bytes]) -> None:
     try:
         if os.getppid() != parent:
             raise DependencyCancelled('MCP client exited before dependency preparation')
-        prepare_dependencies(content, False, lock_timeout=540)
+        prepare_dependencies(content, False, capability=capability, lock_timeout=540)
     finally:
         stopped.set()
         watcher.join(timeout=1)
@@ -79,7 +79,13 @@ def verify(root: Path = ROOT) -> tuple[dict, dict[str, bytes]]:
         if path.is_symlink():
             raise ValueError('plugin contains symbolic link: ' + str(path.relative_to(root)))
         if path.is_file() and path != lock_path:
-            content[path.relative_to(root).as_posix()] = path.read_bytes()
+            relative = path.relative_to(root)
+            # Python may create runtime bytecode beside packaged scripts. These
+            # caches are derived files and must never change package identity.
+            if (path.suffix == '.pyc' and '__pycache__' in relative.parts
+                    and relative.as_posix() not in lock['files']):
+                continue
+            content[relative.as_posix()] = path.read_bytes()
     if {name: hashlib.sha256(data).hexdigest() for name, data in content.items()} != lock['files']:
         raise ValueError('plugin file inventory mismatch; reinstall the verified archive')
     for name in content:
@@ -93,16 +99,21 @@ def verify(root: Path = ROOT) -> tuple[dict, dict[str, bytes]]:
     return lock, content
 
 
-def dependency_root(content: dict[str, bytes]) -> Path:
-    node = subprocess.run(['node', '--version'], env=node_environment(), timeout=10, check=True, capture_output=True, text=True).stdout.strip()
-    if int(node.removeprefix('v').split('.')[0]) < 20:
-        raise ValueError('Node 20 or newer is required')
-    identity = {'schema': 'isolated-target.v1', 'python': sys.version, 'machine': platform.machine(), 'platform': sys.platform, 'node': node,
-                'python_lock': hashlib.sha256(content['requirements.lock']).hexdigest(),
-                'node_lock': hashlib.sha256(content['openubmc-kb-mcp/package-lock.json']).hexdigest()}
+def dependency_root(content: dict[str, bytes], capability: str) -> Path:
+    identity = {'schema': 'capability-target.v2', 'capability': capability,
+                'machine': platform.machine(), 'platform': sys.platform}
+    if capability == 'runtime':
+        identity.update(python=sys.version, lock=hashlib.sha256(content['requirements.lock']).hexdigest())
+    elif capability == 'kb':
+        node = subprocess.run(['node', '--version'], env=node_environment(), timeout=10, check=True, capture_output=True, text=True).stdout.strip()
+        if int(node.removeprefix('v').split('.')[0]) < 20:
+            raise ValueError('KB requires Node 20 or newer')
+        identity.update(node=node, lock=hashlib.sha256(content['openubmc-kb-mcp/package-lock.json']).hexdigest())
+    else:
+        raise ValueError('Unknown dependency capability')
     key = hashlib.sha256(canonical(identity)).hexdigest()
     data = Path(os.environ.get('XDG_DATA_HOME') or Path.home()/'.local/share')
-    return data/'openubmc/plugin-dependencies'/key
+    return data/'openubmc/plugin-dependencies'/capability/key
 
 
 def dependency_inventory(root: Path) -> dict:
@@ -127,7 +138,7 @@ def check_dependencies(root: Path) -> dict:
     if root.is_symlink() or receipt.is_symlink():
         raise ValueError('Dependency cache must not be a symbolic link')
     record = json.loads(receipt.read_bytes())
-    if record.get('schema') != 'openubmc.plugin-dependencies.v1' or record.get('files') != dependency_inventory(root):
+    if not isinstance(record, dict) or record.get('schema') != 'openubmc.plugin-dependencies.v2' or record.get('files') != dependency_inventory(root):
         raise ValueError('Dependency cache drift; run pluginctl.py prepare --repair')
     return record
 
@@ -169,10 +180,10 @@ def _run_dependency_command(command: list[str], env: dict[str, str], *, timeout:
         process.wait()
 
 
-def prepare_dependencies(content: dict[str, bytes], repair: bool, *, offline: bool = False, retries: int = 0,
+def prepare_dependencies(content: dict[str, bytes], repair: bool, *, capability: str, offline: bool = False, retries: int = 0,
                           pip_timeout: float | None = None, npm_timeout: float | None = None,
                           lock_timeout: float = 30.0) -> Path:
-    root = dependency_root(content)
+    root = dependency_root(content, capability)
     root.parent.mkdir(parents=True, exist_ok=True)
     with (root.parent/(root.name+'.lock')).open('a') as mutex:
         deadline = time.monotonic() + max(0.1, lock_timeout)
@@ -203,19 +214,21 @@ def prepare_dependencies(content: dict[str, bytes], repair: bool, *, offline: bo
         if root.exists() and root.is_symlink():
             raise ValueError('Dependency cache must not be a symbolic link')
         staging.mkdir(mode=0o700)
-        (staging/'requirements.lock').write_bytes(content['requirements.lock'])
         knowledge = staging/'knowledge'
-        knowledge.mkdir()
-        for name in ('package.json', 'package-lock.json'):
-            (knowledge/name).write_bytes(content['openubmc-kb-mcp/'+name])
         env = node_environment()
-        commands = [
-            [sys.executable, '-I', '-B', '-m', 'pip', 'install', '--disable-pip-version-check', '--no-compile', '--only-binary=:all:', '--require-hashes', '--target', str(staging/'python-packages'), '-r', str(staging/'requirements.lock')],
-            ['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund', '--prefix', str(knowledge)],
-        ]
-        if offline:
-            commands[0].append('--no-index')
-            commands[1].append('--offline')
+        if capability == 'runtime':
+            (staging/'requirements.lock').write_bytes(content['requirements.lock'])
+            command = [sys.executable, '-I', '-B', '-m', 'pip', 'install', '--disable-pip-version-check', '--no-compile', '--only-binary=:all:', '--require-hashes', '--target', str(staging/'python-packages'), '-r', str(staging/'requirements.lock')]
+            if offline:
+                command.append('--no-index')
+        else:
+            knowledge.mkdir()
+            for name in ('package.json', 'package-lock.json'):
+                (knowledge/name).write_bytes(content['openubmc-kb-mcp/'+name])
+            command = ['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund', '--prefix', str(knowledge)]
+            if offline:
+                command.append('--offline')
+        commands = [command]
         try:
             for command in commands:
                 stage = 'pip' if command[0] == sys.executable else 'npm'
@@ -235,7 +248,7 @@ def prepare_dependencies(content: dict[str, bytes], repair: bool, *, offline: bo
                             raise
             # Dependency identity covers the complete installed content, including
             # Node production dependencies; no package writes occur during startup.
-            record = {'schema': 'openubmc.plugin-dependencies.v1', 'files': dependency_inventory(staging)}
+            record = {'schema': 'openubmc.plugin-dependencies.v2', 'capability': capability, 'files': dependency_inventory(staging)}
             (staging/'receipt.json').write_bytes(canonical(record))
             check_dependencies(staging)
             if backup.exists():
@@ -310,29 +323,25 @@ def node_environment() -> dict[str, str]:
 
 
 def local_credentials_status(content: dict[str, bytes]) -> dict[str, object]:
-    """Inspect the selected file using the same reader as domain operations."""
+    """Inspect local sources using verified Runtime modules, without dependencies."""
+    import sys
     import types
-    reader = types.ModuleType('verified_credential_file')
-    exec(compile(content['skills/openubmc-target-runtime/openubmc_target_runtime/credential_file.py'],
-                 '<verified-credential-file>', 'exec'), reader.__dict__)
-    result = {'configured': False, 'status': 'unavailable', 'reason': '',
-              'remote_authentication': 'not_checked', 'capabilities': {}}
+    prefix = '_verified_openubmc_credentials'
+    package = types.ModuleType(prefix)
+    package.__path__ = []
+    loaded = {prefix: package}
+    sys.modules[prefix] = package
     try:
-        path = reader.selected_credentials_path()
-        if path is None:
-            path = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home()/'.config')/'openubmc/credentials.env'
-        if not path.exists() and not path.is_symlink():
-            return dict(result, status='missing', reason='credentials file is missing')
-        values = reader.read_credentials_file(path)
-    except (reader.CredentialFileError, OSError) as error:
-        return dict(result, reason=str(error))
-    completeness = reader.credential_completeness(values)
-    result['capabilities'] = completeness['capabilities']
-    missing = completeness['missing_keys']
-    configured = completeness['configured']
-    return dict(result, configured=configured, status='configured' if configured else 'incomplete',
-                reason='local credentials are complete; remote authentication was not checked' if configured
-                else 'missing keys: ' + ', '.join(missing) if missing else 'no credential capability is configured')
+        for name in ('credential_file', 'configuration', 'credentials'):
+            module = types.ModuleType(prefix + '.' + name)
+            module.__package__ = prefix
+            sys.modules[module.__name__] = loaded[module.__name__] = module
+            path = 'skills/openubmc-target-runtime/openubmc_target_runtime/' + name + '.py'
+            exec(compile(content[path], '<verified-' + name + '>', 'exec'), module.__dict__)
+        return module.LocalCredentialSource().status()
+    finally:
+        for name in loaded:
+            sys.modules.pop(name, None)
 
 
 def probe_server(command: str, content: dict[str, bytes], lock: dict) -> dict[str, object]:
@@ -374,9 +383,9 @@ def write_timing(path: Path | None, stage: str, started: float) -> None:
             stream.write(json.dumps({'stage': stage, 'elapsed_seconds': time.monotonic()-started})+'\n')
 
 
-def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | None = None) -> int:
+def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | None = None, page_args: list[str] | None = None) -> int:
     started = time.monotonic()
-    dependencies = dependency_root(content)
+    dependencies = dependency_root(content, "runtime" if command == "configure" else command)
     write_timing(timings, 'dependency_identity', started)
     if not (dependencies/'receipt.json').is_file():
         raise ValueError('Dependencies are not prepared; run pluginctl.py prepare')
@@ -390,7 +399,13 @@ def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | 
     env = node_environment()
     env['OPENUBMC_MCP_SOURCE_COMMIT'] = lock['source_commit']
     env['OPENUBMC_PLUGIN_CONTENT_DIGEST'] = lock['content_digest']
-    if command == 'runtime':
+    if command == 'configure':
+        # The page and its worker use the guarded package entrypoints. The
+        # execution snapshot provides verified dependencies, not a plugin lock.
+        argv = [sys.executable, '-I', '-B', '-c',
+                'import sys,runpy;sys.path.insert(0,sys.argv[1]);sys.argv=[sys.argv[2],*sys.argv[3:]];runpy.run_path(sys.argv[0],run_name="__main__")',
+                str(snapshot/'python-packages'), str(ROOT/'skills/openubmc-environment-setup/scripts/config_page.py'), *(page_args or [])]
+    elif command == 'runtime':
         argv = [sys.executable, '-I', '-B', '-c',
                 'import sys,runpy;sys.path.insert(0,sys.argv[1]);runpy.run_path(sys.argv[2],run_name="__main__")',
                 str(snapshot/'python-packages'), str(snapshot/'scripts/launch_runtime.py')]
@@ -414,7 +429,7 @@ def positive_timeout(value: str) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'migrate', 'restore-legacy'])
+    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'configure', 'migrate', 'restore-legacy'])
     parser.add_argument('--home', type=Path, default=Path.home())
     parser.add_argument('--codex-home', type=Path)
     parser.add_argument('--transaction', default='')
@@ -423,6 +438,11 @@ def main() -> int:
     migration_mode.add_argument('--remove', dest='migration_mode', action='store_const', const='remove', help='Remove owned legacy registrations and Skill links')
     parser.add_argument('--preview', action='store_true', help='Inspect migration without changing files')
     parser.add_argument('--target-plugin', default='openubmc@openubmc-public', help='Plugin registration to preserve during migration')
+    parser.add_argument('--no-browser', action='store_true')
+    parser.add_argument('--target', action='append', default=[])
+    parser.add_argument('--purpose', choices=['bmc','os'], default='bmc')
+    parser.add_argument('--transport', choices=['ssh','redfish'], default='ssh')
+    parser.add_argument('--capability', choices=['runtime', 'kb', 'all'], default='all', help='Capability to prepare or diagnose')
     parser.add_argument('--repair', action='store_true', help='Recreate a damaged dependency cache')
     parser.add_argument('--prepare-on-start', action='store_true', help='Prepare locked dependencies before the first MCP startup')
     parser.add_argument('--offline', action='store_true', help='Disable package index access')
@@ -456,24 +476,42 @@ def main() -> int:
         if args.command == 'prepare':
             signal.signal(signal.SIGTERM, _cancel_dependency_process)
             signal.signal(signal.SIGINT, _cancel_dependency_process)
-            root = prepare_dependencies(content, args.repair, offline=args.offline, retries=args.retries, pip_timeout=args.pip_timeout, npm_timeout=args.npm_timeout, lock_timeout=args.lock_timeout)
-            report['dependencies'] = str(root)
+            capabilities = ('runtime', 'kb') if args.capability == 'all' else (args.capability,)
+            roots = {}
+            for capability in capabilities:
+                roots[capability] = str(prepare_dependencies(content, args.repair, capability=capability, offline=args.offline, retries=args.retries, pip_timeout=args.pip_timeout, npm_timeout=args.npm_timeout, lock_timeout=args.lock_timeout))
+            report['capability_dependencies'] = roots
+            report['dependencies'] = roots.get('runtime', roots.get('kb'))
+        elif args.command == 'configure':
+            if not (dependency_root(content, 'runtime')/'receipt.json').is_file():
+                prepare_dependencies(content, False, capability='runtime')
+            page_args=['--purpose',args.purpose,'--transport',args.transport]
+            if args.no_browser: page_args.append('--no-browser')
+            for target in args.target: page_args.extend(['--target',target])
+            return launch('configure',content,lock,page_args=page_args)
         elif args.command in ('runtime', 'kb'):
-            if args.prepare_on_start and not (dependency_root(content)/'receipt.json').is_file():
-                prepare_for_start(content)
+            if args.prepare_on_start and not (dependency_root(content, args.command)/'receipt.json').is_file():
+                prepare_for_start(content, args.command)
             return launch(args.command, content, lock, args.timings)
         elif args.command == 'doctor':
             report['package_integrity'] = True
-            try:
-                check_dependencies(dependency_root(content))
-                report['dependencies_ready'] = True
-            except (OSError, ValueError, subprocess.SubprocessError) as error:
-                report['dependencies_ready'] = False
-                report['error'] = str(error)
-            if report['dependencies_ready']:
-                report['mcp_health'] = {name: probe_server(name, content, lock) for name in ('runtime', 'kb')}
-            else:
-                report['mcp_health'] = {'runtime': {'ok': False, 'error': 'dependencies unavailable'}, 'kb': {'ok': False, 'error': 'dependencies unavailable'}}
+            capabilities = ('runtime', 'kb') if args.capability == 'all' else (args.capability,)
+            report['capabilities'] = {}
+            report['mcp_health'] = {}
+            for capability in capabilities:
+                status = {'dependencies_ready': False, 'startup_ready': False}
+                try:
+                    root = dependency_root(content, capability)
+                    check_dependencies(root)
+                    status.update(dependencies_ready=True, dependencies=str(root))
+                    health = probe_server(capability, content, lock)
+                    status['startup_ready'] = health['ok']
+                except (OSError, ValueError, subprocess.SubprocessError) as error:
+                    status['error'] = str(error)
+                    health = {'ok': False, 'error': 'dependencies unavailable'}
+                report['capabilities'][capability] = status
+                report['mcp_health'][capability] = health
+            report['dependencies_ready'] = all(item['dependencies_ready'] for item in report['capabilities'].values())
             report['credentials'] = local_credentials_status(content)
             report['credentials_configured'] = report['credentials']['configured']
             report['startup_ready'] = report['dependencies_ready'] and all(item.get('ok') for item in report['mcp_health'].values())

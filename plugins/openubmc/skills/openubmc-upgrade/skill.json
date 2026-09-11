@@ -17,6 +17,7 @@
     "openubmc_upgrade/__init__.py",
     "openubmc_upgrade/operation_state.py",
     "openubmc_upgrade/runtime_backend.py",
+    "openubmc_upgrade/task_diagnostics.py",
     "openubmc_upgrade/webui.py",
     "references/redfish-upgrade.md",
     "references/webui-upgrade.md",
