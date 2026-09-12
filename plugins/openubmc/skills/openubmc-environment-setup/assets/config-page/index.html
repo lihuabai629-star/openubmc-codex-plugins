@@ -29,6 +29,20 @@
         </section>
       </aside>
       <main>
+        <details id="plugin-maintenance">
+          <summary>插件状态与修复</summary>
+          <p>检查当前版本、启动状态和升级遗留配置。设备连接需另行检查。</p>
+          <div id="plugin-status" role="status" aria-live="polite">尚未检查</div>
+          <div class="actions">
+            <button type="button" id="plugin-check">检查状态</button>
+            <button type="button" id="plugin-preview">预览启动配置修复</button>
+            <button type="button" id="plugin-apply" hidden>备份并应用修复</button>
+            <button type="button" id="plugin-undo" hidden>撤销本次配置修复</button>
+            <button type="button" id="plugin-runtime">修复 Runtime 依赖</button>
+            <button type="button" id="plugin-kb">修复知识库依赖</button>
+          </div>
+          <p id="plugin-result" role="status" aria-live="polite"></p>
+        </details>
         <div class="section-heading">
           <div>
             <h2 id="title">BMC 与 OS</h2>

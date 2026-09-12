@@ -13,6 +13,7 @@ if __name__ == '__main__':
 
 import argparse
 import copy
+import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import ipaddress
 import json
@@ -119,9 +120,112 @@ def import_legacy_targets(text):
     return config
 
 
+class PluginMaintenance:
+    """Bounded local operations through the immutable plugin CLI."""
+
+    def __init__(self, plugin_root, *, environment=None, timeout=660):
+        self.root = Path(plugin_root)
+        self.timeout = timeout
+        self.environment = dict(os.environ if environment is None else environment)
+        self.home = Path(self.environment.get("HOME", str(Path.home())))
+        self.codex = Path(self.environment.get("CODEX_HOME", str(self.home/".codex")))
+        self.preview_id = None
+        self.preview_config = None
+        self.transaction = None
+
+    def command(self, *arguments):
+        process = subprocess.Popen(
+            [sys.executable, "-I", "-B", str(self.root/"scripts/pluginctl.py"),
+             *arguments, "--home", str(self.home), "--codex-home", str(self.codex)],
+            env=self.environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, start_new_session=True,
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=self.timeout)
+        except BaseException:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait(timeout=5)
+            finally:
+                process.stdout.close()
+                process.stderr.close()
+            raise
+        try:
+            value = json.loads(stdout or stderr)
+        except ValueError:
+            raise ValueError("plugin_operation_failed") from None
+        if process.returncode not in (0, 2) or not isinstance(value, dict):
+            raise ValueError("plugin_operation_failed")
+        return value
+
+    def config_bytes(self):
+        path = self.codex/"config.toml"
+        if path.is_symlink():
+            raise ConfigurationConflict("configuration_conflict")
+        return path.read_bytes() if path.exists() else b""
+
+    def dispatch(self, data):
+        action = data.get("action")
+        if action == "status":
+            report = self.command("doctor")
+            config = report.get("codex_configuration", {})
+            return {
+                "version": report.get("version"),
+                "integrity": report.get("package_integrity", False),
+                "runtime": report.get("capabilities", {}).get("runtime", {}).get("startup_ready", False),
+                "kb": report.get("capabilities", {}).get("kb", {}).get("startup_ready", False),
+                "configuration": {"ready": config.get("ready", False),
+                    "conflict": bool(config.get("conflicts")),
+                    "servers": config.get("changes", {}).get("mcp_servers", [])},
+            }
+        if action == "preview":
+            before = self.config_bytes()
+            report = self.command("repair-overrides", "--preview")
+            if not report.get("ok") or before != self.config_bytes():
+                raise ConfigurationConflict("configuration_conflict")
+            self.preview_id = secrets.token_urlsafe(24)
+            self.preview_config = before
+            return {"preview_id": self.preview_id,
+                    "servers": report["changes"]["mcp_servers"],
+                    "would_change": report["would_change"]}
+        if action == "apply":
+            if not self.preview_id or data.get("preview_id") != self.preview_id or self.config_bytes() != self.preview_config:
+                raise ConfigurationConflict("configuration_conflict")
+            self.preview_id = None
+            report = self.command("repair-overrides", "--expected-config-digest", hashlib.sha256(self.preview_config).hexdigest())
+            if not report.get("ok"):
+                raise ConfigurationConflict("configuration_conflict")
+            self.transaction = report.get("transaction")
+            return {"changed": report["changed"], "transaction": self.transaction}
+        if action == "undo":
+            if not self.transaction or data.get("transaction") != self.transaction:
+                raise ConfigurationConflict("configuration_conflict")
+            report = self.command("restore-legacy", "--transaction", self.transaction)
+            if not report.get("ok"):
+                raise ConfigurationConflict("configuration_conflict")
+            self.transaction = None
+            return {"restored": True}
+        if action == "dependencies":
+            capability = data.get("capability")
+            if capability not in ("runtime", "kb"):
+                raise ValueError("invalid_capability")
+            result = self.command("prepare", "--repair", "--capability", capability)
+            return {"repaired": result.get("ok") is True, "capability": capability}
+        raise ValueError("invalid_plugin_action")
+
+
 class LocalConfigurationServer:
     def __init__(
-        self, config_home: Path, *, checker=None, authorized_targets=(), sources=None
+        self, config_home: Path, *, checker=None, authorized_targets=(), sources=None, maintenance=None
     ):
         self.config_home = Path(config_home).expanduser().resolve()
         self.stores = {
@@ -137,6 +241,7 @@ class LocalConfigurationServer:
         }
         for kind, path in (sources or {}).items():
             self.stores[kind] = LocalConfigurationStore(path, kind=kind)
+        self.maintenance = maintenance
         self.checker = checker
         self.authorized_targets = tuple(authorized_targets)
         self.session_token = secrets.token_urlsafe(32)
@@ -361,6 +466,10 @@ class LocalConfigurationServer:
             if path == "/api/close":
                 threading.Timer(0.1, self.http.shutdown).start()
                 return {"closed": True}
+            if path == "/api/plugin":
+                if self.maintenance is None:
+                    return {"available": False}
+                return self.maintenance.dispatch(data)
             kind = data["kind"]
             store = self.stores[kind]
             if path == "/api/save":
@@ -467,11 +576,17 @@ class LocalConfigurationServer:
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config-home", type=Path)
+    parser.add_argument("--home", type=Path)
+    parser.add_argument("--codex-home", type=Path)
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--target", action="append", default=[])
     parser.add_argument("--purpose", choices=["bmc", "os"], default="bmc")
     parser.add_argument("--transport", choices=["ssh", "redfish"], default="ssh")
     args = parser.parse_args()
+    if args.home is not None:
+        os.environ["HOME"] = str(args.home)
+    if args.codex_home is not None:
+        os.environ["CODEX_HOME"] = str(args.codex_home)
 
     def stop(_signum, _frame):
         raise KeyboardInterrupt
@@ -508,6 +623,8 @@ def main():
         checker=BoundedConfigurationChecker(),
         sources=sources,
         authorized_targets=targets,
+        maintenance=PluginMaintenance(Path(__file__).resolve().parents[3])
+        if (Path(__file__).resolve().parents[3]/"plugin-lock.json").is_file() else None,
     ) as server:
         print(server.url, flush=True)
         if not args.no_browser:

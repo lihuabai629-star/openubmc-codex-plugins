@@ -558,3 +558,55 @@ $("finish").onclick = () =>
       .querySelectorAll("input,select")
       .forEach((e) => (e.disabled = true));
   });
+
+let pluginPreview, pluginTransaction;
+async function pluginStatus() {
+  const result = await api("/api/plugin", { action: "status" });
+  const status = $("plugin-status");
+  status.replaceChildren();
+  if (result.available === false) {
+    node("p", "请从已安装的插件打开本机配置页面。", status);
+    return;
+  }
+  for (const [label, value] of [
+    ["版本", result.version || "无法验证"],
+    ["安装文件", result.integrity ? "完整" : "校验未通过，请重新安装市场版本"],
+    ["Runtime", result.runtime ? "可启动" : "未就绪，可尝试修复依赖"],
+    ["知识库", result.kb ? "可启动" : "未就绪，可尝试修复依赖"],
+    ["启动配置", result.configuration.ready ? "未发现覆盖冲突" : result.configuration.conflict
+      ? "存在自定义或冲突配置，请保留原配置并联系维护者处理"
+      : "发现旧启动覆盖，可预览修复"],
+  ]) node("p", `${label}：${value}`, status);
+}
+$("plugin-check").onclick = () => action(pluginStatus);
+$("plugin-preview").onclick = () => action(async () => {
+  const result = await api("/api/plugin", { action: "preview" });
+  if (result.available === false) throw new Error("请从已安装的插件打开页面。");
+  pluginPreview = result.preview_id;
+  $("plugin-apply").hidden = !result.would_change;
+  $("plugin-result").textContent = result.would_change
+    ? `将备份当前配置，并移除以下手工启动覆盖：${result.servers.join("、")}。插件将管理启动入口。`
+    : "没有需要清理的标准启动覆盖。";
+});
+$("plugin-apply").onclick = () => action(async () => {
+  const result = await api("/api/plugin", { action: "apply", preview_id: pluginPreview });
+  pluginTransaction = result.transaction;
+  $("plugin-apply").hidden = true;
+  $("plugin-undo").hidden = !pluginTransaction;
+  $("plugin-result").textContent = "配置已备份并修复。请重新打开受影响的任务，确认能够恢复。";
+  await pluginStatus();
+});
+$("plugin-undo").onclick = () => action(async () => {
+  await api("/api/plugin", { action: "undo", transaction: pluginTransaction });
+  $("plugin-undo").hidden = true;
+  $("plugin-result").textContent = "已恢复修复前的配置。";
+  await pluginStatus();
+});
+for (const capability of ["runtime", "kb"]) {
+  $("plugin-" + capability).onclick = () => action(async () => {
+    $("plugin-result").textContent = "正在修复依赖，请保持页面打开。";
+    const result = await api("/api/plugin", { action: "dependencies", capability });
+    $("plugin-result").textContent = result.repaired ? "依赖修复完成。" : "修复未完成，请检查本机网络或联系维护者。";
+    await pluginStatus();
+  });
+}

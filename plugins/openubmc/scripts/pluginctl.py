@@ -384,6 +384,12 @@ def write_timing(path: Path | None, stage: str, started: float) -> None:
 
 
 def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | None = None, page_args: list[str] | None = None) -> int:
+    if command == 'configure':
+        # Recovery must remain accessible when either dependency cache is broken.
+        # The guarded page and configuration store use only the standard library.
+        argv = [sys.executable, '-I', '-B', str(ROOT/'skills/openubmc-environment-setup/scripts/config_page.py'), *(page_args or [])]
+        os.execvpe(argv[0], argv, node_environment())
+        return 0
     started = time.monotonic()
     dependencies = dependency_root(content, "runtime" if command == "configure" else command)
     write_timing(timings, 'dependency_identity', started)
@@ -399,13 +405,7 @@ def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | 
     env = node_environment()
     env['OPENUBMC_MCP_SOURCE_COMMIT'] = lock['source_commit']
     env['OPENUBMC_PLUGIN_CONTENT_DIGEST'] = lock['content_digest']
-    if command == 'configure':
-        # The page and its worker use the guarded package entrypoints. The
-        # execution snapshot provides verified dependencies, not a plugin lock.
-        argv = [sys.executable, '-I', '-B', '-c',
-                'import sys,runpy;sys.path.insert(0,sys.argv[1]);sys.argv=[sys.argv[2],*sys.argv[3:]];runpy.run_path(sys.argv[0],run_name="__main__")',
-                str(snapshot/'python-packages'), str(ROOT/'skills/openubmc-environment-setup/scripts/config_page.py'), *(page_args or [])]
-    elif command == 'runtime':
+    if command == 'runtime':
         argv = [sys.executable, '-I', '-B', '-c',
                 'import sys,runpy;sys.path.insert(0,sys.argv[1]);runpy.run_path(sys.argv[2],run_name="__main__")',
                 str(snapshot/'python-packages'), str(snapshot/'scripts/launch_runtime.py')]
@@ -429,10 +429,11 @@ def positive_timeout(value: str) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'configure', 'migrate', 'restore-legacy'])
+    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'configure', 'migrate', 'repair-overrides', 'restore-legacy'])
     parser.add_argument('--home', type=Path, default=Path.home())
-    parser.add_argument('--codex-home', type=Path)
+    parser.add_argument('--codex-home', type=Path, default=Path(os.environ['CODEX_HOME']) if os.environ.get('CODEX_HOME') else None)
     parser.add_argument('--transaction', default='')
+    parser.add_argument('--expected-config-digest')
     migration_mode = parser.add_mutually_exclusive_group()
     migration_mode.add_argument('--disable-only', dest='migration_mode', action='store_const', const='disable-only', default='disable-only', help='Disable legacy registrations while retaining files (default)')
     migration_mode.add_argument('--remove', dest='migration_mode', action='store_const', const='remove', help='Remove owned legacy registrations and Skill links')
@@ -462,14 +463,15 @@ def main() -> int:
         write_timing(args.timings, 'verify', started)
         report = {'ok': True, 'source_commit': lock['source_commit'], 'version': lock['version'],
                   'content_digest': lock['content_digest'], 'skills': lock['skills']}
-        if args.command in ('migrate', 'restore-legacy'):
+        if args.command in ('migrate', 'repair-overrides', 'restore-legacy'):
             import types
             module = types.ModuleType('openubmc_plugin_install')
             exec(compile(content['scripts/plugin_install.py'], '<verified-plugin-install>', 'exec'), module.__dict__)
             skill_paths = [item['path'] for item in json.loads(content['workflow.json'])['skills']]
-            if args.command == 'migrate':
+            if args.command in ('migrate', 'repair-overrides'):
                 operation = module.preview if args.preview else module.migrate
-                result = operation(args.home, skill_paths, args.codex_home, mode=args.migration_mode, target_plugin=args.target_plugin)
+                binding = {'expected_before_digest': args.expected_config_digest} if not args.preview else {}
+                result = operation(args.home, skill_paths, args.codex_home, mode='repair-overrides' if args.command == 'repair-overrides' else args.migration_mode, target_plugin=args.target_plugin, **binding)
             else:
                 result = module.restore(args.home, args.transaction, args.codex_home)
             print(json.dumps(result, sort_keys=True)); return 0 if result['ok'] else 2
@@ -483,9 +485,8 @@ def main() -> int:
             report['capability_dependencies'] = roots
             report['dependencies'] = roots.get('runtime', roots.get('kb'))
         elif args.command == 'configure':
-            if not (dependency_root(content, 'runtime')/'receipt.json').is_file():
-                prepare_dependencies(content, False, capability='runtime')
-            page_args=['--purpose',args.purpose,'--transport',args.transport]
+            page_args=['--purpose',args.purpose,'--transport',args.transport,'--home',str(args.home)]
+            if args.codex_home: page_args.extend(['--codex-home',str(args.codex_home)])
             if args.no_browser: page_args.append('--no-browser')
             for target in args.target: page_args.extend(['--target',target])
             return launch('configure',content,lock,page_args=page_args)
@@ -515,7 +516,17 @@ def main() -> int:
             report['credentials'] = local_credentials_status(content)
             report['credentials_configured'] = report['credentials']['configured']
             report['startup_ready'] = report['dependencies_ready'] and all(item.get('ok') for item in report['mcp_health'].values())
-            report['ok'] = report['startup_ready']
+            import types
+            module = types.ModuleType('openubmc_plugin_install')
+            exec(compile(content['scripts/plugin_install.py'], '<verified-plugin-install>', 'exec'), module.__dict__)
+            configuration = module.preview(args.home, [], args.codex_home,
+                                           mode='repair-overrides', target_plugin=args.target_plugin)
+            configuration['ready'] = configuration['ok'] and not configuration['would_change']
+            if not configuration['ready']:
+                configuration['repair_action'] = ('pluginctl.py repair-overrides --preview; '
+                    'reconcile custom settings if reported, then pluginctl.py repair-overrides')
+            report['codex_configuration'] = configuration
+            report['ok'] = report['startup_ready'] and configuration['ready']
         print(json.dumps(report, sort_keys=True))
         return 0 if report['ok'] else 2
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
