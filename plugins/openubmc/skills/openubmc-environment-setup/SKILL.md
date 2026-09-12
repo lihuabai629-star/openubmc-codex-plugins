@@ -85,6 +85,27 @@ For a legacy loose installation or `openubmc@personal`, use `pluginctl.py migrat
 
 Use `codex plugin list` to identify the installed marketplace and `codex plugin remove openubmc@<marketplace>` to uninstall. For a Git marketplace, refresh with `codex plugin marketplace upgrade <marketplace>` and reinstall with `codex plugin add openubmc@<marketplace>`. Start a new Codex task after a version change.
 
+The local configuration page includes “插件状态与修复”: check version, package integrity,
+Runtime/KB startup and user-level override conflicts. Preview recognized override removal
+before applying it; the page retains a guarded undo for that repair during the page session.
+Use the per-service dependency repair buttons when dependencies are unavailable. Custom
+wrappers and environment settings require reconciliation and are retained.
+
+After a native marketplace upgrade, run the new package's `doctor`. Its
+`codex_configuration` result checks the selected Codex home's user-level MCP overrides;
+`startup_ready` describes the packaged servers only. A healthy package does not prove that
+an existing desktop task can resume.
+
+If `doctor` reports a version-pinned override, run `pluginctl.py repair-overrides --preview`
+from the new package, then `pluginctl.py repair-overrides` to remove recognized Runtime/KB
+launch overrides. The selected native plugin must be enabled. Configuration backups are
+private migration transactions; `restore-legacy --transaction <id>` restores the original
+configuration if it has not changed since repair. Custom launch arguments or environment
+settings require reconciliation before repair. `--codex-home` overrides `CODEX_HOME`;
+otherwise the home defaults to `~/.codex`. Keep MCP startup owned by the plugin so upgrades
+resolve the current launcher. After repair, reopen the affected desktop task and verify
+that resume completes without error before reporting desktop recovery.
+
 For an archive installation managed by `install_plugin.py`, use its `plugin_admin.py audit` and recorded rollback entries. Do not apply archive-administration commands to an installation managed only by the native marketplace. Credentials and durable Runtime records survive plugin removal.
 
 Runtime cache files under `__pycache__` are ignored by package verification. They are derived by Python during MCP startup and cannot invalidate a verified release; packaged files and dependency caches remain hash checked.

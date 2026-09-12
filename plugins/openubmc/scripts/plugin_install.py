@@ -53,9 +53,9 @@ def migration_config(text: str, servers: set[str], targets: set[str]) -> str:
     expected = copy.deepcopy(before)
     for name in servers:
         expected.get('mcp_servers', {}).pop(name, None)
-    if not expected.get('mcp_servers'):
+    if servers and not expected.get('mcp_servers'):
         expected.pop('mcp_servers', None)
-    if 'config' in expected.get('skills', {}):
+    if targets and 'config' in expected.get('skills', {}):
         expected['skills']['config'] = [row for row in expected['skills']['config'] if row.get('path') not in targets]
         if not expected['skills']['config']:
             expected['skills'].pop('config')
@@ -71,6 +71,8 @@ def migration_config(text: str, servers: set[str], targets: set[str]) -> str:
                 table = tomllib.loads(header+'\n')
             except tomllib.TOMLDecodeError:
                 table = {}
+            if table == {'mcp_servers': {}}:
+                expected.setdefault('mcp_servers', {})
             if set(table.get('mcp_servers', {})) & servers:
                 skip = True
             if header == '[[skills.config]]':
@@ -138,11 +140,63 @@ def removal_changes(before: bytes, after: bytes, links: list[dict]) -> dict:
             'plugins': [], 'links': sorted(item['path'] for item in links)}
 
 
+def override_plan(home: Path, codex_root: Path, target_plugin: str) -> tuple[dict, bytes, bytes]:
+    """Remove only recognizable native-cache launch overrides, never arbitrary MCPs."""
+    if not re.fullmatch(r'openubmc@[A-Za-z0-9_-]+', target_plugin):
+        raise ValueError('override repair requires an openubmc marketplace plugin')
+    config = codex_root/'config.toml'
+    if config.is_symlink():
+        raise ValueError('managed configuration files must not be symbolic links')
+    before = config.read_bytes() if config.is_file() else b''
+    document = tomllib.loads(before.decode())
+    selected = set()
+    cache = codex_root/'plugins/cache'/target_plugin.split('@')[1]/'openubmc'
+    for name, capability in [('openubmc-target-runtime', 'runtime'), ('openubmc-kb', 'kb')]:
+        current = document.get('mcp_servers', {}).get(name)
+        if current is None:
+            continue
+        args = current.get('args', [])
+        paths = [arg for arg in args if isinstance(arg, str) and (arg.endswith('/scripts/pluginctl.py') or arg == 'scripts/pluginctl.py')]
+        if len(paths) != 1:
+            raise ValueError('MCP override is not a recognized plugin launcher: ' + name)
+        path = Path(paths[0])
+        cwd = current.get('cwd')
+        if not path.is_absolute() and isinstance(cwd, str):
+            path = Path(cwd)/path
+        try:
+            relative = path.relative_to(cache)
+        except ValueError:
+            raise ValueError('MCP override is outside the selected plugin cache: ' + name) from None
+        if len(relative.parts) != 3 or relative.parts[1:] != ('scripts', 'pluginctl.py') or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', relative.parts[0]):
+            raise ValueError('MCP override has an unrecognized version path: ' + name)
+        if cwd is not None and (not isinstance(cwd, str) or Path(cwd) != path.parent.parent):
+            raise ValueError('MCP override has a custom working directory: ' + name)
+        index = args.index(paths[0])
+        flags = args[:index]
+        tail = args[index + 1:]
+        if (current.get('command') != 'python3' or flags not in (['-I'], ['-I', '-B'], ['-B', '-I'])
+                or tail not in ([capability], [capability, '--prepare-on-start'])):
+            raise ValueError('MCP override has custom launch arguments: ' + name)
+        if set(current) - {'command', 'args', 'cwd', 'enabled', 'startup_timeout_sec', 'tool_timeout_sec', 'required'}:
+            raise ValueError('MCP override contains custom settings; reconcile before repair: ' + name)
+        selected.add(name)
+    if selected and document.get('plugins', {}).get(target_plugin, {}).get('enabled') is not True:
+        raise ValueError('enable the selected native plugin before repairing overrides')
+    after = migration_config(before.decode(), selected, set()).encode()
+    record = {'schema': 'openubmc.plugin-migration.v1', 'home': str(home), 'codex_home': str(codex_root),
+              'before_digest': digest(before), 'after_digest': digest(after), 'links': [],
+              'config_existed': config.is_file(), 'status': 'prepared', 'mode': 'repair-overrides',
+              'changes': removal_changes(before, after, []), 'target_plugin': target_plugin}
+    return record, before, after
+
+
 def plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
          mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public') -> tuple[dict, bytes, bytes]:
-    if mode not in {'remove', 'disable-only'}:
+    if mode not in {'remove', 'disable-only', 'repair-overrides'}:
         raise ValueError('invalid migration mode')
     codex_root = (codex_home or home/'.codex').resolve()
+    if mode == 'repair-overrides':
+        return override_plan(home, codex_root, target_plugin)
     config = codex_root/'config.toml'
     state_path = home/'.config/openubmc/environment-state.json'
     if config.is_symlink() or state_path.is_symlink():
@@ -226,7 +280,7 @@ def pending_migration(home: Path, codex_home: Path | None, mode: str, target_plu
                 raise ValueError('incomplete migration journal belongs to another home')
             if record.get('mode', 'remove') != mode:
                 raise ValueError('incomplete migration uses another mode; reconcile that mode first')
-            if mode == 'disable-only' and record.get('target_plugin') != target_plugin:
+            if mode in {'disable-only', 'repair-overrides'} and record.get('target_plugin') != target_plugin:
                 raise ValueError('incomplete migration preserves a different target plugin')
             root = path.parent
             before_path, after_path = root/'before.toml', root/'after.toml'
@@ -274,7 +328,7 @@ def preview(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
 
 
 def migrate(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
-            mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public') -> dict:
+            mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public', expected_before_digest: str | None = None) -> dict:
     home = home.resolve()
     journals = journal_root(home)
     journals.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -286,6 +340,8 @@ def migrate(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
             before, after = (root/'before.toml').read_bytes(), (root/'after.toml').read_bytes()
         else:
             record, before, after = plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
+            if expected_before_digest is not None and record['before_digest'] != expected_before_digest:
+                raise ValueError('Codex configuration changed since preview')
             if before == after and (mode == 'disable-only' or not record['links']):
                 return {'ok': True, 'changed': False, 'mode': mode}
             transaction = uuid.uuid4().hex
@@ -295,6 +351,8 @@ def migrate(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
             write_atomic(root/'before.toml', before)
             write_atomic(root/'after.toml', after)
             save(root/'transaction.json', record)
+        if expected_before_digest is not None and record['before_digest'] != expected_before_digest:
+            raise ValueError('Codex configuration changed since preview')
         validate_ownership_state(home, record)
         config = (codex_home or home/'.codex').resolve()/'config.toml'
         if config.is_symlink():

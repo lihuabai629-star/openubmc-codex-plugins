@@ -2,22 +2,22 @@
   "behavior": {
     "artifacts": {
       "passed": true,
-      "seconds": 4.669,
+      "seconds": 4.576,
       "tests": 4
     },
     "build": {
       "passed": true,
-      "seconds": 1.667,
+      "seconds": 1.114,
       "tests": 6
     },
     "credentials": {
       "passed": true,
-      "seconds": 1.407,
+      "seconds": 0.917,
       "tests": 9
     },
     "doctor": {
       "passed": true,
-      "seconds": 3.564,
+      "seconds": 3.226,
       "tests": 5
     },
     "kb_loader": {
@@ -26,35 +26,35 @@
     },
     "logs": {
       "passed": true,
-      "seconds": 0.195,
+      "seconds": 0.11,
       "tests": 3
     },
     "migration": {
       "passed": true,
-      "seconds": 4.608,
-      "tests": 8
+      "seconds": 6.614,
+      "tests": 15
     },
     "python_entrypoints": {
       "passed": true,
-      "seconds": 28.407,
+      "seconds": 29.5,
       "tests": 11
     },
     "ssh": {
       "passed": true,
-      "seconds": 4.674,
+      "seconds": 4.638,
       "tests": 4
     },
     "upgrade": {
       "passed": true,
-      "seconds": 5.886,
+      "seconds": 5.758,
       "tests": 2
     }
   },
   "cold_dependencies": {
     "passed": true,
-    "seconds": 24.694
+    "seconds": 25.183
   },
-  "content_digest": "36e378314441005d5518bf56fcfca500dba6af2aa4f51bdfcb16a38fb765c796",
+  "content_digest": "f68a4b0769c503d2f51f51952db7831875b233b3b0bee05a38fe49f39d94f800",
   "dependency_locks": {
     "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2"
@@ -99,6 +99,6 @@
   "remote_business_qualification": "not_run",
   "runtime_shutdown_verified": true,
   "schema": "openubmc.public-behavior.v1",
-  "source_commit": "c1b6f2a07f228682f24180b54e500f44e7de1ed3",
-  "version": "2.0.13"
+  "source_commit": "382dc9b8caa24b23fe35d28a46d25372748ab624",
+  "version": "2.0.14"
 }

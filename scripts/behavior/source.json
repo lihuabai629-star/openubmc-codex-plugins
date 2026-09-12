@@ -9,12 +9,12 @@
     "behavior/test_failure_gates.py": "cc57abdba373782e535100f645a17db5a27be5068f8eadbc6e0b891a6150bd2e",
     "behavior/test_openssh_timeouts.py": "f20e2ee205cde4e6a35afdff2f7beb0dd1556c5dff285f23ec83c304452c7fd6",
     "behavior/test_plugin_credentials.py": "7fea9a411174eb9003a05aa45840fd8849a10bbf498e4021658360b411a4dbfc",
-    "behavior/test_plugin_disable_migration.py": "73102645dad831643bedadfab8e823f1dea2807a88b0bfe4c08e902fe3166266",
+    "behavior/test_plugin_disable_migration.py": "893fd943d2cc4a129c15c1ea31e1e5211b0302f13aa6af43f63913c97d7f4387",
     "behavior/test_plugin_python_entrypoints.py": "77aa1442b9963c5e9a92ef96ad5d71cf22997d932a141e0c222f924567b0aa3c",
     "behavior/test_upgrade_task_states.py": "3fba0983ea5a074822c3857bdf5e690e35ca3c99870aba4bd9c79b4e09cbdeba",
     "check_behavior.py": "fc5593b5b085a9a36fdb17d293da1c4ec40ed3c6254a70749911bfb0a9a9ec91",
     "host/package-lock.json": "3d456708625217a8fe548dda38925d1882444a2f40ec7209a5968e5d5d615b4c",
     "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5"
   },
-  "source_commit": "c1b6f2a07f228682f24180b54e500f44e7de1ed3"
+  "source_commit": "382dc9b8caa24b23fe35d28a46d25372748ab624"
 }

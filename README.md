@@ -41,7 +41,7 @@ python3 -I <plugin-root>/scripts/pluginctl.py migrate --disable-only
 
 The helper disables owned legacy entries, retains files, links, credentials and history, and preserves `openubmc@openubmc-public`. Start a new Codex task to load the saved state. Restore with `restore-legacy --transaction <id>`; later configuration or ownership changes require reconciliation. The explicit `migrate --remove` route remains available for removing owned loose registrations and links.
 
-## Dependency recovery
+## Local status and recovery
 
 For Python integrations, follow the packaged [entrypoint and import guide](plugins/openubmc/PYTHON.md).
 
@@ -52,7 +52,9 @@ python3 -I <plugin-directory>/scripts/pluginctl.py doctor
 python3 -I <plugin-directory>/scripts/pluginctl.py prepare --repair
 ```
 
-`doctor` verifies the package, dependencies and local MCP startup. It does not establish access to a BMC or knowledge service. Native Windows has not been qualified; run the plugin in a Linux environment.
+Ask Codex: “打开 openUBMC 本机配置，检查插件状态。” The page shows the version, file integrity, Runtime/KB startup and user-level launch conflicts. It opens even when dependencies are missing. Preview recognized launch-override removal before applying it; the page offers guarded undo and separate dependency repair buttons. Custom wrappers and environment settings are retained for reconciliation.
+
+`doctor` checks the same local package and user-level configuration boundaries. Neither a healthy package nor a successful protocol resume proves that a particular desktop task has recovered: reopen that task and confirm its resume result. BMC and knowledge-service authentication require separate checks. Native Windows has not been qualified; use Linux or WSL.
 
 ## License
 

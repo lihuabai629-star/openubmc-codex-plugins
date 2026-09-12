@@ -130,6 +130,102 @@ class DisableMigrationTests(unittest.TestCase):
         for path in self.preserved:
             self.assertEqual(path.read_bytes(), b'private-fixture-do-not-print')
 
+    def test_version_pinned_overrides_are_removed_with_backup_and_native_config_recovery(self):
+        old = self.home/'.codex/plugins/cache/openubmc-public/openubmc/2.0.12/scripts/pluginctl.py'
+        original = '[plugins."openubmc@openubmc-public"]\nenabled = true\n'
+        for name, capability in [('openubmc-target-runtime', 'runtime'), ('openubmc-kb', 'kb')]:
+            original += (f'[mcp_servers.{name}]\ncommand = "python3"\n'
+                         f'args = {json.dumps(["-I", "-B", str(old), capability, "--prepare-on-start"])}\n')
+        original += '[mcp_servers.unrelated]\ncommand = "keep"\nenabled = false\n'
+        self.config.write_text(original)
+        self.assertFalse(old.exists())
+        preview = self.cli('repair-overrides', '--preview')
+        self.assertEqual(preview['changes']['mcp_servers'], ['openubmc-kb', 'openubmc-target-runtime'])
+        self.assertEqual(self.config.read_text(), original)
+        applied = self.cli('repair-overrides')
+        self.assertTrue(applied['changed'])
+        _, config = native_snapshot(self.home, self.environment)
+        self.assertNotIn('openubmc-target-runtime', config['mcp_servers'])
+        self.assertNotIn('openubmc-kb', config['mcp_servers'])
+        self.assertEqual(config['mcp_servers']['unrelated']['command'], 'keep')
+        self.assertTrue(config['plugins']['openubmc@openubmc-public']['enabled'])
+        backup = self.home/'.local/share/openubmc/migrations'/applied['transaction']/'before.toml'
+        self.assertEqual(backup.read_text(), original)
+        self.assertEqual(backup.stat().st_mode & 0o777, 0o600)
+        self.assertFalse(self.cli('repair-overrides')['changed'])
+        self.cli('restore-legacy', '--transaction', applied['transaction'])
+        self.assertEqual(self.config.read_text(), original)
+
+    def test_override_repair_preserves_custom_settings_and_refuses_disabled_replacement(self):
+        old = self.home/'.codex/plugins/cache/openubmc-public/openubmc/2.0.12/scripts/pluginctl.py'
+        base = ('[plugins."openubmc@openubmc-public"]\nenabled = true\n'
+                '[mcp_servers.openubmc-target-runtime]\ncommand = "python3"\n'
+                f'args = {json.dumps(["-I", str(old), "runtime"])}\n')
+        cases = [base + '[mcp_servers.openubmc-target-runtime.env]\nSECRET = "private-fixture-do-not-print"\n',
+                 base.replace('enabled = true', 'enabled = false'),
+                 base.replace('/openubmc-public/', '/another-market/'),
+                 base.replace('"runtime"', '"runtime", "--custom"')]
+        for original in cases:
+            with self.subTest(case=cases.index(original)):
+                self.config.write_text(original)
+                self.assertTrue(self.cli('repair-overrides', '--preview', success=False)['conflicts'])
+                self.cli('repair-overrides', success=False)
+                self.assertEqual(self.config.read_text(), original)
+
+    def test_override_repair_uses_selected_codex_home_and_protects_later_edits(self):
+        codex = self.home/'separate-codex'
+        codex.mkdir()
+        self.environment['CODEX_HOME'] = str(codex)
+        config = codex/'config.toml'
+        old = codex/'plugins/cache/openubmc-public/openubmc/2.0.12/scripts/pluginctl.py'
+        config.write_text('[plugins."openubmc@openubmc-public"]\nenabled = true\n'
+                          '[mcp_servers.openubmc-kb]\ncommand = "python3"\n'
+                          f'args = {json.dumps(["-I", str(old), "kb"])}\n')
+        applied = self.cli('repair-overrides')
+        self.assertTrue(applied['changed'])
+        self.assertEqual(self.config.read_text(), self.original)
+        changed = config.read_text() + '# later edit\n'
+        config.write_text(changed)
+        self.cli('restore-legacy', '--transaction', applied['transaction'], success=False)
+        self.assertEqual(config.read_text(), changed)
+
+    def test_override_preview_preserves_empty_tables_without_changes(self):
+        for original in ('[mcp_servers]\n', '[skills]\n', '[skills]\nconfig = []\n'):
+            with self.subTest(original=original):
+                self.config.write_text(original)
+                self.assertFalse(self.cli('repair-overrides', '--preview')['would_change'])
+                self.assertFalse(self.cli('repair-overrides')['changed'])
+                self.assertEqual(self.config.read_text(), original)
+
+    def test_override_removal_preserves_unrelated_empty_tables(self):
+        old = self.home/'.codex/plugins/cache/openubmc-public/openubmc/2.0.12/scripts/pluginctl.py'
+        original = ('[skills]\nconfig = []\n[plugins."openubmc@openubmc-public"]\nenabled = true\n'
+                    '[mcp_servers.openubmc-target-runtime]\ncommand = "python3"\n'
+                    f'args = {json.dumps(["-I", str(old), "runtime"])}\n')
+        self.config.write_text(original)
+        self.cli('repair-overrides')
+        self.assertEqual(self.config.read_text(), original.split('[mcp_servers.')[0])
+
+    def test_relative_plugin_launcher_with_version_pinned_cwd_is_repaired(self):
+        old = self.home/'.codex/plugins/cache/openubmc-public/openubmc/2.0.12'
+        self.config.write_text('[plugins."openubmc@openubmc-public"]\nenabled = true\n'
+                               '[mcp_servers.openubmc-target-runtime]\ncommand = "python3"\n'
+                               f'cwd = {json.dumps(str(old))}\n'
+                               'args = ["-I", "-B", "./scripts/pluginctl.py", "runtime"]\n')
+        self.assertTrue(self.cli('repair-overrides')['changed'])
+        self.assertNotIn('mcp_servers', self.config.read_text())
+
+    def test_override_apply_rejects_configuration_added_after_preview(self):
+        old = self.home/'.codex/plugins/cache/openubmc-public/openubmc/2.0.12/scripts/pluginctl.py'
+        before = '[plugins."openubmc@openubmc-public"]\nenabled = true\n'
+        self.config.write_text(before)
+        self.cli('repair-overrides', '--preview')
+        changed = (before + '[mcp_servers.openubmc-kb]\ncommand = "python3"\n'
+                   f'args = {json.dumps(["-I", str(old), "kb"])}\n')
+        self.config.write_text(changed)
+        self.cli('repair-overrides', '--expected-config-digest', hashlib.sha256(before.encode()).hexdigest(), success=False)
+        self.assertEqual(self.config.read_text(), changed)
+
     def test_restore_refuses_a_changed_installation_owner(self):
         applied = self.cli('migrate', '--disable-only')
         disabled = self.config.read_bytes()
