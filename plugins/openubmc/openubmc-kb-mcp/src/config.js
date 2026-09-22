@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { isIP } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { requestTimeoutMs } from "./http/request-lifetime.js";
+import { KNOWLEDGE_MCP_VERSION } from "./version.js";
 
 const DEFAULTS = Object.freeze({
   lightragUrl: "https://discuss.openubmc.cn/rag",
@@ -103,6 +104,7 @@ export async function loadConfig(
   const oauthBaseUrl = normalizeUrl(parsed.oauthBaseUrl, "oauthBaseUrl");
   return Object.freeze({
     ...parsed,
+    knowledgeMcpVersion: KNOWLEDGE_MCP_VERSION,
     requestTimeoutMs: requestTimeoutMs(parsed.requestTimeoutMs),
     username,
     password,

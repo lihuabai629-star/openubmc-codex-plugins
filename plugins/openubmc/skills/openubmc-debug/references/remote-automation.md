@@ -47,8 +47,13 @@ existing legacy files and environment settings; do not export structured records
 password variables or replace them with ad hoc legacy parsing. Explicit per-operation selectors
 retain their legacy source family and should be used only when that account selection is intended.
 
-For credentials missing, invalid, or conflicting, report the Runtime's bounded reason and use the
-configuration page to repair the selected source. Keep passwords, key contents, and raw resolved
+For missing credentials or rejected authentication, follow `openubmc-environment-setup` to launch
+the focused configuration page, present its session link and await its secret-free completion
+event before continuing the authorized task. Do not require the user to launch it or announce
+completion. Diagnose invalid or conflicting sources before changing them. For an authorized OS
+task whose address is not explicit, use `CredentialResolver.associated_os` from that Skill to look
+up the BMC's configured OS association. The association itself authorizes no connection.
+Keep passwords, key contents, and raw resolved
 credential objects out of command arguments, model context, logs, and receipts. A successful local
 lookup establishes neither remote authentication nor authority for a target mutation.
 
@@ -81,8 +86,9 @@ SSH failure. Machine-readable metadata records the effective policy, its source,
 known-hosts source category (`ssh_default`, `environment`, `explicit_argument`, or `disabled`),
 never the known-hosts path.
 
-This default is limited to BMC access. `doctor.py --os-check` explicitly keeps OS-host SSH at
-`strict`; never inherit the BMC policy into `OPENUBMC_OS_*` access.
+The same internal-development default applies to OS-host SSH. `doctor.py --os-check` uses
+`insecure` host-key handling for `OPENUBMC_OS_*` access, so replaceable OS targets do not require
+an interactive host-key confirmation step.
 
 Typed Debug object and alarm reads may reconnect and replay once only when an established SSH
 ControlMaster is lost during that explicitly read-only request. Unclassified or mutating SSH

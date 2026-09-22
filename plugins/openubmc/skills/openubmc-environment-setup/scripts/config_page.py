@@ -114,7 +114,7 @@ def import_legacy_targets(text):
                 )
             record[field] = selected_credential_value(values, names, environ={}) or ""
         if any(record.values()):
-            name = purpose + "-" + transport
+            name = next((name for name, existing in config["credentials"].items() if existing == record), purpose + "-" + transport)
             config["credentials"][name] = record
             config["defaults"].setdefault(purpose, {})[transport] = name
     return config
@@ -225,7 +225,8 @@ class PluginMaintenance:
 
 class LocalConfigurationServer:
     def __init__(
-        self, config_home: Path, *, checker=None, authorized_targets=(), sources=None, maintenance=None
+        self, config_home: Path, *, checker=None, authorized_targets=(), sources=None, maintenance=None,
+        kind="targets", focus_target=None, wait_for_save=False, purpose="bmc", transport="ssh",
     ):
         self.config_home = Path(config_home).expanduser().resolve()
         self.stores = {
@@ -242,6 +243,11 @@ class LocalConfigurationServer:
         for kind, path in (sources or {}).items():
             self.stores[kind] = LocalConfigurationStore(path, kind=kind)
         self.maintenance = maintenance
+        if kind not in self.stores:
+            raise ConfigurationError("Unknown configuration kind")
+        self.page_session = {"kind": kind, "focus_target": focus_target, "wait_for_save": wait_for_save,
+                             "purpose": purpose, "transport": transport}
+        self.completion = None
         self.checker = checker
         self.authorized_targets = tuple(authorized_targets)
         self.session_token = secrets.token_urlsafe(32)
@@ -384,6 +390,13 @@ class LocalConfigurationServer:
         self.http.server_close()
         self.thread.join(timeout=2)
 
+    def editable_config(self, kind):
+        store = self.stores[kind]
+        if store.status()["saved"] or not store.source.exists():
+            return store.read_saved()
+        text = read_private_text(store.source, max_bytes=1024 * 1024)
+        return json.loads(text) if kind != "targets" or text.lstrip().startswith("{") else import_legacy_targets(text)
+
     def view(self, kind):
         store = self.stores[kind]
         status = store.status()
@@ -437,7 +450,7 @@ class LocalConfigurationServer:
         return {
             **status,
             "readiness": readiness,
-            "config": _masked(store.read_saved()),
+            "config": _masked(self.editable_config(kind)),
             "legacy_available": store.source.is_file(),
             "source": str(store.source),
             "checks": [
@@ -449,6 +462,10 @@ class LocalConfigurationServer:
 
     def state(self):
         with self._lock:
+            selected = self.view(self.page_session["kind"])
+            configured = bool(selected["active_revision"]) and bool(selected["readiness"]) and all(
+                item["configured"] for item in selected["readiness"]
+            )
             return {
                 **{kind: self.view(kind) for kind in self.stores},
                 "environment": {
@@ -459,6 +476,14 @@ class LocalConfigurationServer:
                     "config_home": str(self.config_home),
                 },
                 "authorized_targets": list(self.authorized_targets),
+                "page_session": self.page_session,
+                "configuration_entry": {
+                    "url": self.url,
+                    "reason": "configuration_ready" if configured else "configuration_required",
+                    "environment": "WSL"
+                    if "microsoft" in os.uname().release.lower()
+                    else "Linux",
+                },
             }
 
     def dispatch(self, path, data):
@@ -473,7 +498,7 @@ class LocalConfigurationServer:
             kind = data["kind"]
             store = self.stores[kind]
             if path == "/api/save":
-                config = _secret_edits(data["config"], store.read_saved())
+                config = _secret_edits(data["config"], self.editable_config(kind))
                 store.save(config, expected_revision=data["expected_revision"])
             elif path == "/api/import":
                 text = read_private_text(store.source, max_bytes=1024 * 1024)
@@ -491,6 +516,8 @@ class LocalConfigurationServer:
                 for target in self.authorized_targets:
                     if kind == "targets":
                         self.check(kind, target)
+                if kind == self.page_session["kind"]:
+                    self.completion = self.completion_receipt(kind)
             elif path == "/api/check":
                 target = data.get("target")
                 if kind == "targets" and not target:
@@ -504,6 +531,37 @@ class LocalConfigurationServer:
             else:
                 raise ConfigurationError("Unknown local action")
             return self.view(kind)
+
+    def completion_receipt(self, kind):
+        view = self.view(kind)
+        readiness = view["readiness"]
+        receipt = {
+            "event": "configuration_saved", "kind": kind,
+            "revision": view["active_revision"],
+            "configured": bool(readiness) and all(item["configured"] for item in readiness),
+            "checks": view["checks"],
+        }
+        if kind == "targets":
+            from openubmc_target_runtime import CredentialResolver
+            from openubmc_target_runtime.credentials import CredentialConfigurationError
+            resolver = CredentialResolver(config_path=self.stores[kind].source, environ={})
+            focus = self.page_session["focus_target"]
+            scopes = self.authorized_targets or [{"ip": focus or "default-configuration.invalid",
+                "purpose": self.page_session["purpose"], "transport": self.page_session["transport"]}]
+            receipt.update(configured=True, focus_target=focus, associated_os=None)
+            try:
+                if focus:
+                    receipt["associated_os"] = resolver.associated_os(task_id="configuration", bmc_host=focus)
+                    if not self.authorized_targets and self.page_session["purpose"] == "os":
+                        if receipt["associated_os"] is None:
+                            return {**receipt, "configured": False, "reason": "target_required"}
+                        scopes[0]["ip"] = receipt["associated_os"]
+                for scope in scopes:
+                    resolver.resolve_local(task_id="configuration", host=scope["ip"],
+                        purpose=scope["purpose"], transport=scope["transport"])
+            except CredentialConfigurationError as error:
+                receipt.update(configured=False, reason=error.code)
+        return receipt
 
     def check(self, kind, target):
         store = self.stores[kind]
@@ -578,7 +636,17 @@ def main():
     parser.add_argument("--config-home", type=Path)
     parser.add_argument("--home", type=Path)
     parser.add_argument("--codex-home", type=Path)
-    parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument(
+        "--open-browser",
+        action="store_true",
+        help="open the printed loopback URL in a browser after starting the page",
+    )
+    # Kept as a compatibility alias for existing scripts.  The page no longer
+    # opens a browser implicitly; callers opt in with --open-browser.
+    parser.add_argument("--no-browser", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--kind", choices=["targets", "kb", "conan"], default="targets")
+    parser.add_argument("--focus-target", help="BMC IP to edit; does not authorize a connection")
+    parser.add_argument("--wait-for-save", action="store_true", help="Report a secret-free completion and exit after the requested configuration is activated")
     parser.add_argument("--target", action="append", default=[])
     parser.add_argument("--purpose", choices=["bmc", "os"], default="bmc")
     parser.add_argument("--transport", choices=["ssh", "redfish"], default="ssh")
@@ -623,11 +691,16 @@ def main():
         checker=BoundedConfigurationChecker(),
         sources=sources,
         authorized_targets=targets,
+        kind=args.kind,
+        focus_target=str(ipaddress.ip_address(args.focus_target)) if args.focus_target else
+            (targets[0]["ip"] if targets and args.purpose == "bmc" else None),
+        wait_for_save=args.wait_for_save,
+        purpose=args.purpose, transport=args.transport,
         maintenance=PluginMaintenance(Path(__file__).resolve().parents[3])
         if (Path(__file__).resolve().parents[3]/"plugin-lock.json").is_file() else None,
     ) as server:
         print(server.url, flush=True)
-        if not args.no_browser:
+        if args.open_browser and not args.no_browser:
             if "microsoft" in os.uname().release.lower() and shutil.which("wslview"):
                 subprocess.Popen(
                     ["wslview", server.url],
@@ -639,10 +712,14 @@ def main():
         try:
             while server.thread.is_alive():
                 server.thread.join(timeout=1)
+                if args.wait_for_save and server.completion is not None:
+                    break
                 if time.monotonic() - server.last_activity > 900:
                     break
         except KeyboardInterrupt:
             pass
+        if args.wait_for_save:
+            print(json.dumps(server.completion or {"event": "configuration_cancelled", "kind": args.kind}), flush=True)
     return 0
 
 

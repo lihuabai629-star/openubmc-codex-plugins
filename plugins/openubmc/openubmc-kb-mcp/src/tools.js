@@ -78,6 +78,8 @@ export function errorResult(error) {
       "Configure credentials in the local private KB configuration."],
     KB_INTERACTION_REQUIRED: ["Knowledge-base authentication requires human interaction.", false,
       "Complete interactive authentication locally before retrying."],
+    KB_RELOGIN_REQUIRED: ["The knowledge-base session expired and needs a new local sign-in.", false,
+      "Open the local configuration page, sign in again, and retry the request."],
     KB_AUTHENTICATION_FAILED: ["Knowledge-base authentication failed.", false,
       "Check the local account credentials and authentication configuration."],
     KB_PERMISSION_DENIED: ["Knowledge-base access was denied.", false,

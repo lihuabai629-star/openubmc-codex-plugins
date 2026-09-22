@@ -422,7 +422,8 @@ def _telnet_text(result: object, *, purpose: str) -> str:
     if not bool(getattr(result, "ok", False)):
         raise RuntimeError(f"Live Patch Telnet command failed during {purpose}")
     stdout = getattr(result, "stdout", "")
-    return stdout if isinstance(stdout, str) else str(stdout)
+    text = stdout if isinstance(stdout, str) else str(stdout)
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _telnet_stdout(result: object, *, marker: str) -> str:
@@ -439,28 +440,66 @@ def _require_path_guard(result: object) -> str:
         raise RuntimeError("Live Patch symlink guard failed") from exc
 
 
-def _require_path_guards(execution, context, paths) -> None:
-    for path in paths:
-        command = _path_guard_command((path,))
-        if len(command.encode("utf-8")) > _TELNET_COMMAND_MAX_BYTES:
-            raise ValueError(
-                "Live Patch path is too long for bounded Telnet guard execution"
-            )
+def _codec_probe_command() -> str:
+    return (
+        "busybox --list|busybox grep -qx base64&&"
+        "busybox --list|busybox grep -qx gzip&&"
+        "echo live_patch_codec_ready"
+    )
+
+
+def _bounded_shell_command(command: str, *, phase: str) -> str:
+    if len(command.encode("utf-8")) <= _TELNET_COMMAND_MAX_BYTES:
+        return command
+    return _compressed_shell_command(command, phase=phase)
+
+
+def _require_path_guards(
+    execution,
+    context,
+    paths,
+    *,
+    phase: str,
+    codec_verified: bool = False,
+) -> bool:
+    commands = [_path_guard_command((path,)) for path in paths]
+    needs_codec = any(
+        len(command.encode("utf-8")) > _TELNET_COMMAND_MAX_BYTES
+        for command in commands
+    )
+    if needs_codec and not codec_verified:
+        _require_shell_codec(execution, context)
+        codec_verified = True
+    for command in commands:
         result = execution.run_telnet(
-            command,
+            _bounded_shell_command(command, phase=phase),
             timeout=min(20.0, context.remaining()),
         )
         _require_path_guard(result)
+    return codec_verified
 
 
 def _require_shell_codec(execution, context) -> None:
     result = execution.run_telnet(
-        "busybox --list|busybox grep -qx base64&&"
-        "busybox --list|busybox grep -qx gzip&&"
-        "echo live_patch_codec_ready",
+        _codec_probe_command(),
         timeout=min(20.0, context.remaining()),
     )
     _telnet_stdout(result, marker="live_patch_codec_ready")
+
+
+def _run_bounded_lane_command(lane, context, command: str, *, phase: str):
+    if len(command.encode("utf-8")) > _TELNET_COMMAND_MAX_BYTES:
+        _telnet_stdout(
+            lane.run_command(
+                _codec_probe_command(),
+                timeout=min(20.0, context.remaining()),
+            ),
+            marker="live_patch_codec_ready",
+        )
+    return lane.run_command(
+        _bounded_shell_command(command, phase=phase),
+        timeout=min(20.0, context.remaining()),
+    )
 
 
 def _prepare_root_mount(
@@ -552,14 +591,18 @@ def _finalize_root_mount(
 
 def _inspect_live_patch_target_identity(lane, context) -> TargetIdentity:
     result = lane.run_command(
-        "product_id=$(tr -d '\\000' </sys/firmware/devicetree/base/model "
-        "2>/dev/null||true); machine_id=$(cat /etc/machine-id 2>/dev/null||true); "
-        "firmware_id=$(sed -n 's/^VERSION_ID=//p' /etc/os-release "
-        "2>/dev/null|tr -d '\"'); reboot_anchor=$(cat "
+        "p=$(tr -d '\\000' </sys/firmware/devicetree/base/model "
+        "2>/dev/null||true); m=$(cat /etc/machine-id 2>/dev/null||true); "
+        "f=$(sed -n 's/^VERSION_ID=//p' /etc/os-release "
+        "2>/dev/null|tr -d '\"'); b=$(cat "
         "/proc/sys/kernel/random/boot_id 2>/dev/null||true); "
+        "c=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null||true); "
+        "e=$(date +%s 2>/dev/null||true); "
+        "u=$(cut -d' ' -f1 /proc/uptime 2>/dev/null||true); "
         "printf 'product_id=%s\\nmachine_id=%s\\nfirmware_id=%s\\n"
-        "reboot_anchor=%s\\n' \"$product_id\" \"$machine_id\" "
-        "\"$firmware_id\" \"$reboot_anchor\"; "
+        "reboot_anchor=%s\\ntarget_clock=%s\\ntarget_clock_epoch=%s\\n"
+        "target_uptime_seconds=%s\\n' \"$p\" \"$m\" \"$f\" \"$b\" "
+        "\"$c\" \"$e\" \"$u\"; "
         "echo live_patch_identity_inspected",
         timeout=min(20.0, context.remaining()),
     )
@@ -574,9 +617,24 @@ def _inspect_live_patch_target_identity(lane, context) -> TargetIdentity:
         machine_id=field_value("machine_id"),
         firmware_id=field_value("firmware_id"),
         reboot_anchor=field_value("reboot_anchor"),
+        target_clock=field_value("target_clock"),
+        target_clock_epoch=field_value("target_clock_epoch"),
+        target_uptime_seconds=field_value("target_uptime_seconds"),
     )
     if not identity.machine_id or not identity.reboot_anchor:
         raise RuntimeError("Live Patch target identity is unavailable")
+    if re.fullmatch(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}",
+        identity.target_clock,
+    ) is None:
+        raise RuntimeError("Live Patch target clock is unavailable")
+    if (
+        re.fullmatch(r"[0-9]+", identity.target_clock_epoch) is None
+        or re.fullmatch(
+            r"[0-9]+(?:\.[0-9]+)?", identity.target_uptime_seconds
+        ) is None
+    ):
+        raise RuntimeError("Live Patch target clock continuity anchor is unavailable")
     return identity
 
 
@@ -699,14 +757,23 @@ def _inspect_live_patch_recovery(
     guarded_paths = [(remote, remote_root, False)]
     if backup and guard_backup:
         guarded_paths.append((backup, "/tmp", False))
-    for path in guarded_paths:
-        command = _path_guard_command((path,))
-        if len(command.encode("utf-8")) > _TELNET_COMMAND_MAX_BYTES:
-            raise ValueError(
-                "Live Patch recovery path is too long for bounded Telnet guard execution"
-            )
+    commands = [_path_guard_command((path,)) for path in guarded_paths]
+    if any(
+        len(command.encode("utf-8")) > _TELNET_COMMAND_MAX_BYTES
+        for command in commands
+    ):
+        _telnet_stdout(
+            lane.run_command(
+                _codec_probe_command(), timeout=min(20.0, context.remaining())
+            ),
+            marker="live_patch_codec_ready",
+        )
+    for command in commands:
         _require_path_guard(
-            lane.run_command(command, timeout=min(20.0, context.remaining()))
+            lane.run_command(
+                _bounded_shell_command(command, phase="r"),
+                timeout=min(20.0, context.remaining()),
+            )
         )
 
     target_identity = _inspect_live_patch_target_identity(lane, context)
@@ -984,7 +1051,7 @@ class LivePatchMcpBackend:
             expected_mode = str(expected_metadata["mode"])
             expected_uid = int(expected_metadata["uid"])
             expected_gid = int(expected_metadata["gid"])
-            result = lane.run_command(
+            command = (
                 "remote_sha=$(sha256sum {remote} | awk '{{print $1}}') && "
                 "remote_mode=$(stat -c %a {remote}) && "
                 "remote_uid=$(stat -c %u {remote}) && "
@@ -1000,8 +1067,13 @@ class LivePatchMcpBackend:
                     expected_mode=shlex.quote(expected_mode),
                     expected_uid=expected_uid,
                     expected_gid=expected_gid,
-                ),
-                timeout=min(20.0, context.remaining()),
+                )
+            )
+            result = _run_bounded_lane_command(
+                lane,
+                context,
+                command,
+                phase="i",
             )
             text = _telnet_stdout(result, marker="verify_sha256")
             if expected_sha not in text.lower():
@@ -1325,12 +1397,15 @@ class LivePatchMcpBackend:
                 ]
                 if not no_backup:
                     guarded_paths.append((backup, "/tmp", False))
-                _require_path_guards(
+                codec_verified = _require_path_guards(
                     execution,
                     context,
                     tuple(guarded_paths),
+                    phase="i",
                 )
-                _require_shell_codec(execution, context)
+                if not codec_verified:
+                    _require_shell_codec(execution, context)
+                    codec_verified = True
                 target_identity = _inspect_live_patch_target_identity(
                     execution.telnet_lane,
                     context,
@@ -1410,6 +1485,8 @@ class LivePatchMcpBackend:
                         (remote, remote_root, False),
                         (staging, "/tmp", True),
                     ),
+                    phase="i",
+                    codec_verified=codec_verified,
                 )
                 install = execution.run_telnet(
                     _compressed_shell_command(
@@ -1694,12 +1771,15 @@ class LivePatchMcpBackend:
                 guarded_paths = [(remote, remote_root, remove_created)]
                 if backup:
                     guarded_paths.append((backup, "/tmp", True))
-                _require_path_guards(
+                codec_verified = _require_path_guards(
                     execution,
                     context,
                     tuple(guarded_paths),
+                    phase="r",
                 )
-                _require_shell_codec(execution, context)
+                if not codec_verified:
+                    _require_shell_codec(execution, context)
+                    codec_verified = True
                 target_identity = _inspect_live_patch_target_identity(
                     execution.telnet_lane,
                     context,
@@ -1861,12 +1941,17 @@ class LivePatchMcpBackend:
                         lease_name=LivePatchRuntimeAdapter.LEASE_NAME,
                         transport=binding.telnet_transport,
                     )
-                    result = lane.run_command(
+                    command = (
                         "test ! -e {remote} && test ! -L {remote} && "
                         "echo verify_missing".format(
                             remote=shlex.quote(remote),
-                        ),
-                        timeout=min(20.0, context.remaining()),
+                        )
+                    )
+                    result = _run_bounded_lane_command(
+                        lane,
+                        context,
+                        command,
+                        phase="r",
                     )
                     _telnet_stdout(result, marker="verify_missing")
                     return {"remote_removed": True}
@@ -1916,7 +2001,7 @@ class LivePatchMcpBackend:
                     lease_name=LivePatchRuntimeAdapter.LEASE_NAME,
                     transport=binding.telnet_transport,
                 )
-                result = lane.run_command(
+                command = (
                     "remote_sha=$(sha256sum {remote} | awk '{{print $1}}') && "
                     "remote_mode=$(stat -c %a {remote}) && "
                     "remote_uid=$(stat -c %u {remote}) && "
@@ -1932,8 +2017,13 @@ class LivePatchMcpBackend:
                         expected_mode=shlex.quote(expected_mode),
                         expected_uid=expected_uid,
                         expected_gid=expected_gid,
-                    ),
-                    timeout=min(20.0, context.remaining()),
+                    )
+                )
+                result = _run_bounded_lane_command(
+                    lane,
+                    context,
+                    command,
+                    phase="r",
                 )
                 text = _telnet_stdout(result, marker="verify_sha256")
                 if expected_sha not in text.lower():

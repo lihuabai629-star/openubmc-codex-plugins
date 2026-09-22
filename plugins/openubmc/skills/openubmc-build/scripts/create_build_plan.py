@@ -22,6 +22,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import re
+
+from build_route import equivalence_receipt
 
 
 SCHEMA = "openubmc-build/plan-v1"
@@ -41,8 +44,10 @@ RESOLVED_LOCK_ROLES = (
 )
 LOCAL_LOCK_ROOT = Path("/tmp") / f"openubmc-build-{os.getuid()}"
 EXECUTION_CONTRACT_FILES = (
+    "scripts/build_route.py",
     "scripts/check_dependency_delta.py",
     "scripts/check_rootfs_access.py",
+    "scripts/check_rootfs_lua.py",
     "scripts/completed_evidence.py",
     "scripts/create_build_plan.py",
     "scripts/finalize_product_attempt.py",
@@ -58,6 +63,19 @@ class BuildPlanError(ValueError):
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
+
+
+def validate_routing_binding(plan: dict[str, object]) -> None:
+    """Fail closed when a plan declares a substituted tool without proof."""
+    routing = plan.get("routing")
+    if not isinstance(routing, dict) or not routing.get("substitution_required"):
+        return
+    receipt = routing.get("equivalence")
+    if not isinstance(receipt, dict) or receipt.get("equivalent") is not True:
+        raise ValueError("tool_equivalence_missing_from_plan")
+    normalized = equivalence_receipt(receipt)
+    if normalized.get("digest") != receipt.get("digest"):
+        raise ValueError("tool_equivalence_digest_mismatch")
 
 
 def run_git(root: Path, *args: str) -> bytes:
@@ -523,6 +541,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--resolved-lock-path")
     parser.add_argument("--rootfs-image")
     parser.add_argument(
+        "--lua-checker",
+        help="Absolute version-matched luac executable used to check Lua from the final image",
+    )
+    parser.add_argument(
+        "--rootfs-lua-root",
+        action="append",
+        default=[],
+        type=parse_rootfs_path,
+        metavar="/PATH",
+        help="Image subtree scanned recursively for Lua source; defaults to openUBMC app and driver roots",
+    )
+    parser.add_argument(
         "--hpm-key-file",
         help="Explicit local package-decryption key for required HPM containment verification",
     )
@@ -551,6 +581,15 @@ def main(argv: list[str] | None = None) -> int:
         choices=("user", "handoff", "generated"),
         default="user",
     )
+    parser.add_argument(
+        "--equivalence-receipt",
+        help="JSON receipt required when the selected build tool replaces the routed tool",
+    )
+    parser.add_argument(
+        "--tool-substitution",
+        action="store_true",
+        help="declare that the command intentionally replaces the routed build tool",
+    )
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args(raw_argv)
 
@@ -564,6 +603,28 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         output_path = Path(args.output).resolve()
+        equivalence: dict[str, object] | None = None
+        if args.equivalence_receipt:
+            raw_equivalence = json.loads(
+                Path(args.equivalence_receipt).resolve(strict=True).read_text(encoding="utf-8")
+            )
+            if not isinstance(raw_equivalence, dict):
+                raise BuildPlanError("invalid_equivalence_receipt", "equivalence receipt must be an object")
+            try:
+                equivalence = equivalence_receipt(raw_equivalence)
+            except (TypeError, ValueError) as exc:
+                raise BuildPlanError("invalid_equivalence_receipt", str(exc)) from exc
+        command_text = " ".join(command).lower()
+        if re.search(r"\bconan\s+create\b", command_text) and equivalence is None:
+            raise BuildPlanError(
+                "raw_conan_requires_equivalence",
+                "raw conan create cannot bypass the routed tool without an equivalence receipt",
+            )
+        if args.tool_substitution and equivalence is None:
+            raise BuildPlanError(
+                "tool_substitution_requires_equivalence",
+                "--tool-substitution requires --equivalence-receipt",
+            )
         if args.reuse_evidence and args.mode not in {"validate", "component-package"}:
             raise BuildPlanError("evidence_reuse_mode_unsupported", "only local validate/component-package evidence may be reused")
         if (args.evidence_input or args.evidence_output) and not args.reuse_evidence:
@@ -572,6 +633,11 @@ def main(argv: list[str] | None = None) -> int:
             raise BuildPlanError("evidence_reuse_inputs_incomplete", "reuse requires a toolchain input and at least one evidence output")
         if args.hpm_key_file and args.mode != "product-artifact":
             raise BuildPlanError("hpm_key_requires_product_mode", "--hpm-key-file requires product-artifact mode")
+        if (args.lua_checker or args.rootfs_lua_root) and args.mode != "product-artifact":
+            raise BuildPlanError(
+                "lua_gate_requires_product_mode",
+                "--lua-checker and --rootfs-lua-root require product-artifact mode",
+            )
         run_root = Path(args.run_root).resolve() if args.run_root else output_path.parent
         mutable_by_workspace: dict[str, list[str]] = {}
         for name, relative in args.mutable_path:
@@ -598,13 +664,14 @@ def main(argv: list[str] | None = None) -> int:
                 or not args.rootfs_image
                 or not args.baseline_resolved_lock
                 or not args.rootfs_service
+                or not args.lua_checker
             ):
                 raise BuildPlanError(
                     "missing_product_inputs",
                     "product-artifact requires --manifest-root, --community, "
                     "--artifact-path, --rootfs-image, --product-version, "
                     "--baseline-resolved-lock, and at least one "
-                    "--rootfs-service",
+                    "--rootfs-service, plus --lua-checker",
                 )
             if "manifest" not in workspace_roots_by_name:
                 raise BuildPlanError(
@@ -741,6 +808,26 @@ def main(argv: list[str] | None = None) -> int:
                     "rootfs_image_not_regular",
                     f"--rootfs-image is not a regular file output: {rootfs_image}",
                 )
+            lua_checker_path = Path(args.lua_checker).expanduser()
+            if not lua_checker_path.is_absolute():
+                raise BuildPlanError(
+                    "lua_checker_not_absolute",
+                    "--lua-checker must be an absolute executable path",
+                )
+            try:
+                lua_checker_path = lua_checker_path.resolve(strict=True)
+            except OSError as exc:
+                raise BuildPlanError(
+                    "invalid_lua_checker",
+                    "--lua-checker must resolve to an executable regular file",
+                ) from exc
+            if not lua_checker_path.is_file() or not os.access(lua_checker_path, os.X_OK):
+                raise BuildPlanError(
+                    "invalid_lua_checker",
+                    "--lua-checker must resolve to an executable regular file",
+                )
+            lua_checker_identity = file_identity(lua_checker_path)
+            locks["lua_checker"] = lua_checker_identity
             locks["dependency_baseline"] = resolved_lock_identity(
                 baseline_resolved_lock
             )
@@ -835,6 +922,12 @@ def main(argv: list[str] | None = None) -> int:
                     "product_output_input_collision",
                     "product output collides with the planned debugfs executable",
                 )
+            if Path(str(lua_checker_identity["path"])) in set(output_paths):
+                raise BuildPlanError(
+                    "product_output_input_collision",
+                    "product output collides with the planned Lua checker executable",
+                )
+            lua_roots = sorted(set(args.rootfs_lua_root or DEFAULT_ROOTFS_PATHS))
             output_resources.extend(
                 sorted(
                     (
@@ -878,6 +971,20 @@ def main(argv: list[str] | None = None) -> int:
                     "debugfs": debugfs_identity,
                     "services": services,
                 },
+                "rootfs_lua": {
+                    "image_path": str(rootfs_image),
+                    "image_format": "ext4",
+                    "debugfs": debugfs_identity,
+                    "checker": lua_checker_identity,
+                    "checker_argv": ["-p", "{source}"],
+                    "roots": lua_roots,
+                    "limits": {
+                        "max_files": 20000,
+                        "max_file_bytes": 16777216,
+                        "max_total_bytes": 536870912,
+                        "checker_timeout_seconds": 20,
+                    },
+                },
                 "outputs": {
                     "artifact": str(artifact_path),
                     "dependency_lock": str(resolved_lock),
@@ -890,6 +997,7 @@ def main(argv: list[str] | None = None) -> int:
                 "required_gates": [
                     "dependency-delta",
                     "rootfs-access",
+                    "rootfs-lua-syntax",
                 ],
             }
             if args.hpm_key_file:
@@ -930,6 +1038,12 @@ def main(argv: list[str] | None = None) -> int:
                 "executable": command_executable_identity(command, cwd),
             },
         }
+        if equivalence is not None or args.tool_substitution:
+            plan["routing"] = {
+                "tool": Path(command[0]).name if command else "",
+                "substitution_required": bool(args.tool_substitution or equivalence),
+                "equivalence": equivalence,
+            }
         if args.reuse_evidence:
             plan["evidence_reuse"] = {"kind": args.reuse_evidence, "scope": "local-only"}
         plan["plan_id"] = semantic_plan_id(plan)

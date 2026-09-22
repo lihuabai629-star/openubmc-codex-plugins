@@ -1,6 +1,6 @@
 ---
 name: openubmc-build
-description: "Build and test openUBMC components or firmware: 编译组件、生成代码、运行测试、打 HPM 包、构建失败。Use for bingo/bmcgo compile, gen, test, component Conan packaging, or product HPM builds with verified local evidence. Route firmware upload and activation to openubmc-upgrade, live symptoms to openubmc-debug, and package uploads to openubmc-publish."
+description: "Build and test openUBMC components or firmware: 编译组件、生成代码、运行测试、打 HPM 包、构建失败。Use for bmcgo validation, component Conan packaging, or product HPM builds with verified local evidence. Explicit bingo commands and Bingo CLI development route to openubmc-bingo-development; environment setup routes to openubmc-environment-setup. Route firmware upload and activation to openubmc-upgrade, live symptoms to openubmc-debug, and package uploads to openubmc-publish."
 ---
 
 # openUBMC Build
@@ -14,6 +14,8 @@ Build never reads target credentials or opens SSH, Telnet, or Redfish sessions. 
 Resolve every helper path relative to this `SKILL.md`. In examples, `<skill-dir>` means the directory containing this file. Never copy an installation-specific absolute Skill path into a command or document.
 
 ## Route First
+
+Run `scripts/build_route.py` before selecting a build tool. An explicit Bingo build command or Bingo CLI development request is a handoff and must not fall through to `bmcgo` or raw `conan create`. Product/HPM and component-package routes require their workspace precondition. Tool substitution requires the equivalence receipt described in [references/build-routing.md](references/build-routing.md).
 
 Choose one mode before any persistent write:
 
@@ -110,10 +112,18 @@ For `product-artifact`, an accepted result requires all Plan gates:
 - version read from `/etc/version.json` inside the Plan-bound final image equals the Plan;
 - dependency delta is within the Plan allowlist;
 - each planned non-root service can traverse its own mapped image paths.
+- every Lua source file under the planned final-image roots passes the frozen,
+  version-matched Lua compiler's syntax check.
 
 Run `scripts/finalize_product_attempt.py` after a successful product Attempt. It reacquires the Plan, checkout, and product-output locks and recomputes dependency, image-access, verification, and metadata evidence in one lock cycle. Standalone gate reports are diagnostic evidence, not acceptance tokens. Read [references/artifact-verification.md](references/artifact-verification.md).
 
 When a deterministic retry may reproduce identical bytes, preserve and move aside the old HPM, final ext4 image, and built resolved lock before starting the new Attempt so each planned output begins absent.
+
+Before packaging or deployment, use `scripts/release_gates.py` for the
+pre-package Lua source gate, final-container completeness inspection,
+post-activation service-start smoke, and rollback proof. A failed or missing
+gate rejects the release; upload or version readback alone is not runtime
+verification.
 
 Until HPM containment of the inspected image is proved, final verification and metadata remain `package_binding_unverified` with `upgrade_eligible: false`.
 

@@ -54,6 +54,26 @@ _HOST_KEY_FAILURE_MARKERS = (
     "no rsa host key is known for",
     "offending ",
 )
+_SECRET_ENV_NAME_TOKENS = (
+    "PASSWORD",
+    "PASSWD",
+    "PASSPHRASE",
+    "SECRET",
+    "TOKEN",
+    "AUTHORIZATION",
+    "COOKIE",
+    "API_KEY",
+    "APIKEY",
+)
+
+
+def _transport_environment() -> dict[str, str]:
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if not any(token in name.upper() for token in _SECRET_ENV_NAME_TOKENS)
+        and name != "SSHPASS"
+    }
 
 
 class SshHostKeyPolicyError(ValueError):
@@ -287,13 +307,19 @@ def _run_bounded_process(
     env: dict[str, str] | None,
     stdout_limit_bytes: int | None,
     stderr_limit_bytes: int | None,
+    secret_input: str = "",
 ) -> subprocess.CompletedProcess[str]:
     process = subprocess.Popen(
         cmd,
+        stdin=subprocess.PIPE if secret_input else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
     )
+    if secret_input:
+        assert process.stdin is not None
+        process.stdin.write((secret_input + "\n").encode("utf-8"))
+        process.stdin.close()
     assert process.stdout is not None
     assert process.stderr is not None
     stdout_state: dict[str, object] = {"limit_exceeded": False}
@@ -673,7 +699,7 @@ class OpenSshControlMasterTransport:
         command: list[str] = []
         password = str(credentials.password)
         if password:
-            command += ["sshpass", "-e"]
+            command += ["sshpass", "-d", "0"]
         command += self._connection_prefix(
             port=handle.port,
             host_key_config=host_key_config,
@@ -695,10 +721,7 @@ class OpenSshControlMasterTransport:
             f"ControlPath={handle.control_path}",
             handle.destination,
         ]
-        run_env = None
-        if password:
-            run_env = dict(os.environ)
-            run_env["SSHPASS"] = password
+        run_env = _transport_environment()
         if not shutil.which("ssh"):
             completed = subprocess.CompletedProcess(
                 args=command,
@@ -746,6 +769,7 @@ class OpenSshControlMasterTransport:
                 text=True,
                 timeout=self.connect_timeout,
                 env=run_env,
+                input=(password + "\n" if password else None),
             )
             completed = _attach_capture_metadata(
                 completed,
@@ -808,6 +832,7 @@ class OpenSshControlMasterTransport:
                 capture_output=True,
                 text=True,
                 timeout=min(self.connect_timeout, 2.0),
+                env=_transport_environment(),
             )
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
@@ -894,7 +919,7 @@ class OpenSshControlMasterTransport:
                 completed = _run_bounded_process(
                     command,
                     timeout=timeout,
-                    env=None,
+                    env=_transport_environment(),
                     stdout_limit_bytes=stdout_limit_bytes,
                     stderr_limit_bytes=stderr_limit_bytes,
                 )
@@ -972,6 +997,7 @@ class OpenSshControlMasterTransport:
                     capture_output=True,
                     text=True,
                     timeout=min(self.connect_timeout, 2.0),
+                    env=_transport_environment(),
                 )
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
@@ -1049,7 +1075,7 @@ def run_ssh(
 
     cmd: List[str] = []
     if password:
-        cmd += ["sshpass", "-e"]
+        cmd += ["sshpass", "-d", "0"]
     cmd += [
         "ssh",
         "-p",
@@ -1116,10 +1142,7 @@ def run_ssh(
             stderr_limit_bytes=stderr_limit_bytes,
         )
     else:
-        run_env = None
-        if password:
-            run_env = dict(os.environ)
-            run_env["SSHPASS"] = password
+        run_env = _transport_environment()
         try:
             if stdout_limit_bytes is not None or stderr_limit_bytes is not None:
                 cp = _run_bounded_process(
@@ -1128,6 +1151,7 @@ def run_ssh(
                     env=run_env,
                     stdout_limit_bytes=stdout_limit_bytes,
                     stderr_limit_bytes=stderr_limit_bytes,
+                    secret_input=password,
                 )
             else:
                 timed_out = False
@@ -1138,6 +1162,7 @@ def run_ssh(
                         text=True,
                         timeout=timeout,
                         env=run_env,
+                        input=(password + "\n" if password else None),
                     )
                 except subprocess.TimeoutExpired:
                     timed_out = True

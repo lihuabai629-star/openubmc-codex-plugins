@@ -10,7 +10,7 @@ python3 <skill-dir>/scripts/finalize_product_attempt.py \
   --attempt-state <state.json>
 ```
 
-The finalizer obtains the same canonical Plan, checkout, and output locks as the Attempt. Within one lock cycle it checks all current output identities against `outputs_after`; requires the HPM, final ext4 image, and built resolved lock each to have been absent before the Attempt or to have a different SHA-256 afterward; overwrites and recomputes both gate reports; reads `/etc/version.json` from the final image; writes verification; writes metadata only for accepted verification; and checks output freshness again. mtime, ctime, or inode churn with identical bytes cannot launder output left by a failed or earlier Attempt. `verify_product_artifact.py` and `write_artifact_metadata.py` are internal finalizer helpers; their standalone CLIs cannot authorize acceptance.
+The finalizer obtains the same canonical Plan, checkout, and output locks as the Attempt. Within one lock cycle it checks all current output identities against `outputs_after`; requires the HPM, final ext4 image, and built resolved lock each to have been absent before the Attempt or to have a different SHA-256 afterward; overwrites and recomputes the dependency, image-access, and Lua syntax gate reports; reads `/etc/version.json` from the final image; writes verification; writes metadata only for accepted verification; and checks output freshness again. mtime, ctime, or inode churn with identical bytes cannot launder output left by a failed or earlier Attempt. `verify_product_artifact.py` and `write_artifact_metadata.py` are internal finalizer helpers; their standalone CLIs cannot authorize acceptance.
 
 For a deterministic retry expected to reproduce identical bytes, preserve and move aside all three old planned outputs before starting the new Attempt. Freshness is content-bound, so touching an output or replacing it with another inode containing the same bytes remains stale.
 
@@ -47,6 +47,24 @@ python3 <skill-dir>/scripts/check_rootfs_access.py \
 The checker opens the Plan-bound final ext4 image with the frozen `debugfs` executable and reads inode UID, GID, type, and mode for `/` plus every ancestor of each service's mapped paths. Add mappings at Plan creation with repeated `--rootfs-service 'NAME=UID:GID[:SUP...]=/path[,/path...]'`. A service is never checked against another service's private paths.
 
 This gate proves classic Unix directory traversal from ext4 inode metadata for the frozen UID/GID sets. It does not prove file read/execute bits, ACL behavior, runtime mount overlays, or service startup.
+
+## Rootfs Lua syntax gate
+
+Create the product Plan with `--lua-checker <absolute-version-matched-luac>`.
+The Plan freezes that executable's content identity. During finalization,
+`check_rootfs_lua.py` recursively enumerates Lua source below the planned image
+roots with the frozen `debugfs`, reads each regular `.lua` file directly from
+the final ext4 image, and invokes the checker as `luac -p` on locally extracted
+bytes. The report binds each image path, size, and SHA-256. It does not persist
+source text or raw checker output; a failure retains the image path, checker
+return code, parsed line number when available, and an output digest.
+
+The default roots are `/opt/bmc/apps` and `/opt/bmc/drivers`. Repeated
+`--rootfs-lua-root` values replace those defaults for products with another
+layout. A missing root, an unparseable listing, a `.lua` symlink, no discovered
+Lua source, checker drift, timeout, size-limit breach, or syntax error blocks
+acceptance. This gate proves syntax for the bytes in the final image; service
+startup and runtime behavior remain Upgrade or QEMU acceptance evidence.
 
 A bad Conan cache is a preflight failure for packages in the current resolved graph. Repair or reacquire only those package identities; do not globally chmod the Conan cache.
 

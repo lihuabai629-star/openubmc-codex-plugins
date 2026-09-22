@@ -107,6 +107,19 @@ def _content_key(reference: Mapping[str, object]) -> str:
     return blob_id
 
 
+def evidence_reference_target_ids(reference: Mapping[str, object]) -> set[str]:
+    target_ids = {_text(reference.get("target_id", ""), maximum=128)}
+    raw_bindings = reference.get("target_bindings")
+    if isinstance(raw_bindings, list):
+        target_ids.update(
+            _text(item.get("target_id", ""), maximum=128)
+            for item in raw_bindings
+            if isinstance(item, Mapping)
+        )
+    target_ids.discard("")
+    return target_ids
+
+
 @dataclass
 class _EvidenceGroup:
     canonical: Mapping[str, object]
@@ -114,12 +127,32 @@ class _EvidenceGroup:
     cases: set[str]
     targets: set[str]
     generations: set[str]
+    bindings: list[Mapping[str, object]]
+
+
+def _identity_binding(reference: Mapping[str, object]) -> dict[str, object]:
+    return {
+        "case_id": _text(reference.get("case_id", ""), maximum=128),
+        "evidence_id": _text(reference.get("evidence_id", ""), maximum=128),
+        "target_id": _text(reference.get("target_id", ""), maximum=128),
+        "target_address": _text(reference.get("target_address", ""), maximum=256),
+        "operation": _text(reference.get("operation", ""), maximum=128),
+        "operation_id": _text(reference.get("operation_id", ""), maximum=128),
+        "expected_product_version": _text(
+            reference.get("expected_product_version", ""), maximum=256
+        ),
+        "observed_product_version": _text(
+            reference.get("observed_product_version", ""), maximum=256
+        ),
+        "observed_at": float(reference.get("observed_at", 0.0)),
+    }
 
 
 def _project(
     group: _EvidenceGroup,
 ) -> dict[str, object]:
     reference = group.canonical
+    visible_bindings = group.bindings[:16]
     return {
         "case_id": _text(reference.get("case_id", ""), maximum=128),
         "evidence_id": _text(reference.get("evidence_id", ""), maximum=128),
@@ -127,9 +160,34 @@ def _project(
         "media_type": _text(reference.get("media_type", ""), maximum=128),
         "byte_count": _non_negative_int(reference.get("byte_count", 0)),
         "target_id": _text(reference.get("target_id", "")),
+        "target_address": _text(reference.get("target_address", "")),
         "generation": _text(reference.get("generation", "")),
         "producer": _text(reference.get("producer", "")),
         "provenance": _text(reference.get("provenance", "")),
+        "operation": _text(reference.get("operation", "")),
+        "operation_id": _text(reference.get("operation_id", ""), maximum=128),
+        "expected_product_version": _text(
+            reference.get("expected_product_version", "")
+        ),
+        "observed_product_version": _text(
+            reference.get("observed_product_version", "")
+        ),
+        "target_bindings": [
+            {
+                name: _text(item.get(name, ""), maximum=256)
+                for name in (
+                    "target_id",
+                    "target_address",
+                    "operation_id",
+                    "expected_product_version",
+                    "observed_product_version",
+                )
+            }
+            for item in reference.get("target_bindings", [])[:64]
+            if isinstance(item, Mapping)
+        ]
+        if isinstance(reference.get("target_bindings"), list)
+        else [],
         "observed_at": float(reference.get("observed_at", 0.0)),
         "target_epoch": reference.get("target_epoch"),
         "workflow_definition_id": _text(
@@ -145,6 +203,12 @@ def _project(
         "case_count": len(group.cases),
         "target_count": len(group.targets),
         "generation_count": len(group.generations),
+        "identity_mixed": group.reference_count > 1,
+        "identity_binding_count": len(group.bindings),
+        "identity_bindings": [
+            _identity_binding(binding) for binding in visible_bindings
+        ],
+        "identity_bindings_truncated": len(group.bindings) > len(visible_bindings),
     }
 
 
@@ -175,21 +239,23 @@ class EvidenceQueryService:
             )
             existing = grouped.get(key)
             case = _text(reference.get("case_id", ""), maximum=128)
-            target = _text(reference.get("target_id", ""))
+            targets = evidence_reference_target_ids(reference)
             generation = _text(reference.get("generation", ""))
             if existing is None:
                 grouped[key] = _EvidenceGroup(
                     canonical=reference,
                     reference_count=1,
                     cases={case},
-                    targets={target},
+                    targets=set(targets),
                     generations={generation},
+                    bindings=[reference],
                 )
             else:
                 existing.reference_count += 1
                 existing.cases.add(case)
-                existing.targets.add(target)
+                existing.targets.update(targets)
                 existing.generations.add(generation)
+                existing.bindings.append(reference)
 
         items: list[dict[str, object]] = []
         byte_truncated = False

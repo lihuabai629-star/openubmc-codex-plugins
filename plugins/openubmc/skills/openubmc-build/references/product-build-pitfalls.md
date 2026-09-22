@@ -40,7 +40,7 @@ An Attempt and its finalizer separately acquire the same canonical same-host res
 
 ## Stale output
 
-A filename in `output/` is not evidence of a successful Attempt. Locked finalization requires the HPM, final ext4 image, and built resolved lock each to be absent before the successful Attempt or have a different SHA-256 afterward, together with the matching product version, recomputed dependency and permission gates, and fresh metadata. mtime, ctime, or inode-only changes are rejected. When a deterministic retry is expected to reproduce identical bytes, preserve and move all three old outputs aside before starting it.
+A filename in `output/` is not evidence of a successful Attempt. Locked finalization requires the HPM, final ext4 image, and built resolved lock each to be absent before the successful Attempt or have a different SHA-256 afterward, together with the matching product version, recomputed dependency, permission, and final-image Lua syntax gates, and fresh metadata. mtime, ctime, or inode-only changes are rejected. When a deterministic retry is expected to reproduce identical bytes, preserve and move all three old outputs aside before starting it.
 
 ## Package binding
 

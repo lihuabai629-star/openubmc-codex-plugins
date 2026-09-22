@@ -109,14 +109,37 @@ def _atomic_write(path: Path, content: bytes) -> None:
         Path(temporary).unlink(missing_ok=True)
 
 
+def device_associations(config: dict) -> dict[str, str]:
+    """Validate and normalize non-secret BMC-to-OS address associations."""
+    if not isinstance(config, dict) or type(config.get('schema_version')) is not int or config['schema_version'] != 1:
+        raise ConfigurationError('Unsupported target configuration schema')
+    devices = config.get('devices', {})
+    if not isinstance(devices, dict):
+        raise ConfigurationError('Device associations must be an object')
+    result = {}
+    for bmc, device in devices.items():
+        if not isinstance(bmc, str) or not isinstance(device, dict) or set(device) != {'os_ip'} or not isinstance(device['os_ip'], str):
+            raise ConfigurationError('A device association requires an OS IP')
+        try:
+            host = str(ipaddress.ip_address(bmc))
+            os_host = str(ipaddress.ip_address(device['os_ip']))
+        except (ValueError, TypeError):
+            raise ConfigurationError('Device associations require literal IP addresses') from None
+        if host in result or host == os_host:
+            raise ConfigurationError('Conflicting device association')
+        result[host] = os_host
+    return result
+
+
 def _validate_targets(config: object) -> None:
     if not isinstance(config, dict) or type(config.get('schema_version')) is not int or config['schema_version'] != 1:
         raise ConfigurationError('Unsupported target configuration schema')
     for name in ('credentials', 'defaults', 'targets'):
         if not isinstance(config.get(name, {}), dict):
             raise ConfigurationError('Credential records and target defaults must be objects')
-    if set(config) - {'schema_version', 'credentials', 'defaults', 'targets'}:
+    if set(config) - {'schema_version', 'credentials', 'defaults', 'targets', 'devices'}:
         raise ConfigurationError('Unknown target configuration field')
+    device_associations(config)
     for record in config.get('credentials', {}).values():
         if not isinstance(record, dict) or set(record) - {'user', 'password', 'identity_file'} or any(not isinstance(value, str) or '\0' in value for value in record.values()):
             raise ConfigurationError('Credential fields must be strings')

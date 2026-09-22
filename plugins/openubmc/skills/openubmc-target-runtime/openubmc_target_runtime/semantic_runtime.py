@@ -1993,13 +1993,23 @@ class Outcome:
     status: str
     summary: str
     acceptance: object = field(default_factory=list)
+    verified_findings: tuple[Mapping[str, object], ...] = ()
+    remaining_work: tuple[Mapping[str, object], ...] = ()
+    blocked_by: tuple[Mapping[str, object], ...] = ()
 
     def to_public_dict(self) -> dict[str, object]:
-        return {
+        result = {
             "status": self.status,
             "summary": self.summary,
             "acceptance": self.acceptance,
         }
+        if self.status == "partial" or self.verified_findings:
+            result["verified_findings"] = [dict(item) for item in self.verified_findings]
+        if self.status == "partial" or self.remaining_work:
+            result["remaining_work"] = [dict(item) for item in self.remaining_work]
+        if self.status == "partial" or self.blocked_by:
+            result["blocked_by"] = [dict(item) for item in self.blocked_by]
+        return result
 
 
 @dataclass(frozen=True)
@@ -2039,6 +2049,18 @@ class RunTurn:
                 status=_text(raw_outcome.get("status")),
                 summary=_text(raw_outcome.get("summary")),
                 acceptance=raw_outcome.get("acceptance", []),
+                verified_findings=tuple(
+                    dict(item) for item in raw_outcome.get("verified_findings", [])
+                    if isinstance(item, Mapping)
+                ),
+                remaining_work=tuple(
+                    dict(item) for item in raw_outcome.get("remaining_work", [])
+                    if isinstance(item, Mapping)
+                ),
+                blocked_by=tuple(
+                    dict(item) for item in raw_outcome.get("blocked_by", [])
+                    if isinstance(item, Mapping)
+                ),
             )
             if isinstance(raw_outcome, Mapping) and raw_outcome
             else None
@@ -2161,6 +2183,18 @@ def project_run_turn(
             status=_text(raw_outcome.get("status")),
             summary=_text(raw_outcome.get("summary")),
             acceptance=raw_outcome.get("acceptance", []),
+            verified_findings=tuple(
+                dict(item) for item in raw_outcome.get("verified_findings", [])
+                if isinstance(item, Mapping)
+            ),
+            remaining_work=tuple(
+                dict(item) for item in raw_outcome.get("remaining_work", [])
+                if isinstance(item, Mapping)
+            ),
+            blocked_by=tuple(
+                dict(item) for item in raw_outcome.get("blocked_by", [])
+                if isinstance(item, Mapping)
+            ),
         )
         if isinstance(raw_outcome, Mapping) and raw_outcome
         else None
@@ -2187,7 +2221,7 @@ def project_run_turn(
             selected_next_action = base_turn.next_action
     if incident is not None and not selected_next_action:
         selected_next_action = incident.operator_action
-    if outcome is not None or selected_state in {
+    if (outcome is not None and outcome.status != "partial") or selected_state in {
         "cancelled",
         "completed",
         "failed",

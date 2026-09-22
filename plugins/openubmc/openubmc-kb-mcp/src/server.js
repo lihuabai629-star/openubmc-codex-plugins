@@ -12,6 +12,7 @@ import {
   installMcpProcessSignalHandlers
 } from "./process-lifecycle.js";
 import { registerTools } from "./tools.js";
+import { KNOWLEDGE_MCP_VERSION } from "./version.js";
 
 
 function configPath(argv) {
@@ -24,7 +25,7 @@ export async function createServer(path, processLifecycle = null) {
   const config = await loadConfig(path, { allowMissingCredentials: true });
   const lightrag = new ReloadingKnowledgeClient(config);
   const server = new McpServer(
-    { name: "openubmc-kb-mcp-server", version: "1.3.0" },
+    { name: "openubmc-kb-mcp-server", version: KNOWLEDGE_MCP_VERSION },
     {
       instructions: "Use the read-only openUBMC knowledge-base tools for candidate discovery. Runtime and repository evidence remain authoritative."
     }
@@ -152,7 +153,7 @@ function createProcessLifecycle(path) {
   }
   const lifecycle = new McpProcessLifecycle({
     component: "knowledge-mcp",
-    version: "1.3.0",
+    version: KNOWLEDGE_MCP_VERSION,
     client,
     taskId,
     sessionId,

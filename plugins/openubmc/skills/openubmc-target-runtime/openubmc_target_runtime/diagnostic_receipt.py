@@ -504,6 +504,12 @@ class DiagnosticEvidenceRef:
     observed_at: object = ""
     target_epoch: object = None
     byte_count: object = None
+    target_address: str = ""
+    operation: str = ""
+    operation_id: str = ""
+    expected_product_version: str = ""
+    observed_product_version: str = ""
+    target_bindings: tuple[Mapping[str, object], ...] = ()
 
     @classmethod
     def from_public_dict(cls, value: Mapping[str, object]) -> "DiagnosticEvidenceRef":
@@ -513,6 +519,22 @@ class DiagnosticEvidenceRef:
             observed_at=value.get("observed_at", ""),
             target_epoch=value.get("target_epoch"),
             byte_count=value.get("byte_count"),
+            target_address=str(value.get("target_address", "")).strip(),
+            operation=str(value.get("operation", "")).strip(),
+            operation_id=str(value.get("operation_id", "")).strip(),
+            expected_product_version=str(
+                value.get("expected_product_version", "")
+            ).strip(),
+            observed_product_version=str(
+                value.get("observed_product_version", "")
+            ).strip(),
+            target_bindings=tuple(
+                dict(item)
+                for item in value.get("target_bindings", [])
+                if isinstance(item, Mapping)
+            )
+            if isinstance(value.get("target_bindings"), list)
+            else (),
         )
 
     def to_public_dict(self, *, minimal: bool = False) -> dict[str, object]:
@@ -526,6 +548,12 @@ class DiagnosticEvidenceRef:
             ("observed_at", self.observed_at),
             ("target_epoch", self.target_epoch),
             ("byte_count", self.byte_count),
+            ("target_address", self.target_address),
+            ("operation", self.operation),
+            ("operation_id", self.operation_id),
+            ("expected_product_version", self.expected_product_version),
+            ("observed_product_version", self.observed_product_version),
+            ("target_bindings", list(self.target_bindings)),
         ):
             if value is not None and value != "":
                 result[name] = _bounded_public(
@@ -2468,6 +2496,12 @@ def build_diagnostic_receipt(
             for key in (
                 "evidence_id",
                 "target_id",
+                "target_address",
+                "operation",
+                "operation_id",
+                "expected_product_version",
+                "observed_product_version",
+                "target_bindings",
                 "observed_at",
                 "target_epoch",
                 "byte_count",

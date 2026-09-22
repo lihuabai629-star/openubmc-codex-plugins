@@ -26,7 +26,16 @@ from verify_hpm_containment import verify_hpm_containment
 
 SCHEMA = "openubmc-build/verification-v1"
 GATE_SCHEMA = "openubmc-build/gate-report-v1"
-REQUIRED_PRODUCT_GATES = ("dependency-delta", "rootfs-access")
+REQUIRED_PRODUCT_GATES = (
+    "dependency-delta",
+    "rootfs-access",
+    "rootfs-lua-syntax",
+)
+GATE_REQUIREMENTS = {
+    "dependency-delta": "dependency_delta",
+    "rootfs-access": "rootfs_access",
+    "rootfs-lua-syntax": "rootfs_lua",
+}
 
 
 def load_json(path: Path) -> tuple[Path, bytes, dict[str, object]]:
@@ -278,9 +287,7 @@ def verify(
         detail = "missing"
         if record:
             resolved, raw, report = record
-            requirement_key = (
-                "dependency_delta" if gate == "dependency-delta" else "rootfs_access"
-            )
+            requirement_key = GATE_REQUIREMENTS[gate]
             expected_requirement_digest = digest_object(
                 expectation.get(requirement_key, {})
             )
@@ -304,7 +311,7 @@ def verify(
                 if unexpected:
                     passed = False
                     detail += f" unexpected={unexpected}"
-            else:
+            elif gate == "rootfs-access":
                 requirement = expectation.get("rootfs_access", {})
                 if (
                     report.get("details", {}).get("services")
@@ -314,6 +321,16 @@ def verify(
                 ):
                     passed = False
                     detail += " rootfs_requirement_mismatch"
+            else:
+                requirement = expectation.get("rootfs_lua", {})
+                if (
+                    report.get("details", {}).get("roots")
+                    != requirement.get("roots")
+                    or report.get("inputs", [{}])[0].get("path")
+                    != requirement.get("image_path")
+                ):
+                    passed = False
+                    detail += " rootfs_lua_requirement_mismatch"
             evidence_gates.append(
                 {
                     "id": gate,

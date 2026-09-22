@@ -11,13 +11,15 @@ let state,
   kind = "targets",
   busy = false,
   closed = false,
+  expertTargets = false,
+  dirty = false,
   id = 0;
 const $ = (id) => document.getElementById(id);
 const reasons = {
   remote_missing: "本机未找到该 Conan remote，请选择当前构建环境中的已有仓库。",
   configuration_changed: "检查期间配置发生变化，请重新检查。",
   connected: "连接成功",
-  credentials_missing: "凭据不完整，请填写后保存并生效。",
+  credentials_missing: "账号不完整，请填写后保存。",
   authentication_failed: "认证失败，请检查账号或密码。",
   network_error: "网络连接失败，请检查地址和网络。",
   host_identity_failed: "SSH 主机身份未确认，请在本机完成主机身份校验。",
@@ -27,7 +29,7 @@ const reasons = {
   timeout: "检查超时，请检查网络和服务状态。",
   check_unavailable: "本机检查工具或依赖未就绪。",
   connection_failed: "连接未通过，请检查本机配置与服务状态。",
-  activation_required: "请先保存并生效。",
+  activation_required: "请先保存配置。",
   target_required: "请填写要检查的目标 IP。",
   confirmation_required: "请选择目标后点击检查连接。",
 };
@@ -106,7 +108,7 @@ function secret(parent, label, isSet, source) {
   wrap.className = "secret";
   const mode = select(
     wrap,
-    label,
+    label + "操作",
     [
       ["keep", "保留"],
       ["replace", "替换"],
@@ -114,7 +116,9 @@ function secret(parent, label, isSet, source) {
     ],
     isSet ? "keep" : "replace",
   );
-  const value = input(wrap, "新" + label, "", "password");
+  mode.setAttribute("aria-label", label + "操作");
+  mode.previousElementSibling.textContent = "处理方式";
+  const value = input(wrap, label, "", "password");
   value.placeholder = isSet ? "已保存的秘密不会显示" : "输入后保存在本机";
   value.disabled = mode.value !== "replace";
   mode.onchange = () => {
@@ -139,13 +143,172 @@ function table(parent, headers) {
   return node("tbody", undefined, t);
 }
 let collect;
+function accountFields(parent, label, record = {}, source) {
+  const group = node("section", undefined, parent);
+  group.className = "account-form";
+  const grid = node("div", undefined, group);
+  grid.className = "account-grid";
+  const user = input(grid, label + " 用户名", record.user || "");
+  const passwordArea = node("div", undefined, grid);
+  let passwordAction = record.password_set ? "keep" : "remove";
+  const saved = node("div", undefined, passwordArea);
+  saved.className = "saved-secret";
+  node("span", label + " 密码已配置", saved);
+  const change = node("button", "修改密码", saved);
+  change.type = "button";
+  change.className = "add";
+  const password = input(passwordArea, label + " 密码", "", "password");
+  password.parentElement.hidden = Boolean(record.password_set);
+  saved.hidden = !record.password_set;
+  change.onclick = () => {
+    saved.hidden = true;
+    password.parentElement.hidden = false;
+    password.focus();
+  };
+  password.oninput = () => { passwordAction = password.value ? "replace" : record.password_set ? "keep" : "remove"; };
+  password.placeholder = record.password_set ? "留空保留已有密码" : "输入密码";
+  const advanced = node("details", undefined, group);
+  node("summary", "SSH 密钥与密码管理", advanced);
+  const identity = input(advanced, label + " SSH 密钥文件", record.identity_file || "");
+  const remove = node("button", "清除密码", advanced);
+  remove.type = "button";
+  remove.className = "delete";
+  remove.onclick = () => {
+    passwordAction = "remove";
+    password.value = "";
+    saved.hidden = true;
+    password.parentElement.hidden = false;
+    password.placeholder = "保存后清除密码";
+  };
+  return () => ({ user: user.value, identity_file: identity.value,
+    password: passwordAction === "replace" ? { action: "replace", value: password.value }
+      : { action: passwordAction, ...(passwordAction === "keep" && source ? { source } : {}) } });
+}
+
+function renderSimpleTargets(config) {
+  const parent = $("fields");
+  const credentials = config.credentials || {};
+  const bmcSource = config.defaults?.bmc?.ssh || config.defaults?.bmc?.redfish;
+  node("h3", "默认 BMC 账号", parent);
+  node("p", "SSH 和 Redfish 共用此账号。", parent);
+  const bmc = accountFields(parent, "BMC", credentials[bmcSource], bmcSource);
+  const osSection = node("details", undefined, parent);
+  node("summary", "默认 OS 账号（可选）", osSection);
+  osSection.open = state.page_session?.purpose === "os";
+  const osSource = config.defaults?.os?.ssh;
+  const os = accountFields(osSection, "OS", credentials[osSource], osSource);
+  const devices = node("details", undefined, parent);
+  node("summary", "设备与关联 OS", devices);
+  node("p", "添加关联 OS，或为某台设备设置不同账号。", devices);
+  const list = node("div", undefined, devices);
+  const rows = [];
+  const initialHosts = new Set([
+    ...Object.keys(config.devices || {}),
+    ...Object.keys(config.targets || {}).filter((ip) => config.targets[ip].bmc || !Object.keys(config.targets[ip]).length),
+  ]);
+  function optionalAccount(parent, label, title, source) {
+    const toggle = input(parent, title, "", "checkbox");
+    toggle.checked = Boolean(source);
+    toggle.parentElement.classList.add("checkbox-field");
+    const area = node("div", undefined, parent);
+    area.hidden = !toggle.checked;
+    const read = accountFields(area, label, credentials[source], source);
+    toggle.onchange = () => { area.hidden = !toggle.checked; };
+    return { toggle, read, source };
+  }
+  function addDevice(ip = "") {
+    const row = node("fieldset", undefined, list);
+    node("legend", "设备", row);
+    const address = input(row, "BMC IP", ip);
+    const originalBmc = config.targets?.[ip]?.bmc;
+    const bmc = optionalAccount(row, "设备 BMC", "此 BMC 使用不同账号", originalBmc?.ssh || originalBmc?.redfish);
+    const originalOs = config.devices?.[ip]?.os_ip || "";
+    const osIp = input(row, "关联 OS IP", originalOs);
+    osIp.placeholder = "可选";
+    const os = optionalAccount(row, "设备 OS", "此 OS 使用不同账号", config.targets?.[originalOs]?.os?.ssh);
+    const entry = { address, bmc, osIp, os };
+    rows.push(entry);
+    const remove = node("button", "移除设备", row);
+    remove.className = "delete";
+    remove.type = "button";
+    remove.onclick = () => { rows.splice(rows.indexOf(entry), 1); row.remove(); };
+  }
+  initialHosts.forEach(addDevice);
+  const focus = state.page_session?.focus_target;
+  if (focus) {
+    if (!initialHosts.has(focus)) addDevice(focus);
+    devices.open = true;
+  }
+  const add = node("button", "添加设备", devices);
+  add.type = "button";
+  add.className = "add";
+  add.onclick = () => addDevice();
+  collect = () => {
+    const result = structuredClone(config);
+    result.schema_version = 1;
+    result.credentials = Object.fromEntries(Object.entries(credentials).map(([name, record]) =>
+      [name, { user: record.user || "", identity_file: record.identity_file || "", password: { action: "keep", source: name } }]));
+    result.defaults ||= {};
+    function reference(read, original) {
+      const value = read();
+      if (!value.user && value.password.action === "remove" && !value.identity_file && !original) return;
+      const old = credentials[original];
+      if (old && value.user === (old.user || "") && value.identity_file === (old.identity_file || "") && value.password.action === "keep") return original;
+      const name = "account-" + crypto.randomUUID();
+      result.credentials[name] = value;
+      return name;
+    }
+    const defaultBmc = reference(bmc, bmcSource);
+    const defaultOs = reference(os, osSource);
+    if (defaultBmc) result.defaults.bmc = { ssh: defaultBmc, redfish: defaultBmc };
+    if (defaultOs) result.defaults.os = { ...result.defaults.os, ssh: defaultOs };
+    result.targets ||= {};
+    result.devices = {};
+    for (const host of initialHosts) {
+      if (result.targets[host]) delete result.targets[host].bmc;
+      if (result.targets[host] && !Object.keys(result.targets[host]).length) delete result.targets[host];
+      const oldOs = config.devices?.[host]?.os_ip;
+      if (result.targets[oldOs]) delete result.targets[oldOs].os;
+      if (result.targets[oldOs] && !Object.keys(result.targets[oldOs]).length) delete result.targets[oldOs];
+    }
+    const used = new Set();
+    const osOverrides = new Set();
+    for (const row of rows) {
+      const host = row.address.value.trim();
+      const osHost = row.osIp.value.trim();
+      if (!host || used.has(host)) throw new Error("BMC IP 不能为空或重复。");
+      used.add(host);
+      result.targets[host] ||= {};
+      if (row.bmc.toggle.checked) {
+        const name = reference(row.bmc.read, row.bmc.source);
+        if (!name) throw new Error("请填写此设备的 BMC 账号。");
+        result.targets[host].bmc = { ssh: name, redfish: name };
+      }
+      if (osHost) result.devices[host] = { os_ip: osHost };
+      if (row.os.toggle.checked) {
+        if (!osHost || osOverrides.has(osHost)) throw new Error("关联 OS IP 不能为空，且不能重复设置账号。");
+        osOverrides.add(osHost);
+        const name = reference(row.os.read, row.os.source);
+        if (!name) throw new Error("请填写关联 OS 的账号。");
+        result.targets[osHost] ||= {};
+        result.targets[osHost].os = { ssh: name };
+      }
+    }
+    const referenced = new Set([result.defaults, ...Object.values(result.targets)].flatMap((purposes) => Object.values(purposes).flatMap(Object.values)));
+    for (const name of Object.keys(result.credentials)) {
+      if (name.startsWith("account-") && !referenced.has(name)) delete result.credentials[name];
+    }
+    return result;
+  };
+}
+
 function records(parent, config, conan = false) {
-  node("h3", conan ? "仓库账号" : "凭据记录", parent);
+  node("h3", conan ? "仓库账号" : "常用账号", parent);
   node(
     "p",
     conan
       ? "填写已存在的 Conan remote 名称。检查成功后，Conan 会更新当前用户的认证缓存。"
-      : "多个用途可以选择同一条凭据记录。IP 覆盖使用完整记录。",
+      : "保存一份账号，供多台设备使用。",
     parent,
   );
   const body = table(
@@ -157,15 +320,21 @@ function records(parent, config, conan = false) {
   const rows = [];
   function add(name = "", record = {}) {
     const row = node("tr", undefined, body);
+    row.className = "account-row";
+    body.closest("table").className = "accounts";
     const cells = Array.from({ length: conan ? 4 : 5 }, () =>
       node("td", undefined, row),
     );
     const n = input(cells[0], conan ? "Remote" : "名称", name);
     const user = input(cells[1], "用户名", record.user || "");
     const password = secret(cells[2], "密码", record.password_set, name);
-    const key = conan
-      ? null
-      : input(cells[3], "密钥文件", record.identity_file || "");
+    let key = null;
+    if (!conan) {
+      const advanced = node("details", undefined, cells[3]);
+      node("summary", "SSH 密钥", advanced);
+      key = input(advanced, "密钥文件", record.identity_file || "");
+      advanced.open = Boolean(record.identity_file);
+    }
     const remove = node("button", "删除", cells.at(-1));
     remove.type = "button";
     remove.className = "delete";
@@ -233,8 +402,11 @@ function renderTargets(config) {
     getRecords.reference(config.defaults?.os?.ssh),
   );
   references.push([bmcSsh, "未配置"], [redfish, "未配置"], [osSsh, "未配置"]);
-  node("h3", "按 IP 覆盖", parent);
-  const body = table(parent, [
+  const overrides = node("details", undefined, parent);
+  overrides.className = "overrides";
+  node("summary", "按 IP 使用不同账号", overrides);
+  node("p", "仅为账号不同的设备单独设置，其余设备使用全局默认。", overrides);
+  const body = table(overrides, [
     "目标 IP",
     "BMC SSH",
     "BMC Redfish",
@@ -281,7 +453,7 @@ function renderTargets(config) {
     };
   }
   Object.entries(config.targets || {}).forEach(([ip, value]) => add(ip, value));
-  const addButton = node("button", "添加 IP 覆盖", parent);
+  const addButton = node("button", "添加 IP 覆盖", overrides);
   addButton.type = "button";
   addButton.className = "add";
   addButton.onclick = () => add();
@@ -320,13 +492,14 @@ function renderTargets(config) {
       credentials: getRecords(),
       defaults: refs(bmcSsh.value, redfish.value, osSsh.value),
       targets,
+      ...(config.devices ? { devices: config.devices } : {}),
     };
   };
 }
 function renderKb(config) {
   const parent = $("fields");
   const grid = node("div", undefined, parent);
-  grid.className = "form-grid";
+  grid.className = "form-grid kb-grid";
   const user = input(grid, "openUBMC 账号", config.username || "");
   const password = secret(grid, "密码", config.password_set);
   const clientSecret = secret(grid, "OAuth 应用密钥", config.clientSecret_set);
@@ -466,24 +639,30 @@ function renderChecks() {
   }
 }
 function render() {
+  dirty = false;
   const current = state[kind];
   $("fields").replaceChildren();
   $("fields").oninput = null;
   const names = {
-    targets: ["BMC 与 OS", "先填写常用账号，再为不同设备设置 IP 覆盖。"],
+    targets: ["BMC 与 OS", "设置常用账号，设备连接时自动使用。"],
     kb: ["知识库", "配置独立的 openUBMC 知识库账号与授权应用。"],
     conan: ["Conan", "为已有的构建仓库保存账号并检查认证。"],
   };
   $("title").textContent = names[kind][0];
   $("subtitle").textContent = names[kind][1];
   $("saved-state").textContent = !current.saved
-    ? "未保存"
+    ? current.legacy_available ? "已有本机配置" : "未保存"
     : current.revision === current.active_revision
       ? "已保存并生效"
       : "有尚未生效的更改";
   $("source-path").textContent = current.source;
   $("import").hidden = !current.legacy_available;
-  if (kind === "targets") renderTargets(current.config);
+  $("account-mode").hidden = kind !== "targets";
+  $("account-mode").textContent = expertTargets ? "返回常用配置" : "高级账号管理";
+  if (kind === "targets") {
+    if (expertTargets) renderTargets(current.config);
+    else renderSimpleTargets(current.config);
+  }
   else if (kind === "kb") renderKb(current.config);
   else
     collect = (() => {
@@ -500,28 +679,43 @@ function render() {
       ),
     );
 }
-async function save(activate) {
+async function save() {
   const saved = await api("/api/save", {
     kind,
     expected_revision: state[kind].revision,
     config: collect(),
   });
   state[kind] = saved;
-  if (activate)
-    state[kind] = await api("/api/activate", {
-      kind,
-      revision: saved.revision,
-      expected_active_revision: saved.active_revision,
-    });
+  state[kind] = await api("/api/activate", {
+    kind,
+    revision: saved.revision,
+    expected_active_revision: saved.active_revision,
+  });
   render();
-  notice(
-    activate
-      ? "配置已生效，后续请求会使用当前配置。"
-      : "已保存。点击“保存并生效”后用于后续请求。",
-  );
+  notice("配置已生效，后续请求会使用当前配置。");
+  if (state.page_session?.wait_for_save && state.page_session.kind === kind) {
+    closed = true;
+    sessionStorage.removeItem("openubmc-configuration-session");
+    notice("配置已生效，可以回到原任务继续。连接检查结果以任务中的提示为准。");
+    document.querySelectorAll("input,select").forEach((e) => { e.disabled = true; });
+  }
 }
-$("save").onclick = () => action(() => save(false));
-$("activate").onclick = () => action(() => save(true));
+$("activate").onclick = () => action(save);
+$("account-mode").onclick = () => {
+  if (dirty && !confirm("有尚未保存的修改，放弃修改并切换？")) return;
+  if (expertTargets && separateBmcAccounts(state.targets.config)) {
+    notice("已有 SSH 与 Redfish 的独立账号。需要使用常用配置时，请先将两种协议选择为同一账号并保存。");
+    return;
+  }
+  expertTargets = !expertTargets;
+  render();
+};
+$("editor").addEventListener("input", () => {
+  dirty = true;
+  $("saved-state").textContent = "未保存的修改";
+});
+$("fields").addEventListener("click", (event) => { if (event.target.closest("button")) dirty = true; });
+window.addEventListener("beforeunload", (event) => { if (dirty && !closed) { event.preventDefault(); event.returnValue = ""; } });
 $("import").onclick = () =>
   action(async () => {
     state[kind] = await api("/api/import", {
@@ -529,12 +723,13 @@ $("import").onclick = () =>
       expected_revision: state[kind].revision,
     });
     render();
-    notice("已有配置已导入为待生效更改，原文件保留。");
+    notice("原始配置已导入，点击“保存”后生效。");
   });
 $("editor").onsubmit = (e) => e.preventDefault();
 document.querySelectorAll("[data-tab]").forEach(
   (button) =>
     (button.onclick = () => {
+      if (dirty && !confirm("有尚未保存的修改，放弃修改并切换？")) return;
       kind = button.dataset.tab;
       render();
       notice("");
@@ -542,11 +737,19 @@ document.querySelectorAll("[data-tab]").forEach(
 );
 action(async () => {
   state = await api("/api/state");
+  kind = state.page_session?.kind || "targets";
+  expertTargets = separateBmcAccounts(state.targets.config);
   $("environment").textContent =
     `${state.environment.platform} / ${state.environment.hostname}`;
   $("location").textContent = state.environment.config_home;
   render();
+  if (expertTargets) notice("已有 SSH 与 Redfish 的独立账号，已保留并打开高级账号管理。");
 });
+
+function separateBmcAccounts(config) {
+  return [config.defaults || {}, ...Object.values(config.targets || {})]
+    .some((entry) => entry.bmc?.ssh && entry.bmc?.redfish && entry.bmc.ssh !== entry.bmc.redfish);
+}
 
 $("finish").onclick = () =>
   action(async () => {

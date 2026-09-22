@@ -60,7 +60,7 @@ export function boundedReceipt(name, source, render) {
     if (typeof source?.response === "string") result.response_chars = source.response.length;
     if (Object.hasOwn(source, "references")) result.references = rows(source.references, 32, ["reference_id", "file_path"]);
   } else if (name === "openubmc_kb_status") {
-    result = fields(source, ["configured", "endpoint", "config_path", "detail", "pipeline", "counts"], ["pipeline", "counts"]);
+    result = fields(source, ["configured", "version", "endpoint", "config_path", "detail", "pipeline", "counts"], ["pipeline", "counts"]);
     if (Object.hasOwn(source, "pipeline")) {
       result.pipeline = fields(source.pipeline, ["busy", "job_name", "job_start", "docs", "batchs", "cur_batch", "request_pending", "latest_message", "history_messages", "history_total", "history_truncated"], ["history_messages"]);
       const history = source.pipeline.history_messages;

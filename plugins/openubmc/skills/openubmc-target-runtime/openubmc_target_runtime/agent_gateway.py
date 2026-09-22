@@ -671,6 +671,13 @@ def render_execute_turn_text(
             f"summary={_bounded_text(outcome.get('summary'), 256)}"
             f"{acceptance_text}."
         )
+        if _text(outcome.get("status")) == "partial":
+            fixed_lines.append(
+                "Partial "
+                f"verified_findings={len(outcome.get('verified_findings', [])) if isinstance(outcome.get('verified_findings'), list) else 0} "
+                f"remaining_work={len(outcome.get('remaining_work', [])) if isinstance(outcome.get('remaining_work'), list) else 0} "
+                f"blocked_by={len(outcome.get('blocked_by', [])) if isinstance(outcome.get('blocked_by'), list) else 0}."
+            )
     next_guidance = _text(value.get("next"))
     if next_guidance:
         fixed_lines.append(
@@ -1850,7 +1857,7 @@ class AgentGateway:
                 "code": (
                     "ScopeViolation"
                     if operation == "observe" and isinstance(exc, AgentPreflightError)
-                    else type(exc).__name__
+                    else str(getattr(exc, "code", type(exc).__name__))
                 ),
                 "message": _text(exc)[:1024],
             },

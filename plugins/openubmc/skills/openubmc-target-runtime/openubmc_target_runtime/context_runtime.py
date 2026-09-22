@@ -39,7 +39,7 @@ from .diagnostic_receipt import (
 )
 from .diagnosis_record import accepted_diagnosis_record
 from .effect_runner import EffectIntent, EffectSettlementMode, PreparedEffect
-from .evidence_store import EvidenceQuery
+from .evidence_store import EvidenceQuery, evidence_reference_target_ids
 from .mutation import (
     MutationAuthorizationDenied,
     MutationOperationConflict,
@@ -359,6 +359,14 @@ def _sanitize(value: object) -> object:
         sanitized: dict[str, object] = {}
         for key, item in value.items():
             name = str(key)
+            if name == _TASK_POLICY_FIELD and isinstance(item, Mapping):
+                try:
+                    sanitized[name] = (
+                        TaskAuthorizationPolicy.from_public_dict(item).to_public_dict()
+                    )
+                except (TypeError, ValueError):
+                    continue
+                continue
             if is_secret_key(name):
                 continue
             sanitized[name] = _sanitize(item)
@@ -372,19 +380,17 @@ def _sanitize(value: object) -> object:
     return redact_text(value)
 
 
-def _sanitize_runtime_inputs(value: object) -> object:
-    """Normalize reusable internal inputs without discarding connection values."""
+def _sanitize_mapping(value: Mapping[str, object]) -> dict[str, object]:
+    sanitized = _sanitize(value)
+    if not isinstance(sanitized, Mapping):
+        raise TypeError("sanitized mapping changed shape")
+    return dict(sanitized)
 
-    if isinstance(value, Mapping):
-        return {
-            str(key): _sanitize_runtime_inputs(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, (list, tuple)):
-        return [_sanitize_runtime_inputs(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
+
+def _sanitize_runtime_inputs(value: object) -> object:
+    """Retain reusable inputs while keeping inline secrets out of durable Cases."""
+
+    return _sanitize(value)
 
 
 def _strict_bool(
@@ -513,6 +519,7 @@ def _operation_identity_inputs(arguments: Mapping[str, object]) -> dict[str, obj
         "restart_scope",
         "ssh_host_key_policy",
         "target_id",
+        "targets",
         "verification_checks",
         "_minimum_target_epoch",
     }
@@ -527,6 +534,24 @@ class PendingCaseEvent:
     kind: str
     payload: Mapping[str, object]
     operation_id: str = ""
+
+
+@dataclass(frozen=True)
+class EvidenceTargetBinding:
+    target_id: str
+    target_address: str
+    operation_id: str
+    expected_product_version: str = ""
+    observed_product_version: str = ""
+
+    def to_public_dict(self) -> dict[str, str]:
+        return {
+            "target_id": self.target_id,
+            "target_address": self.target_address,
+            "operation_id": self.operation_id,
+            "expected_product_version": self.expected_product_version,
+            "observed_product_version": self.observed_product_version,
+        }
 
 
 @dataclass(frozen=True)
@@ -549,6 +574,12 @@ class EvidenceRef:
     workflow_step_id: str = ""
     workflow_attempt: int = 0
     parent_evidence_ids: tuple[str, ...] = ()
+    target_address: str = ""
+    operation: str = ""
+    operation_id: str = ""
+    expected_product_version: str = ""
+    observed_product_version: str = ""
+    target_bindings: tuple[EvidenceTargetBinding, ...] = ()
 
     def to_public_dict(self) -> dict[str, object]:
         return {
@@ -570,6 +601,14 @@ class EvidenceRef:
             "workflow_step_id": self.workflow_step_id,
             "workflow_attempt": self.workflow_attempt,
             "parent_evidence_ids": list(self.parent_evidence_ids),
+            "target_address": self.target_address,
+            "operation": self.operation,
+            "operation_id": self.operation_id,
+            "expected_product_version": self.expected_product_version,
+            "observed_product_version": self.observed_product_version,
+            "target_bindings": [
+                binding.to_public_dict() for binding in self.target_bindings
+            ],
         }
 
 
@@ -1350,6 +1389,12 @@ def project_case(
                 and int(current_gate.get("gate_version", 0)) == gate_version
             ):
                 projection["current_gate"] = {}
+            if (
+                isinstance(projection.get("run_outcome"), Mapping)
+                and str(projection["run_outcome"].get("status", "")) == "partial"
+            ):
+                projection["run_outcome"] = {}
+                projection["status"] = "open"
         elif kind == "RunCancelled":
             gate_id = str(payload.get("gate_id", ""))
             gate_version = int(payload.get("gate_version", 0))
@@ -1400,11 +1445,23 @@ def project_case(
         elif kind == "RunOutcomeRecorded":
             raw_outcome = payload.get("outcome")
             if isinstance(raw_outcome, Mapping):
-                projection["run_outcome"] = dict(raw_outcome)
+                outcome = dict(raw_outcome)
+                projection["run_outcome"] = outcome
                 projection["current_gate"] = {}
                 projection["current_incident"] = {}
-                projection["status"] = "terminal"
-                projection["next_actions"] = []
+                if str(outcome.get("status", "")) == "partial":
+                    projection["status"] = "partial"
+                    remaining = outcome.get("remaining_work", [])
+                    projection["next_actions"] = [
+                        str(item.get("summary", "resume the remaining work"))
+                        for item in remaining
+                        if isinstance(item, Mapping) and str(item.get("summary", "")).strip()
+                    ][:8]
+                    if not projection["next_actions"]:
+                        projection["next_actions"] = ["resume the Run to continue remaining work"]
+                else:
+                    projection["status"] = "terminal"
+                    projection["next_actions"] = []
         elif kind == "RunDecisionCommitted":
             decision = {
                 key: value
@@ -2277,18 +2334,19 @@ class InMemoryRuntimeRepository:
                 )
             now = self._clock()
             for item in pending:
+                sanitized_payload = _sanitize_mapping(item.payload)
                 revision = len(existing) + 1
                 existing.append(
                     {
                         "revision": revision,
                         "kind": item.kind,
                         "operation_id": item.operation_id,
-                        "payload": dict(item.payload),
+                        "payload": sanitized_payload,
                         "created_at": now,
                     }
                 )
                 if item.kind == "EvidenceAttached":
-                    reference = item.payload.get("evidence")
+                    reference = sanitized_payload.get("evidence")
                     if isinstance(reference, Mapping):
                         evidence_id = str(reference.get("evidence_id", ""))
                         if evidence_id:
@@ -2331,9 +2389,10 @@ class InMemoryRuntimeRepository:
     def complete_idempotency(
         self, case_id: str, key: str, receipt: Mapping[str, object]
     ) -> None:
+        sanitized_receipt = _sanitize_mapping(receipt)
         with self._lock:
             self._idempotency[(case_id, key)]["status"] = "completed"
-            self._idempotency[(case_id, key)]["receipt"] = dict(receipt)
+            self._idempotency[(case_id, key)]["receipt"] = sanitized_receipt
 
     def abandon_idempotency(self, case_id: str, key: str) -> None:
         with self._lock:
@@ -2410,7 +2469,7 @@ class InMemoryRuntimeRepository:
                 )
                 and (
                     not query.target_id
-                    or str(reference.get("target_id", "")) == query.target_id
+                    or query.target_id in evidence_reference_target_ids(reference)
                 )
                 and (
                     not query.producer
@@ -2762,6 +2821,7 @@ class SQLiteRuntimeRepository:
                 )
             now = self._clock()
             for offset, item in enumerate(pending, start=1):
+                sanitized_payload = _sanitize_mapping(item.payload)
                 connection.execute(
                     "INSERT INTO case_events "
                     "(case_id, revision, kind, operation_id, payload_json, created_at) "
@@ -2771,12 +2831,12 @@ class SQLiteRuntimeRepository:
                         current + offset,
                         item.kind,
                         item.operation_id,
-                        _json_bytes(dict(item.payload)).decode("utf-8"),
+                        _json_bytes(sanitized_payload).decode("utf-8"),
                         now,
                     ),
                 )
                 if item.kind == "EvidenceAttached":
-                    reference = item.payload.get("evidence")
+                    reference = sanitized_payload.get("evidence")
                     if isinstance(reference, Mapping):
                         evidence_id = str(reference.get("evidence_id", ""))
                         if evidence_id:
@@ -2874,12 +2934,13 @@ class SQLiteRuntimeRepository:
     def complete_idempotency(
         self, case_id: str, key: str, receipt: Mapping[str, object]
     ) -> None:
+        sanitized_receipt = _sanitize_mapping(receipt)
         with self._lock, self._connect() as connection:
             connection.execute(
                 "UPDATE idempotency SET status = 'completed', receipt_json = ?, "
                 "updated_at = ? WHERE case_id = ? AND key = ?",
                 (
-                    _json_bytes(dict(receipt)).decode("utf-8"),
+                    _json_bytes(sanitized_receipt).decode("utf-8"),
                     self._clock(),
                     case_id,
                     key,
@@ -2998,8 +3059,16 @@ class SQLiteRuntimeRepository:
             if value:
                 clauses.append(f"{column} = ?")
                 parameters.append(value)
+        if query.target_id:
+            clauses.append(
+                "(json_extract(reference_json, '$.target_id') = ? "
+                "OR EXISTS ("
+                "SELECT 1 FROM json_each(reference_json, '$.target_bindings') "
+                "AS target_binding WHERE "
+                "json_extract(target_binding.value, '$.target_id') = ?))"
+            )
+            parameters.extend((query.target_id, query.target_id))
         for path, value in (
-            ("$.target_id", query.target_id),
             ("$.producer", query.producer),
             ("$.workflow_definition_id", query.workflow_definition_id),
         ):
@@ -3961,6 +4030,134 @@ class ContextRuntime:
             self.repository.commit(case_id, expected_revision=0, events=(event,))
         )
 
+    @staticmethod
+    def _evidence_target_address(
+        projection: Mapping[str, object],
+        arguments: Mapping[str, object],
+        target_id: str,
+    ) -> str:
+        for item in projection.get("targets", []):
+            if (
+                isinstance(item, Mapping)
+                and str(item.get("target_id", "")) == target_id
+            ):
+                return str(item.get("address", "")).strip()
+        targets = ContextRuntime._targets(arguments)
+        for item in targets:
+            if str(item.get("target_id", "")) == target_id:
+                return str(item.get("address", "")).strip()
+        return ""
+
+    @staticmethod
+    def _evidence_version(
+        sources: Iterable[Mapping[str, object]],
+        names: tuple[str, ...],
+    ) -> str:
+        for source in sources:
+            for name in names:
+                value = source.get(name)
+                if isinstance(value, str) and 0 < len(value.strip()) <= 256:
+                    cooked = value.strip()
+                    if redact_text(cooked) == cooked:
+                        return cooked
+        return ""
+
+    @classmethod
+    def _evidence_target_bindings(
+        cls,
+        *,
+        descriptor: OperationDescriptor,
+        value: Mapping[str, object],
+        arguments: Mapping[str, object],
+        operation_id: str,
+        target_id: str,
+        target_address: str,
+        expected_product_version: str,
+        observed_product_version: str,
+    ) -> tuple[EvidenceTargetBinding, ...]:
+        requested_targets = cls._targets(arguments)
+        if descriptor.name != "upgrade_batch" and len(requested_targets) <= 1:
+            if not target_id and not target_address:
+                return ()
+            return (
+                EvidenceTargetBinding(
+                    target_id=target_id,
+                    target_address=target_address,
+                    operation_id=operation_id,
+                    expected_product_version=expected_product_version,
+                    observed_product_version=observed_product_version,
+                ),
+            )
+
+        result_targets = value.get("targets", [])
+        result_by_target = {
+            str(item.get("target_id", "")): item
+            for item in result_targets
+            if isinstance(item, Mapping) and item.get("target_id")
+        } if isinstance(result_targets, list) else {}
+        bindings: list[EvidenceTargetBinding] = []
+        for requested in requested_targets:
+            child_target_id = str(requested.get("target_id", "")).strip()
+            child_address = str(requested.get("address", "")).strip()
+            raw_child = result_by_target.get(child_target_id, {})
+            raw_child = raw_child if isinstance(raw_child, Mapping) else {}
+            child_result = raw_child.get("result", {})
+            child_result = (
+                child_result if isinstance(child_result, Mapping) else {}
+            )
+            child_verification = child_result.get("verification", {})
+            child_verification = (
+                child_verification
+                if isinstance(child_verification, Mapping)
+                else {}
+            )
+            raw_verification = raw_child.get("verification", {})
+            raw_verification = (
+                raw_verification
+                if isinstance(raw_verification, Mapping)
+                else {}
+            )
+            child_observed_version = cls._evidence_version(
+                (
+                    child_result,
+                    child_verification,
+                    raw_child,
+                    raw_verification,
+                ),
+                (
+                    "observed_product_version",
+                    "installed_version",
+                    "active_version",
+                    "firmware_version",
+                ),
+            )
+            raw_child_operation_id = (
+                raw_child.get(
+                    "operation_id",
+                    child_result.get("operation_id", operation_id),
+                )
+                if descriptor.name == "upgrade_batch"
+                else operation_id
+            )
+            child_operation_id = _safe_identifier(
+                raw_child_operation_id,
+                fallback=operation_id,
+            )
+            if redact_text(raw_child_operation_id) != str(
+                raw_child_operation_id or ""
+            ):
+                child_operation_id = operation_id
+            bindings.append(
+                EvidenceTargetBinding(
+                    target_id=child_target_id,
+                    target_address=child_address,
+                    operation_id=child_operation_id or operation_id,
+                    expected_product_version=expected_product_version,
+                    observed_product_version=child_observed_version,
+                )
+            )
+        return tuple(bindings)
+
     def _put_evidence(
         self,
         value: Mapping[str, object],
@@ -3983,8 +4180,42 @@ class ContextRuntime:
                 value.get("generation", arguments.get("target_epoch", "unknown")),
             )
         )
-        provenance = f"{descriptor.name}:{operation_id}"
         projection = self._load(case_id) or {}
+        target_address = self._evidence_target_address(
+            projection,
+            arguments,
+            target_id,
+        )
+        workflow_inputs = projection.get("workflow_inputs", {})
+        workflow_inputs = (
+            workflow_inputs if isinstance(workflow_inputs, Mapping) else {}
+        )
+        verification = value.get("verification", {})
+        verification = verification if isinstance(verification, Mapping) else {}
+        expected_product_version = self._evidence_version(
+            (arguments, workflow_inputs),
+            ("expected_product_version", "product_version"),
+        ) or self._evidence_version((value,), ("expected_product_version",))
+        observed_product_version = self._evidence_version(
+            (value, verification),
+            (
+                "observed_product_version",
+                "installed_version",
+                "active_version",
+                "firmware_version",
+            ),
+        )
+        target_bindings = self._evidence_target_bindings(
+            descriptor=descriptor,
+            value=value,
+            arguments=arguments,
+            operation_id=operation_id,
+            target_id=target_id,
+            target_address=target_address,
+            expected_product_version=expected_product_version,
+            observed_product_version=observed_product_version,
+        )
+        provenance = f"{descriptor.name}:{operation_id}"
         definition = projection.get("workflow_definition", {})
         definition = definition if isinstance(definition, Mapping) else {}
         operation = next(
@@ -4026,8 +4257,16 @@ class ContextRuntime:
                 "blob_id": blob_id,
                 "case_id": case_id,
                 "target_id": target_id,
+                "target_address": target_address,
                 "generation": generation,
                 "provenance": provenance,
+                "operation": descriptor.name,
+                "operation_id": operation_id,
+                "expected_product_version": expected_product_version,
+                "observed_product_version": observed_product_version,
+                "target_bindings": [
+                    binding.to_public_dict() for binding in target_bindings
+                ],
             }
         )
         return EvidenceRef(
@@ -4091,6 +4330,12 @@ class ContextRuntime:
                 )
             ),
             parent_evidence_ids=parent_evidence_ids,
+            target_address=target_address,
+            operation=descriptor.name,
+            operation_id=operation_id,
+            expected_product_version=expected_product_version,
+            observed_product_version=observed_product_version,
+            target_bindings=target_bindings,
         )
 
     def _envelope(
@@ -4432,14 +4677,124 @@ class ContextRuntime:
             reference: Mapping[str, object],
         ) -> Mapping[str, object] | None:
             resolved = reference
-            if not str(reference.get("blob_id", "")):
-                evidence_id = str(reference.get("evidence_id", ""))
+            evidence_id = str(reference.get("evidence_id", ""))
+            if evidence_id:
                 indexed = self.repository.evidence_reference(
                     str(projection.get("case_id", "")), evidence_id
                 )
                 if not isinstance(indexed, Mapping):
                     return None
                 resolved = indexed
+            elif not str(reference.get("blob_id", "")):
+                return None
+            case_id = str(projection.get("case_id", ""))
+            if str(resolved.get("case_id", "")) not in {"", case_id}:
+                return None
+            target_id = str(resolved.get("target_id", ""))
+            target_address = str(resolved.get("target_address", ""))
+            current_address = next(
+                (
+                    str(item.get("address", ""))
+                    for item in projection.get("targets", [])
+                    if isinstance(item, Mapping)
+                    and str(item.get("target_id", "")) == target_id
+                ),
+                "",
+            )
+            if target_id and target_address and not current_address:
+                return None
+            if target_address and current_address and target_address != current_address:
+                return None
+            workflow_inputs = projection.get("workflow_inputs", {})
+            workflow_inputs = (
+                workflow_inputs if isinstance(workflow_inputs, Mapping) else {}
+            )
+            current_version = str(workflow_inputs.get("product_version", ""))
+            expected_version = str(
+                resolved.get("expected_product_version", "")
+            )
+            if current_version and expected_version and current_version != expected_version:
+                return None
+            raw_target_bindings = resolved.get("target_bindings")
+            if isinstance(raw_target_bindings, list) and raw_target_bindings:
+                current_targets = {
+                    str(item.get("target_id", "")): str(
+                        item.get("address", "")
+                    )
+                    for item in projection.get("targets", [])
+                    if isinstance(item, Mapping) and item.get("target_id")
+                }
+                for raw_binding in raw_target_bindings:
+                    if not isinstance(raw_binding, Mapping):
+                        return None
+                    bound_target_id = str(raw_binding.get("target_id", ""))
+                    bound_target_address = str(
+                        raw_binding.get("target_address", "")
+                    )
+                    if (
+                        not bound_target_id
+                        or bound_target_id not in current_targets
+                        or not bound_target_address
+                        or bound_target_address
+                        != current_targets[bound_target_id]
+                    ):
+                        return None
+                    bound_expected_version = str(
+                        raw_binding.get("expected_product_version", "")
+                    )
+                    bound_observed_version = str(
+                        raw_binding.get("observed_product_version", "")
+                    )
+                    if (
+                        current_version
+                        and bound_expected_version
+                        and current_version != bound_expected_version
+                    ):
+                        return None
+                    if (
+                        bound_expected_version
+                        and bound_observed_version
+                        and bound_expected_version != bound_observed_version
+                    ):
+                        return None
+            evidence_id = str(
+                resolved.get("evidence_id", reference.get("evidence_id", ""))
+            )
+            producing_operation = next(
+                (
+                    item
+                    for item in projection.get("operations", [])
+                    if isinstance(item, Mapping)
+                    and evidence_id
+                    and evidence_id in item.get("evidence_ids", [])
+                ),
+                None,
+            )
+            if isinstance(producing_operation, Mapping):
+                resolved_operation = str(resolved.get("operation", ""))
+                resolved_operation_id = str(resolved.get("operation_id", ""))
+                if (
+                    resolved_operation
+                    and resolved_operation
+                    != str(producing_operation.get("operation", ""))
+                ):
+                    return None
+                if (
+                    resolved_operation_id
+                    and resolved_operation_id
+                    != str(producing_operation.get("operation_id", ""))
+                ):
+                    return None
+                started_at = producing_operation.get("started_at")
+                observed_at = resolved.get("observed_at")
+                if (
+                    isinstance(started_at, (int, float))
+                    and not isinstance(started_at, bool)
+                    and isinstance(observed_at, (int, float))
+                    and not isinstance(observed_at, bool)
+                    and float(observed_at) < float(started_at)
+                ):
+                    return None
             raw = self.blob_repository.read(
                 str(resolved.get("blob_id", "")),
                 offset=0,
@@ -4589,7 +4944,7 @@ class ContextRuntime:
             projection,
             terminal_status=(
                 outcome_status
-                if outcome_status == "cancelled"
+                if outcome_status in {"partial", "cancelled", "failed", "completed"}
                 else case_terminal_status(projection)
             ),
             include_bundle=self._closeout_bundle_enabled(projection),
@@ -7235,6 +7590,11 @@ class ContextRuntime:
         limit: int = DEFAULT_EVIDENCE_READ_BYTES,
         target_id: str = "",
         generation: str = "",
+        target_address: str = "",
+        expected_product_version: str = "",
+        observed_product_version: str = "",
+        operation: str = "",
+        operation_id: str = "",
     ) -> dict[str, object]:
         if offset < 0:
             raise ValueError("evidence offset must be non-negative")
@@ -7250,14 +7610,95 @@ class ContextRuntime:
             raise EvidenceUnavailable(
                 f"evidence {evidence_id} does not belong to case {case_id}"
             )
-        if target_id and str(reference.get("target_id", "")) != target_id:
-            raise EvidenceUnavailable(
-                f"evidence {evidence_id} target does not match {target_id}"
-            )
         if generation and str(reference.get("generation", "")) != generation:
             raise EvidenceUnavailable(
                 f"evidence {evidence_id} generation does not match {generation}"
             )
+        if operation and str(reference.get("operation", "")) != operation:
+            raise EvidenceUnavailable(
+                f"evidence {evidence_id} operation does not match {operation}"
+            )
+        raw_target_bindings = reference.get("target_bindings")
+        target_bindings = [
+            item
+            for item in raw_target_bindings
+            if isinstance(item, Mapping)
+        ] if isinstance(raw_target_bindings, list) else []
+        binding_selectors = (
+            ("target_id", target_id, "target"),
+            ("target_address", target_address, "address"),
+            (
+                "expected_product_version",
+                expected_product_version,
+                "expected product version",
+            ),
+            (
+                "observed_product_version",
+                observed_product_version,
+                "observed product version",
+            ),
+            ("operation_id", operation_id, "operation id"),
+        )
+        target_scoped_selectors = any(
+            expected
+            for field, expected, _label in binding_selectors
+            if field != "operation_id"
+        )
+        binding_constraints = [
+            (field, expected, label)
+            for field, expected, label in binding_selectors
+            if expected
+            and (
+                (bool(target_bindings) and target_scoped_selectors)
+                or str(reference.get(field, "")) != expected
+            )
+        ]
+        selected_bindings = target_bindings
+        if binding_constraints:
+            selected_bindings = [
+                binding
+                for binding in target_bindings
+                if all(
+                    str(binding.get(field, "")) == expected
+                    for field, expected, _label in binding_constraints
+                )
+            ]
+            if not selected_bindings:
+                field, expected, label = next(
+                    (
+                        constraint
+                        for constraint in binding_constraints
+                        if not any(
+                            str(binding.get(constraint[0], ""))
+                            == constraint[1]
+                            for binding in target_bindings
+                        )
+                    ),
+                    binding_constraints[-1],
+                )
+                raise EvidenceUnavailable(
+                    f"evidence {evidence_id} {label} does not match {expected}"
+                )
+        bindings_to_validate = selected_bindings or [reference]
+        current_targets = {
+            str(item.get("target_id", "")): str(item.get("address", ""))
+            for item in projection.get("targets", [])
+            if isinstance(item, Mapping) and item.get("target_id")
+        }
+        for binding in bindings_to_validate:
+            bound_target_id = str(binding.get("target_id", ""))
+            bound_address = str(binding.get("target_address", ""))
+            if not bound_target_id or not bound_address:
+                continue
+            current_address = current_targets.get(bound_target_id, "")
+            if not current_address:
+                raise EvidenceUnavailable(
+                    f"evidence {evidence_id} target no longer exists in the Run"
+                )
+            if bound_address != current_address:
+                raise EvidenceUnavailable(
+                    f"evidence {evidence_id} address no longer matches the Run target"
+                )
         body = self.blob_repository.read(
             str(reference["blob_id"]), offset=offset, limit=limit
         )
@@ -7349,12 +7790,25 @@ class ContextRuntime:
             evidence_type, fallback=""
         ) != evidence_type:
             raise ValueError("evidence_type must be a safe identifier")
+        target_address = str(selected_target.get("address", "")).strip()
+        workflow_inputs = projection.get("workflow_inputs", {})
+        workflow_inputs = (
+            workflow_inputs if isinstance(workflow_inputs, Mapping) else {}
+        )
+        expected_product_version = self._evidence_version(
+            (workflow_inputs,),
+            ("product_version",),
+        )
         evidence_id = "evidence-" + _fingerprint(
             {
                 "run_id": run_id,
                 "target_id": target_id,
+                "target_address": target_address,
                 "evidence_type": evidence_type,
                 "blob_id": normalized_sha256,
+                "operation": "operator-evidence-attach",
+                "operation_id": operation_id,
+                "expected_product_version": expected_product_version,
             }
         )[:32]
         existing = self.repository.evidence_reference(run_id, evidence_id)
@@ -7414,6 +7868,20 @@ class ContextRuntime:
             "workflow_step_id": "",
             "workflow_attempt": 0,
             "parent_evidence_ids": [],
+            "target_address": target_address,
+            "operation": "operator-evidence-attach",
+            "operation_id": operation_id,
+            "expected_product_version": expected_product_version,
+            "observed_product_version": "",
+            "target_bindings": [
+                {
+                    "target_id": target_id,
+                    "target_address": target_address,
+                    "operation_id": operation_id,
+                    "expected_product_version": expected_product_version,
+                    "observed_product_version": "",
+                }
+            ],
         }
         return {
             "run_id": run_id,
@@ -7429,6 +7897,7 @@ class ContextRuntime:
         target: str,
         artifact_ref: Mapping[str, object],
         evidence_type: str,
+        operation_id: str,
     ) -> dict[str, object]:
         """Bind one ArtifactStore-owned package to an open Run Evidence fact."""
 
@@ -7445,6 +7914,11 @@ class ContextRuntime:
         reference_value = dict(artifact_ref)
         digest = str(reference_value.get("digest", "")).removeprefix("sha256:")
         size = reference_value.get("size")
+        target_address = str(selected_target.get("address", "")).strip()
+        expected_product_version = self._evidence_version(
+            (reference_value,),
+            ("version",),
+        )
         if (
             len(digest) != 64
             or any(character not in "0123456789abcdef" for character in digest)
@@ -7460,8 +7934,12 @@ class ContextRuntime:
             {
                 "run_id": run_id,
                 "target_id": target_id,
+                "target_address": target_address,
                 "evidence_type": evidence_type,
                 "artifact_digest": digest,
+                "operation": "operator-evidence-attach",
+                "operation_id": operation_id,
+                "expected_product_version": expected_product_version,
             }
         )[:32]
         existing = self.repository.evidence_reference(run_id, evidence_id)
@@ -7517,6 +7995,20 @@ class ContextRuntime:
             "workflow_step_id": "",
             "workflow_attempt": 0,
             "parent_evidence_ids": [],
+            "target_address": target_address,
+            "operation": "operator-evidence-attach",
+            "operation_id": operation_id,
+            "expected_product_version": expected_product_version,
+            "observed_product_version": "",
+            "target_bindings": [
+                {
+                    "target_id": target_id,
+                    "target_address": target_address,
+                    "operation_id": operation_id,
+                    "expected_product_version": expected_product_version,
+                    "observed_product_version": "",
+                }
+            ],
         }
         return {
             "run_id": run_id,
@@ -7665,14 +8157,10 @@ class ContextRuntime:
             self.blob_repository.size_bytes() + self.repository.size_bytes()
             > self.storage_soft_limit_bytes
         ):
+            candidates = []
             for meta in sorted(
                 self.repository.metadata(), key=lambda item: float(item["last_access"])
             ):
-                if (
-                    self.blob_repository.size_bytes() + self.repository.size_bytes()
-                    <= self.storage_soft_limit_bytes
-                ):
-                    break
                 if str(meta.get("status")) not in {"terminal", "closed"}:
                     continue
                 projection = self._load(str(meta["case_id"]))
@@ -7680,6 +8168,19 @@ class ContextRuntime:
                     projection
                 )["workflow_complete"]:
                     continue
+                candidates.append(meta)
+            for meta in candidates:
+                # Keep the newest terminal case available for resume even when
+                # one case alone is larger than the soft limit.  This preserves
+                # LRU access semantics and avoids deleting the only recovery
+                # record under pressure.
+                if len(candidates) - evicted_cases <= 1:
+                    break
+                if (
+                    self.blob_repository.size_bytes() + self.repository.size_bytes()
+                    <= self.storage_soft_limit_bytes
+                ):
+                    break
                 self.forget_case(str(meta["case_id"]))
                 evicted_cases += 1
         gc_result = self.garbage_collect_evidence()

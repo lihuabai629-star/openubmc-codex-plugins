@@ -22,7 +22,8 @@ function normalizeToken(value) {
 export function createTokenOwner(config) {
   return createHash("sha256")
     .update(JSON.stringify([config.userCenterUrl, config.oauthBaseUrl, config.lightragUrl,
-      config.clientId, config.username, config.configurationRevision || null]))
+      config.clientId, config.username, config.configurationRevision || null,
+      config.knowledgeMcpVersion || null]))
     .digest("hex");
 }
 

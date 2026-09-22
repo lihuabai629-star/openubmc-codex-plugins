@@ -10,6 +10,8 @@ import threading
 import time
 import uuid
 
+from .redaction import require_secret_free
+
 
 TASK_CONTEXT_SCHEMA = "openubmc-target-runtime.task-context"
 TASK_CONTEXT_VERSION = 1
@@ -123,6 +125,7 @@ class TaskContextStore:
         created_at: float,
         accessed_at: float,
     ) -> bytes:
+        require_secret_free(context, boundary="task context persistence")
         document = {
             "schema": TASK_CONTEXT_SCHEMA,
             "version": TASK_CONTEXT_VERSION,

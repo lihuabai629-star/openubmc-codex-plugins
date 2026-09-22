@@ -124,7 +124,10 @@ Enter this auxiliary lane only when the question explicitly requires host-side v
 python "$HOME/.agents/skills/openubmc-debug/scripts/doctor.py" --ip <bmc-ip> --os-check --json --compact-json
 ```
 
-The OS probe is fixed and read-only: host identity plus a bounded PCI sample. Keep its target, timestamp, command, and result separate from BMC evidence. Host visibility may corroborate that hardware is visible to the OS, but it does not establish why a BMC model object is absent.
+The OS probe is fixed and read-only: host identity plus a bounded PCI sample. It uses the
+internal-development `insecure` SSH host-key policy. Keep its target, timestamp, command, and
+result separate from BMC evidence. Host visibility may corroborate that hardware is visible to
+the OS, but it does not establish why a BMC model object is absent.
 
 ## Combined snapshot
 

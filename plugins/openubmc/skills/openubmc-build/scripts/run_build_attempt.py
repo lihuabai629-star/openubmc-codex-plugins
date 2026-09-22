@@ -38,6 +38,7 @@ from create_build_plan import (
     file_identity,
     output_resource_lock,
     semantic_plan_id,
+    validate_routing_binding,
     skill_digest,
     workspace_identity,
 )
@@ -125,6 +126,7 @@ def load_plan(path: Path) -> tuple[Path, dict[str, object], str]:
             "after Plan creation"
         )
     executable = document.get("runner", {}).get("executable", {})
+    validate_routing_binding(document)
     if executable:
         current_executable = file_identity(Path(str(executable["path"])))
         for field in ("path", "sha256", "size", "mode"):

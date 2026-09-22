@@ -917,6 +917,12 @@ class MutationJournal:
                 firmware_id=str(identity_value.get("firmware_id", "")),
                 reboot_anchor=str(identity_value.get("reboot_anchor", "")),
                 target_clock=str(identity_value.get("target_clock", "")),
+                target_clock_epoch=str(
+                    identity_value.get("target_clock_epoch", "")
+                ),
+                target_uptime_seconds=str(
+                    identity_value.get("target_uptime_seconds", "")
+                ),
             )
         try:
             raw_expected_missing = value.get("expected_missing")
@@ -1064,6 +1070,12 @@ class MutationRecoveryEvidence:
                 firmware_id=str(identity_value.get("firmware_id", "")),
                 reboot_anchor=str(identity_value.get("reboot_anchor", "")),
                 target_clock=str(identity_value.get("target_clock", "")),
+                target_clock_epoch=str(
+                    identity_value.get("target_clock_epoch", "")
+                ),
+                target_uptime_seconds=str(
+                    identity_value.get("target_uptime_seconds", "")
+                ),
             )
         raw_safety_blockers = value.get("safety_blockers", [])
         if not isinstance(raw_safety_blockers, (list, tuple)) or any(

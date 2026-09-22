@@ -27,6 +27,7 @@ from deploy_live_file import (  # type: ignore  # noqa: E402
     LivePatchError,
     run_health_check,
     validate_remote_path,
+    verification_command_error,
 )
 from runtime_cli import RuntimeMutationFailed, run_runtime_mutation  # noqa: E402
 
@@ -184,6 +185,10 @@ def _runtime_rollback(args: argparse.Namespace, plan: dict[str, Any]) -> int:
     ]
     health = None
     if args.health_check or args.verify_mdbctl:
+        target_identity = journal.get("target_identity", {})
+        target_identity = (
+            target_identity if isinstance(target_identity, dict) else {}
+        )
         health = run_health_check(
             args.ip,
             args.health_timeout,
@@ -191,6 +196,10 @@ def _runtime_rollback(args: argparse.Namespace, plan: dict[str, Any]) -> int:
             args.verify_mdbctl,
             transcript,
             args.json,
+            str(target_identity.get("target_clock", "")),
+            str(target_identity.get("reboot_anchor", "")),
+            str(target_identity.get("target_clock_epoch", "")),
+            str(target_identity.get("target_uptime_seconds", "")),
         )
     ok = health is None or bool(health.get("ok"))
     mount_mode = str(journal.get("root_mount_mode", ""))
@@ -277,6 +286,14 @@ def main() -> int:
     if args.apply and args.restart_scope is None:
         emit(
             {"ok": False, "error": "--apply requires explicit --restart-scope <none|skynet>"},
+            args.json,
+            error=True,
+        )
+        return 2
+    verification_error = verification_command_error(args.verify_mdbctl)
+    if args.apply and verification_error:
+        emit(
+            {"ok": False, "error": verification_error},
             args.json,
             error=True,
         )

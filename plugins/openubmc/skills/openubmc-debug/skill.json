@@ -74,6 +74,7 @@
     "scripts/collect_logs.py",
     "scripts/compare_remote.py",
     "scripts/doctor.py",
+    "scripts/execution_router.py",
     "scripts/diagnostic_advice.py",
     "scripts/mdbctl_remote.py",
     "scripts/package_skill.py",

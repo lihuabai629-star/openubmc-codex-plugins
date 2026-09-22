@@ -50,6 +50,7 @@ python3 <skill-dir>/scripts/create_build_plan.py \
   --product-version <target-version> \
   --baseline-resolved-lock <absolute-pre-build-package.lock> \
   --resolved-lock-path <absolute-built-package.lock> \
+  --lua-checker <absolute-version-matched-luac> \
   --rootfs-service 'ssdp=104:104=/opt/bmc/apps/ssdp,/run/ssdp' \
   --allowed-dependency-change <component> \
   --cwd <manifest-root> \
@@ -57,7 +58,7 @@ python3 <skill-dir>/scripts/create_build_plan.py \
   -- <exact command and arguments>
 ```
 
-Repeat `--workspace`, `--rootfs-service`, and `--allowed-dependency-change` when needed. Each service entry binds one UID/GID set to only its comma-separated paths; `/opt/bmc/apps` and `/opt/bmc/drivers` are added to that service. Before Plan creation, copy the selected known-good complete resolved lock to immutable evidence outside the checkout and pass that copy as `--baseline-resolved-lock`; never point it at the output file the build will overwrite. The lock must contain `requires`, `build_requires`, `python_requires`, and `config_requires`. If no trustworthy complete baseline exists, stop instead of substituting the smaller community lock. Use `--resolved-lock-path` or `--conan-home` when repository defaults do not identify those inputs.
+Repeat `--workspace`, `--rootfs-service`, and `--allowed-dependency-change` when needed. Each service entry binds one UID/GID set to only its comma-separated paths; `/opt/bmc/apps` and `/opt/bmc/drivers` are added to that service. `--lua-checker` must name an executable regular file for the Lua version used by the product. Its content identity is frozen in the Plan. The Lua gate scans `/opt/bmc/apps` and `/opt/bmc/drivers` by default; add repeated `--rootfs-lua-root /absolute/image/path` only when the product installs Lua elsewhere. Before Plan creation, copy the selected known-good complete resolved lock to immutable evidence outside the checkout and pass that copy as `--baseline-resolved-lock`; never point it at the output file the build will overwrite. The lock must contain `requires`, `build_requires`, `python_requires`, and `config_requires`. If no trustworthy complete baseline exists, stop instead of substituting the smaller community lock. Use `--resolved-lock-path` or `--conan-home` when repository defaults do not identify those inputs.
 
 Product Plan creation fails when `build/<community>.lock` is missing. Do not rename or substitute a different community lock implicitly. This file is a frozen community/product input; it is not the complete dependency baseline. `--baseline-resolved-lock` must point to a separately captured full resolved graph with the same four role lists as the built lock.
 
@@ -97,7 +98,7 @@ python3 <skill-dir>/scripts/finalize_product_attempt.py \
   --attempt-state <attempt>/state.json
 ```
 
-The finalizer reacquires the same Plan, checkout, and output locks; verifies current outputs still equal `outputs_after`; requires the HPM, final ext4 image, and built resolved lock each to have been absent before the Attempt or to have a different SHA-256 afterward; recomputes both gates; reads `/etc/version.json` from the final image; writes verification and metadata; then checks freshness again before releasing the locks. mtime, ctime, or inode changes with identical bytes do not satisfy freshness. Previous standalone gate reports cannot authorize acceptance. One Attempt has one immutable terminal finalization; use a new Attempt for another build/finalization cycle.
+The finalizer reacquires the same Plan, checkout, and output locks; verifies current outputs still equal `outputs_after`; requires the HPM, final ext4 image, and built resolved lock each to have been absent before the Attempt or to have a different SHA-256 afterward; recomputes the dependency, image-access, and Lua syntax gates; reads `/etc/version.json` from the final image; writes verification and metadata; then checks freshness again before releasing the locks. mtime, ctime, or inode changes with identical bytes do not satisfy freshness. Previous standalone gate reports cannot authorize acceptance. One Attempt has one immutable terminal finalization; use a new Attempt for another build/finalization cycle.
 
 If checkout content, argv, or `runner.execution_contract_sha256` changed, create a new Plan instead of weakening the check. A differing full-Skill provenance digest alone is not runtime drift.
 

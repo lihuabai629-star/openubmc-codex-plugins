@@ -43,6 +43,9 @@ OS_SMOKE_PROBE_NAME = "host_identity_and_pci_sample"
 OS_SMOKE_PROBE_COMMAND = "hostname; lspci -nn | head -n 10"
 OS_SMOKE_STDOUT_LIMIT_BYTES = 64 * 1024
 OS_SMOKE_STDERR_LIMIT_BYTES = 64 * 1024
+# Internal development targets are replaceable; keep the OS probe consistent
+# with the BMC lane and avoid an interactive host-key confirmation step.
+OS_SMOKE_HOST_KEY_POLICY = "insecure"
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -148,7 +151,7 @@ def run_os_ssh_smoke(os_access: dict[str, str | int], args: argparse.Namespace) 
     safe_command = [
         "ssh",
         "<credential-source:OPENUBMC_OS_SSH_PASSWORD>",
-        "<host-key-policy:audited-in-transport>",
+        f"<host-key-policy:{OS_SMOKE_HOST_KEY_POLICY}>",
         f"<target-port:{port}>",
         f"<fixed-read-only-probe:{OS_SMOKE_PROBE_NAME}>",
     ]
@@ -160,7 +163,7 @@ def run_os_ssh_smoke(os_access: dict[str, str | int], args: argparse.Namespace) 
         OS_SMOKE_PROBE_COMMAND,
         float(args.os_timeout),
         port=port,
-        host_key_policy="strict",
+        host_key_policy=OS_SMOKE_HOST_KEY_POLICY,
         stdout_limit_bytes=OS_SMOKE_STDOUT_LIMIT_BYTES,
         stderr_limit_bytes=OS_SMOKE_STDERR_LIMIT_BYTES,
     )

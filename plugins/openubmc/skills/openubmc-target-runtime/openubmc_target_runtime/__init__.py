@@ -140,6 +140,14 @@ from .closeout import (
     case_terminal_status,
     render_markdown,
 )
+from .delivery_stage import DELIVERY_STAGES, assess_delivery_stages, identity_split
+from .terminal_delivery import (
+    FinalAnswerRecord,
+    TerminalAnswerError,
+    TerminalAnswerStore,
+    qualify_terminal_answer,
+    render_final_answer,
+)
 from .credential_file import (
     ALLOWED_CREDENTIAL_KEYS,
     CREDENTIALS_FILE_MAX_BYTES,
@@ -520,6 +528,14 @@ __all__ = [
     "build_closeout_bundle",
     "case_terminal_status",
     "render_markdown",
+    "DELIVERY_STAGES",
+    "assess_delivery_stages",
+    "identity_split",
+    "FinalAnswerRecord",
+    "TerminalAnswerError",
+    "TerminalAnswerStore",
+    "qualify_terminal_answer",
+    "render_final_answer",
     "OperationCatalog",
     "OperationCatalogError",
     "OperationDescriptor",

@@ -2,22 +2,22 @@
   "behavior": {
     "artifacts": {
       "passed": true,
-      "seconds": 4.576,
+      "seconds": 4.544,
       "tests": 4
     },
     "build": {
       "passed": true,
-      "seconds": 1.114,
+      "seconds": 0.984,
       "tests": 6
     },
     "credentials": {
       "passed": true,
-      "seconds": 0.917,
+      "seconds": 0.873,
       "tests": 9
     },
     "doctor": {
       "passed": true,
-      "seconds": 3.226,
+      "seconds": 3.114,
       "tests": 5
     },
     "kb_loader": {
@@ -26,35 +26,35 @@
     },
     "logs": {
       "passed": true,
-      "seconds": 0.11,
+      "seconds": 0.119,
       "tests": 3
     },
     "migration": {
       "passed": true,
-      "seconds": 6.614,
+      "seconds": 6.607,
       "tests": 15
     },
     "python_entrypoints": {
       "passed": true,
-      "seconds": 29.5,
+      "seconds": 30.326,
       "tests": 11
     },
     "ssh": {
       "passed": true,
-      "seconds": 4.638,
+      "seconds": 4.582,
       "tests": 4
     },
     "upgrade": {
       "passed": true,
-      "seconds": 5.758,
+      "seconds": 5.831,
       "tests": 2
     }
   },
   "cold_dependencies": {
     "passed": true,
-    "seconds": 25.183
+    "seconds": 18.203
   },
-  "content_digest": "f68a4b0769c503d2f51f51952db7831875b233b3b0bee05a38fe49f39d94f800",
+  "content_digest": "7e3cc6c9f3b7724ed213ec01374b32f75247086570dfb6f05be1e4b14a5138ea",
   "dependency_locks": {
     "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2"
@@ -71,7 +71,8 @@
         "openubmc_kb_list",
         "openubmc_kb_query",
         "openubmc_kb_status"
-      ]
+      ],
+      "version_matches_package": true
     },
     "runtime": {
       "ok": true,
@@ -83,7 +84,8 @@
       "tools": [
         "execute",
         "observe"
-      ]
+      ],
+      "version_matches_package": true
     }
   },
   "ordinary_python_cli_before_mcp": true,
@@ -99,6 +101,6 @@
   "remote_business_qualification": "not_run",
   "runtime_shutdown_verified": true,
   "schema": "openubmc.public-behavior.v1",
-  "source_commit": "382dc9b8caa24b23fe35d28a46d25372748ab624",
-  "version": "2.0.14"
+  "source_commit": "a74379b493fa4e169e1a139c5e8dd823549d7ac2",
+  "version": "2.0.15"
 }

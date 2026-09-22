@@ -274,7 +274,12 @@ def activate(archive: Path, archive_sha: str, home: Path, codex: Path) -> dict:
         module = types.ModuleType('verified_plugin_migration')
         exec(compile(files['scripts/plugin_install.py'], '<verified-migration>', 'exec'), module.__dict__)
         paths = [item['path'] for item in json.loads(files['workflow.json'])['skills']]
-        plan, migration_before, migration_after = module.plan(home, paths, codex)
+        plan, migration_before, migration_after = module.activation_plan(
+            home,
+            paths,
+            codex,
+            target_plugin='openubmc@'+name,
+        )
         if migration_before != config_before:
             raise ValueError('Codex configuration changed while planning')
         journal = store/'transactions'/uuid.uuid4().hex

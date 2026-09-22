@@ -22,6 +22,10 @@ from _cli_common import resolve_telnet_credentials
 from _debug_dump import build_debug_dumper
 from _json_common import build_json_payload as build_common_json_payload
 TS_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
+BOOT_ID_RE = re.compile(
+    r"^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+)
 LOG_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 UTC_OFFSET_RE = re.compile(r"^([+-])(\d{2})(\d{2})$")
 NUMBERED_LOG_LINE_RE = re.compile(r"^([1-9][0-9]*):(.*)$")
@@ -124,6 +128,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--since-boot", action="store_true", help="Filter lines since last boot")
     parser.add_argument(
+        "--since-time",
+        default="",
+        help="Filter timestamped lines at or after YYYY-MM-DD HH:MM:SS",
+    )
+    parser.add_argument(
         "--grep",
         default="",
         help="Comma-separated keywords; only keep lines containing any keyword (case-insensitive)",
@@ -167,6 +176,49 @@ def get_boot_time_str(tn, command_timeout: int = 30) -> str | None:
     if not re.match(r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", boot_str):
         return None
     return boot_str
+
+
+def get_boot_id(tn, command_timeout: int = 30) -> str | None:
+    result = run_cmd_result(
+        tn,
+        "cat /proc/sys/kernel/random/boot_id",
+        timeout=command_timeout,
+    )
+    if not result.ok:
+        return None
+    value = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    return value.lower() if BOOT_ID_RE.fullmatch(value) else None
+
+
+def get_target_clock(tn, command_timeout: int = 30) -> str | None:
+    result = run_cmd_result(
+        tn,
+        "date '+%Y-%m-%d %H:%M:%S'",
+        timeout=command_timeout,
+    )
+    if not result.ok:
+        return None
+    value = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else ""
+    return value if TS_RE.fullmatch(value) else None
+
+
+def get_clock_continuity_sample(
+    tn, command_timeout: int = 30
+) -> tuple[str | None, str | None]:
+    result = run_cmd_result(
+        tn,
+        "date +%s; cut -d' ' -f1 /proc/uptime",
+        timeout=command_timeout,
+    )
+    lines = result.stdout.strip().splitlines() if result.ok else []
+    if len(lines) != 2:
+        return None, None
+    epoch, uptime = lines
+    if re.fullmatch(r"[0-9]+", epoch) is None:
+        epoch = ""
+    if re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", uptime) is None:
+        uptime = ""
+    return epoch or None, uptime or None
 
 
 def parse_utc_offset_minutes(raw: str) -> int | None:
@@ -620,12 +672,17 @@ def build_json_payload(
     logs: list[str],
     keywords: list[str],
     boot_time: str | None,
+    boot_id: str | None,
+    target_clock: str | None,
+    target_clock_epoch: str | None,
+    target_uptime_seconds: str | None,
     utc_offset_minutes: int | None,
     warnings: list[str],
     entries: list[dict[str, object]],
     error: str = "",
     written_files: list[str] | None = None,
 ) -> dict[str, object]:
+    since_time = str(getattr(args, "since_time", ""))
     payload = build_common_json_payload(
         tool="collect_logs",
         ip=args.ip,
@@ -638,6 +695,7 @@ def build_json_payload(
             "logs_requested": logs,
             "keywords": keywords,
             "since_boot_requested": args.since_boot,
+            "since_time_requested": since_time,
             "lines": args.lines,
             "max_bytes": args.max_bytes,
             "include_rotated": args.include_rotated,
@@ -647,8 +705,15 @@ def build_json_payload(
         },
         result={
             "boot_time": boot_time,
+            "boot_id": boot_id,
+            "target_clock": target_clock,
+            "target_clock_epoch": target_clock_epoch,
+            "target_uptime_seconds": target_uptime_seconds,
             "utc_offset_minutes": utc_offset_minutes,
             "since_boot_applied": bool(args.since_boot and boot_time),
+            "effective_since_time": max(
+                value for value in (boot_time or "", since_time) if value
+            ) if (boot_time or since_time) else "",
             "entries": entries,
             "written_files": written_files or [],
         },
@@ -662,7 +727,12 @@ def build_json_payload(
             "logs_requested": logs,
             "keywords": keywords,
             "since_boot_requested": args.since_boot,
+            "since_time_requested": since_time,
             "boot_time": boot_time,
+            "boot_id": boot_id,
+            "target_clock": target_clock,
+            "target_clock_epoch": target_clock_epoch,
+            "target_uptime_seconds": target_uptime_seconds,
             "utc_offset_minutes": utc_offset_minutes,
             "warnings": warnings,
             "entries": entries,
@@ -692,6 +762,8 @@ def main(
     _session=None,
 ) -> int:
     args = _args or parse_args()
+    if not hasattr(args, "since_time"):
+        args.since_time = ""
     if args.lines < 1:
         raise SystemExit("--lines must be positive")
     if args.rotated_limit < 1:
@@ -712,6 +784,10 @@ def main(
         raise SystemExit("Telnet timeouts must be positive")
     if args.telnet_port < 1 or args.telnet_port > 65535:
         raise SystemExit("--telnet-port must be between 1 and 65535")
+    if args.since_time and re.fullmatch(
+        r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}", args.since_time
+    ) is None:
+        raise SystemExit("--since-time must use YYYY-MM-DD HH:MM:SS")
     logs = validate_log_names(
         [item.strip() for item in args.logs.split(",") if item.strip()]
     )
@@ -743,6 +819,7 @@ def main(
                 "rotated_limit": args.rotated_limit,
                 "max_bytes": args.max_bytes,
                 "since_boot": args.since_boot,
+                "since_time": args.since_time,
                 "keywords": list(keywords),
             },
             credential_loader=lambda: resolve_telnet_credentials(args),
@@ -798,6 +875,10 @@ def main(
                     logs=logs,
                     keywords=keywords,
                     boot_time=None,
+                    boot_id=None,
+                    target_clock=None,
+                    target_clock_epoch=None,
+                    target_uptime_seconds=None,
                     utc_offset_minutes=None,
                     warnings=[],
                     entries=[],
@@ -808,6 +889,10 @@ def main(
         print(f"[ERROR] {raw_error}", file=sys.stderr)
         return returncode
     boot_str: str | None = None
+    boot_id: str | None = None
+    target_clock: str | None = None
+    target_clock_epoch: str | None = None
+    target_uptime_seconds: str | None = None
     utc_offset_minutes: int | None = None
     try:
         utc_offset_minutes = get_utc_offset_minutes(tn, args.command_timeout)
@@ -818,10 +903,31 @@ def main(
             if args.since_boot
             else None
         )
+        boot_id = get_boot_id(tn, args.command_timeout) if args.since_boot else None
+        target_clock = (
+            get_target_clock(tn, args.command_timeout)
+            if args.since_boot or args.since_time
+            else None
+        )
+        if args.since_boot or args.since_time:
+            target_clock_epoch, target_uptime_seconds = (
+                get_clock_continuity_sample(tn, args.command_timeout)
+            )
         if args.since_boot and not boot_str:
             warnings.append("since_boot_unavailable")
             if not args.json:
                 print("[WARN] Cannot compute boot time; --since-boot ignored", file=sys.stderr)
+        if args.since_boot and not boot_id:
+            warnings.append("boot_id_unavailable")
+        if (args.since_boot or args.since_time) and not target_clock:
+            warnings.append("target_clock_unavailable")
+        if (args.since_boot or args.since_time) and (
+            not target_clock_epoch or not target_uptime_seconds
+        ):
+            warnings.append("clock_continuity_sample_unavailable")
+        effective_since = max(
+            value for value in (boot_str or "", args.since_time) if value
+        ) if (boot_str or args.since_time) else None
         for base in logs:
             files = list_log_files(
                 tn,
@@ -846,7 +952,7 @@ def main(
                         keyword_batches = keyword_batches_for_log(
                             normalized_path,
                             args.lines,
-                            boot_str,
+                            effective_since,
                             keywords,
                             max_bytes=args.max_bytes,
                         )
@@ -865,7 +971,7 @@ def main(
                             cmd = build_log_read_cmd(
                                 normalized_path,
                                 args.lines,
-                                boot_str,
+                                effective_since,
                                 keyword_batch,
                                 number_lines=bool(keywords),
                                 max_bytes=remaining_bytes,
@@ -958,7 +1064,7 @@ def main(
                 filtered_lines: list[str] = []
                 filtered_line_numbers: list[int | None] = []
                 for index, line in enumerate(raw_lines):
-                    if filter_lines([line], boot_str, keywords):
+                    if filter_lines([line], effective_since, keywords):
                         filtered_lines.append(line)
                         filtered_line_numbers.append(
                             line_numbers[index] if index < len(line_numbers) else None
@@ -972,7 +1078,7 @@ def main(
                     else (
                         build_truncated_message(reported_path, args.max_bytes)
                         if truncated
-                        else build_empty_message(reported_path, boot_str, keywords)
+                        else build_empty_message(reported_path, effective_since, keywords)
                     )
                 )
                 lines = "\n".join(raw_lines).splitlines()
@@ -1041,6 +1147,10 @@ def main(
                     logs=logs,
                     keywords=keywords,
                     boot_time=boot_str,
+                    boot_id=boot_id,
+                    target_clock=target_clock,
+                    target_clock_epoch=target_clock_epoch,
+                    target_uptime_seconds=target_uptime_seconds,
                     utc_offset_minutes=utc_offset_minutes,
                     warnings=warnings,
                     entries=entries,
@@ -1070,6 +1180,10 @@ def main(
                 logs=logs,
                 keywords=keywords,
                 boot_time=boot_str,
+                boot_id=boot_id,
+                target_clock=target_clock,
+                target_clock_epoch=target_clock_epoch,
+                target_uptime_seconds=target_uptime_seconds,
                 utc_offset_minutes=utc_offset_minutes,
                 warnings=warnings,
                 entries=entries,

@@ -19,6 +19,7 @@ from pathlib import Path
 import re
 import tempfile
 import tomllib
+from typing import NamedTuple
 import uuid
 
 
@@ -140,15 +141,10 @@ def removal_changes(before: bytes, after: bytes, links: list[dict]) -> dict:
             'plugins': [], 'links': sorted(item['path'] for item in links)}
 
 
-def override_plan(home: Path, codex_root: Path, target_plugin: str) -> tuple[dict, bytes, bytes]:
-    """Remove only recognizable native-cache launch overrides, never arbitrary MCPs."""
+def recognized_override_servers(document: dict, codex_root: Path, target_plugin: str) -> set[str]:
+    """Identify only standard launchers rooted in the selected native cache."""
     if not re.fullmatch(r'openubmc@[A-Za-z0-9_-]+', target_plugin):
         raise ValueError('override repair requires an openubmc marketplace plugin')
-    config = codex_root/'config.toml'
-    if config.is_symlink():
-        raise ValueError('managed configuration files must not be symbolic links')
-    before = config.read_bytes() if config.is_file() else b''
-    document = tomllib.loads(before.decode())
     selected = set()
     cache = codex_root/'plugins/cache'/target_plugin.split('@')[1]/'openubmc'
     for name, capability in [('openubmc-target-runtime', 'runtime'), ('openubmc-kb', 'kb')]:
@@ -182,6 +178,17 @@ def override_plan(home: Path, codex_root: Path, target_plugin: str) -> tuple[dic
         selected.add(name)
     if selected and document.get('plugins', {}).get(target_plugin, {}).get('enabled') is not True:
         raise ValueError('enable the selected native plugin before repairing overrides')
+    return selected
+
+
+def override_plan(home: Path, codex_root: Path, target_plugin: str) -> tuple[dict, bytes, bytes]:
+    """Remove only recognizable native-cache launch overrides, never arbitrary MCPs."""
+    config = codex_root/'config.toml'
+    if config.is_symlink():
+        raise ValueError('managed configuration files must not be symbolic links')
+    before = config.read_bytes() if config.is_file() else b''
+    document = tomllib.loads(before.decode())
+    selected = recognized_override_servers(document, codex_root, target_plugin)
     after = migration_config(before.decode(), selected, set()).encode()
     record = {'schema': 'openubmc.plugin-migration.v1', 'home': str(home), 'codex_home': str(codex_root),
               'before_digest': digest(before), 'after_digest': digest(after), 'links': [],
@@ -190,32 +197,69 @@ def override_plan(home: Path, codex_root: Path, target_plugin: str) -> tuple[dic
     return record, before, after
 
 
-def plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
-         mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public') -> tuple[dict, bytes, bytes]:
-    if mode not in {'remove', 'disable-only', 'repair-overrides'}:
-        raise ValueError('invalid migration mode')
-    codex_root = (codex_home or home/'.codex').resolve()
-    if mode == 'repair-overrides':
-        return override_plan(home, codex_root, target_plugin)
+def legacy_owned_servers(document: dict, state: dict) -> set[str]:
+    owned = set()
+    for name, field in (('openubmc-target-runtime', 'runtime_mcp'), ('openubmc-kb', 'mcp')):
+        current = document.get('mcp_servers', {}).get(name)
+        owner = state.get(field, {}).get('codex', {})
+        if (current is not None and owner.get('created_entry')
+                and current.get('command') == owner.get('command')
+                and current.get('args', []) == owner.get('args', [])):
+            owned.add(name)
+    return owned
+
+
+class PlanSnapshot(NamedTuple):
+    config: Path
+    state_bytes: bytes
+    state: dict
+    before: bytes
+    document: dict
+
+
+def load_plan_snapshot(home: Path, codex_root: Path) -> PlanSnapshot:
     config = codex_root/'config.toml'
     state_path = home/'.config/openubmc/environment-state.json'
     if config.is_symlink() or state_path.is_symlink():
         raise ValueError('managed configuration files must not be symbolic links')
     state_bytes = state_path.read_bytes() if state_path.is_file() else b''
-    state = json.loads(state_bytes) if state_bytes else {}
     before = config.read_bytes() if config.is_file() else b''
-    document = tomllib.loads(before.decode())
+    return PlanSnapshot(
+        config=config,
+        state_bytes=state_bytes,
+        state=json.loads(state_bytes) if state_bytes else {},
+        before=before,
+        document=tomllib.loads(before.decode()),
+    )
+
+
+def _plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
+          mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public',
+          activation_overrides: frozenset[str] = frozenset(),
+          snapshot: PlanSnapshot | None = None) -> tuple[dict, bytes, bytes]:
+    if mode not in {'remove', 'disable-only', 'repair-overrides'}:
+        raise ValueError('invalid migration mode')
+    codex_root = (codex_home or home/'.codex').resolve()
+    if mode == 'repair-overrides':
+        return override_plan(home, codex_root, target_plugin)
+    snapshot = snapshot or load_plan_snapshot(home, codex_root)
+    config = snapshot.config
+    state_bytes = snapshot.state_bytes
+    state = snapshot.state
+    before = snapshot.before
+    document = snapshot.document
+    legacy_servers = legacy_owned_servers(document, state)
     owned_servers = set()
-    for name, field in (('openubmc-target-runtime', 'runtime_mcp'), ('openubmc-kb', 'mcp')):
+    for name in ('openubmc-target-runtime', 'openubmc-kb'):
         current = document.get('mcp_servers', {}).get(name)
         if current is None:
             continue
+        if name in activation_overrides or name in legacy_servers:
+            owned_servers.add(name)
+            continue
         if mode == 'disable-only' and current.get('enabled') is False:
             continue
-        owner = state.get(field, {}).get('codex', {})
-        if not owner.get('created_entry') or current.get('command') != owner.get('command') or current.get('args', []) != owner.get('args', []):
-            raise ValueError('MCP configuration is not owned by the legacy installer: '+name)
-        owned_servers.add(name)
+        raise ValueError('MCP configuration is not owned by the legacy installer: '+name)
     source = state.get('source_root')
     targets = set(state.get('codex_skill_center', {}).get('targets', []))
     if source:
@@ -253,6 +297,32 @@ def plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
               'config_existed': config.is_file(), 'status': 'prepared', 'mode': mode, 'changes': changes,
               'ownership_state_digest': digest(state_bytes), 'target_plugin': target_plugin}
     return record, before, after
+
+
+def plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
+         mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public') -> tuple[dict, bytes, bytes]:
+    return _plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
+
+
+def activation_plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
+                    target_plugin: str = 'openubmc@openubmc-public') -> tuple[dict, bytes, bytes]:
+    """Compose legacy migration with recognized native-cache override repair."""
+    codex_root = (codex_home or home/'.codex').resolve()
+    snapshot = load_plan_snapshot(home, codex_root)
+    probe_document = copy.deepcopy(snapshot.document)
+    probe_servers = probe_document.get('mcp_servers', {})
+    for name in legacy_owned_servers(snapshot.document, snapshot.state):
+        probe_servers.pop(name, None)
+    probe_document.setdefault('plugins', {}).setdefault(target_plugin, {})['enabled'] = True
+    overrides = recognized_override_servers(probe_document, codex_root, target_plugin)
+    return _plan(
+        home,
+        skill_paths,
+        codex_root,
+        target_plugin=target_plugin,
+        activation_overrides=frozenset(overrides),
+        snapshot=snapshot,
+    )
 
 
 def validate_ownership_state(home: Path, record: dict) -> None:

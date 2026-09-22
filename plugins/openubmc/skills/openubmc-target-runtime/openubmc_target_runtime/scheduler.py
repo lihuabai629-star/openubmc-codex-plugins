@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
+from contextvars import copy_context
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import os
@@ -9,6 +10,8 @@ import statistics
 import threading
 import time
 from typing import Callable, Generic, TypeVar
+
+from .redaction import redact_text
 
 
 TargetT = TypeVar("TargetT")
@@ -138,7 +141,7 @@ class FairTargetScheduler:
                     started_at=started_at,
                     completed_at=_utc_now(),
                     error_code=type(exc).__name__,
-                    error=str(exc),
+                    error=redact_text(exc),
                 )
             with completion_lock:
                 completion_order.append(index)
@@ -153,7 +156,9 @@ class FairTargetScheduler:
             def fill_window() -> None:
                 nonlocal next_index, peak_inflight
                 while next_index < len(targets) and len(futures) < budget:
+                    request_context = copy_context()
                     future = executor.submit(
+                        request_context.run,
                         run_one,
                         next_index,
                         targets[next_index],

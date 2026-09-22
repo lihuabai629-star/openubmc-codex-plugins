@@ -247,6 +247,15 @@ class _RuntimeOperatorPort:
                 limit=int(arguments.get("limit", 65536)),
                 target_id=str(arguments.get("target_id", "")),
                 generation=str(arguments.get("generation", "")),
+                target_address=str(arguments.get("target_address", "")),
+                expected_product_version=str(
+                    arguments.get("expected_product_version", "")
+                ),
+                observed_product_version=str(
+                    arguments.get("observed_product_version", "")
+                ),
+                operation=str(arguments.get("operation", "")),
+                operation_id=str(arguments.get("operation_id", "")),
             )
             return self.wrap_read(
                 value,
@@ -304,6 +313,7 @@ class _RuntimeOperatorPort:
                     target=artifact_target,
                     artifact_ref=artifact_ref.to_public_dict(),
                     evidence_type=evidence_type,
+                    operation_id=operation_id,
                 )
             else:
                 prepared = self._context_runtime.prepare_file_evidence(

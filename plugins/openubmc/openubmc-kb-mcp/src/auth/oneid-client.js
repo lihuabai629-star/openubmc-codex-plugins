@@ -15,6 +15,14 @@ export class CaptchaRequiredError extends Error {
   }
 }
 
+export class ReLoginRequiredError extends Error {
+  constructor() {
+    super("openUBMC KB session expired; sign in again in the local configuration page");
+    this.name = "ReLoginRequiredError";
+    this.code = "KB_RELOGIN_REQUIRED";
+  }
+}
+
 function unwrap(value) {
   return value?.data?.data ?? value?.data ?? value;
 }
@@ -33,6 +41,10 @@ async function responseJson(response, operation) {
     const suffix = typeof detail === "string" && detail.trim() ? `: ${detail.trim().slice(0, 200)}` : "";
     const error = new Error(`${operation} failed with HTTP ${response.status}${suffix}`);
     error.status = response.status;
+    error.operation = operation;
+    error.upstreamCode = typeof value?.error === "string"
+      ? value.error
+      : typeof value?.error_code === "string" ? value.error_code : undefined;
     throw error;
   }
   return value;
@@ -77,8 +89,13 @@ export class OneIdClient {
   }
 
   async clearToken() {
+    return this.invalidateAccessToken();
+  }
+
+  async invalidateAccessToken(accessToken) {
     await this.loadCachedToken();
-    this.token = this.token?.refreshToken
+    if (!this.token || (accessToken && this.token.accessToken !== accessToken)) return;
+    this.token = this.token.refreshToken
       ? { refreshToken: this.token.refreshToken, expiresAt: 0 }
       : undefined;
     if (this.token) await this.tokenStore.save(this.token);
@@ -136,7 +153,16 @@ export class OneIdClient {
       } catch (error) {
         if (signal?.aborted) throw signal.reason;
         if (error?.code === "KB_RESPONSE_TOO_LARGE") throw error;
-        this.token = previous;
+        const invalidRefresh = error?.operation === "OAuth token refresh"
+          && (error.status === 401
+            || (error.status === 400 && ["invalid_grant", "invalid_token", "invalid_refresh_token"]
+              .includes(error.upstreamCode)));
+        if (invalidRefresh) {
+          this.token = undefined;
+          await this.tokenStore.clear();
+          throw new ReLoginRequiredError();
+        }
+        throw error;
       }
     }
 

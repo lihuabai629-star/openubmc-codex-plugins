@@ -21,6 +21,7 @@ from implementation:
 - temporary runtime replacement -> `openubmc-live-patch`;
 - offline dump or log-bundle-only analysis -> `openubmc-log-analyzer`.
 
+
 ## Choose `observe` or `execute`
 
 Use the default `openubmc-target-runtime` MCP through its semantic Agent Interface:
@@ -149,8 +150,8 @@ business acceptance.
 
 ## Read-only invariants
 
-- Keep all remote actions read-only. Never restart services, mutate properties, upload, upgrade,
-  replace files, or invoke arbitrary methods from this Skill.
+- Keep all remote actions read-only: no restart, mutation, upload, upgrade, replacement, or
+  arbitrary method. BMC SSH and `doctor.py --os-check` use `insecure`.
 - Bound object trees, logs, files, source searches, deadlines, and output. Preserve timestamps and
   relevant excerpts.
 - Treat current alarm reads as current state and historical event APIs as history.

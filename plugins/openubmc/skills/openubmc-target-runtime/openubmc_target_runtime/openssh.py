@@ -104,31 +104,30 @@ class OpenSshControlMasterTransport:
             raise OpenSshUnavailable(
                 "sshpass not found; install it or use key-based authentication"
             )
-        return ["sshpass", "-e"]
+        return ["sshpass", "-d", "0"]
 
     @staticmethod
     def _sanitized_environment() -> dict[str, str]:
-        environment = dict(os.environ)
-        for name in (
-            "OPENUBMC_SSH_PASSWORD",
-            "OPENUBMC_TELNET_PASSWORD",
-            "OPENUBMC_OS_SSH_PASSWORD",
-            "OPENUBMC_REDFISH_PASSWORD",
-            "REDFISH_PASSWORD",
-            "SSHPASS",
-        ):
-            environment.pop(name, None)
-        return environment
+        allowed = {
+            "PATH",
+            "HOME",
+            "USER",
+            "LOGNAME",
+            "LANG",
+            "LC_ALL",
+            "LC_CTYPE",
+            "TERM",
+            "TMPDIR",
+            "SSH_AUTH_SOCK",
+        }
+        return {name: value for name, value in os.environ.items() if name in allowed}
 
     @classmethod
     def _environment(
         cls,
-        credentials: ResolvedSshCredentials,
+        _credentials: ResolvedSshCredentials,
     ) -> dict[str, str]:
-        environment = cls._sanitized_environment()
-        if credentials.password:
-            environment["SSHPASS"] = credentials.password
-        return environment
+        return cls._sanitized_environment()
 
     def _connection_options(self, master: OpenSshMaster) -> list[str]:
         options = [
@@ -186,6 +185,7 @@ class OpenSshControlMasterTransport:
                 text=True,
                 timeout=self.connect_timeout,
                 env=self._environment(credentials),
+                input=(credentials.password + "\n" if credentials.password else None),
             )
         except subprocess.TimeoutExpired:
             result = subprocess.CompletedProcess(

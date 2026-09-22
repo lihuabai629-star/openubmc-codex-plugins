@@ -88,6 +88,11 @@ from .mutation import (
 )
 from .operation_contracts import DEFAULT_OPERATION_CONTRACTS, LOG_BUNDLE_STAGE_CONTRACTS
 from .task_context import TaskContextStore
+from .redaction import (
+    register_secret_values,
+    require_secret_free,
+    secret_redaction_request,
+)
 from .orchestration import (
     DeliveryStrategy,
     DeveloperEditIntent,
@@ -1244,14 +1249,17 @@ class _OrchestratedMcpTask:
                     if selected == "auto" and arguments.get("remote_command"):
                         selected = "ssh"
                     transports = (selected,) if selected in {"ssh", "redfish"} else ("ssh", "redfish")
-                return self._credential_resolver.resolve_local_values(
+                values = self._credential_resolver.resolve_local_values(
                     task_id=self.task_id, host=str(arguments["ip"]), arguments=arguments,
                     transports=transports,
                 )
-            if self._credential_values is None:
-                self._credential_values = self._credential_resolver.resolve_legacy_values(task_id=self.task_id, loader=load_selected_credentials_file)
-                self._credential_parse_count += 1
-            return dict(self._credential_values)
+            else:
+                if self._credential_values is None:
+                    self._credential_values = self._credential_resolver.resolve_legacy_values(task_id=self.task_id, loader=load_selected_credentials_file)
+                    self._credential_parse_count += 1
+                values = dict(self._credential_values)
+            register_secret_values(values)
+            return values
 
     def record_workflow_summary(
         self,
@@ -2897,6 +2905,11 @@ class RuntimeMcpService:
                             },
                             "target_id": {"type": "string"},
                             "generation": {"type": "string"},
+                            "target_address": {"type": "string"},
+                            "expected_product_version": {"type": "string"},
+                            "observed_product_version": {"type": "string"},
+                            "operation": {"type": "string"},
+                            "operation_id": {"type": "string"},
                         },
                         "additionalProperties": False,
                     },
@@ -3061,6 +3074,7 @@ class RuntimeMcpService:
         return self.interface_catalog.tool_definitions()
 
     @configuration_request()
+    @secret_redaction_request()
     def call_exposed_tool(
         self,
         name: str,
@@ -3073,6 +3087,7 @@ class RuntimeMcpService:
 
         if not isinstance(arguments, Mapping):
             raise TypeError("tool arguments must be an object")
+        require_secret_free(arguments, boundary="MCP tool arguments")
         if self.interface_profile == "agent":
             bounded_request(arguments)
         if self.interface_profile == "agent":
@@ -3190,6 +3205,7 @@ class RuntimeMcpService:
         return value
 
     @configuration_request()
+    @secret_redaction_request()
     def call_tool(
         self,
         name: str,

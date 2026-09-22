@@ -376,6 +376,8 @@ class TargetIdentity:
     firmware_id: str = ""
     reboot_anchor: str = ""
     target_clock: str = ""
+    target_clock_epoch: str = ""
+    target_uptime_seconds: str = ""
 
     def change_kind(self, current: "TargetIdentity") -> "TargetIdentityChange":
         for field_name in ("product_id", "machine_id"):
@@ -413,6 +415,8 @@ class TargetIdentity:
             "firmware_id": self.firmware_id,
             "reboot_anchor": self.reboot_anchor,
             "target_clock": self.target_clock,
+            "target_clock_epoch": self.target_clock_epoch,
+            "target_uptime_seconds": self.target_uptime_seconds,
         }
 
 

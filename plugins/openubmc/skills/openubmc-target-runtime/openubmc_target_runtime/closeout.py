@@ -7,7 +7,7 @@ it does not maintain a second workflow state machine.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import json
 
@@ -18,6 +18,7 @@ from .delivery import (
     DeliveryRecord,
     DeploymentIdentity,
 )
+from .delivery_stage import assess_delivery_stages, identity_split
 from .diagnostic_receipt import (
     DiagnosticReceipt,
     DiagnosticStatus,
@@ -55,7 +56,7 @@ def case_terminal_status(projection: Mapping[str, object]) -> str:
         if str(operation.get("operation", "")) in _WORKFLOW_CONTROL_OPERATIONS:
             continue
         status = str(operation.get("status", "")).strip().lower()
-        if status in {"completed", "failed", "cancelled", "blocked"}:
+        if status in {"completed", "failed", "cancelled", "partial", "blocked"}:
             return status
     return "completed"
 
@@ -520,6 +521,8 @@ class CaseCloseout:
     receipts: tuple[StageReceipt, ...]
     delivery_records: tuple[DeliveryRecord, ...]
     reasons: tuple[str, ...]
+    delivery_stage: Mapping[str, object] = field(default_factory=dict)
+    artifact_identities: Mapping[str, object] = field(default_factory=dict)
 
     @property
     def fingerprint(self) -> str:
@@ -546,6 +549,8 @@ class CaseCloseout:
                 item.to_public_dict() for item in self.delivery_records
             ],
             "reasons": list(self.reasons),
+            "delivery_stage": dict(self.delivery_stage or {}),
+            "artifact_identities": dict(self.artifact_identities or {}),
         }
         if include_fingerprint:
             value["fingerprint"] = self.fingerprint
@@ -1641,7 +1646,7 @@ def aggregate_case_closeout(
     ]
     def operation_evidence(
         operation: Mapping[str, object],
-    ) -> tuple[list[str], Mapping[str, object], bool]:
+    ) -> tuple[list[str], Mapping[str, object], bool, Mapping[str, object]]:
         evidence_ids = [
             str(item)
             for item in operation.get("evidence_ids", [])
@@ -1651,13 +1656,192 @@ def aggregate_case_closeout(
             reference = evidence_refs.get(
                 evidence_ids[-1], {"evidence_id": evidence_ids[-1]}
             )
+            inputs = _mapping(operation.get("inputs"))
+            operation_name = str(operation.get("operation", ""))
+            target_id = str(
+                inputs.get("target_id", operation.get("target_id", ""))
+            )
+            target_address = next(
+                (
+                    str(target.get("address", ""))
+                    for target in projection.get("targets", [])
+                    if isinstance(target, Mapping)
+                    and str(target.get("target_id", "")) == target_id
+                ),
+                "",
+            )
+            if (
+                str(reference.get("target_id", ""))
+                and str(reference.get("target_address", ""))
+                and not target_address
+            ):
+                return evidence_ids, {}, False, reference
+            workflow_inputs = _mapping(projection.get("workflow_inputs"))
+            expected_product_version = str(
+                inputs.get(
+                    "product_version",
+                    workflow_inputs.get("product_version", ""),
+                )
+            )
+            bindings = (
+                ("case_id", str(projection.get("case_id", ""))),
+                ("operation", operation_name),
+                ("operation_id", str(operation.get("operation_id", ""))),
+                ("target_id", target_id),
+                ("target_address", target_address),
+                ("expected_product_version", expected_product_version),
+            )
+            if any(
+                str(reference.get(field, ""))
+                and expected
+                and str(reference.get(field, "")) != expected
+                for field, expected in bindings
+            ):
+                return evidence_ids, {}, False, reference
+            reference_expected_version = str(
+                reference.get("expected_product_version", "")
+            )
+            reference_observed_version = str(
+                reference.get("observed_product_version", "")
+            )
+            if (
+                reference_expected_version
+                and reference_observed_version
+                and reference_expected_version != reference_observed_version
+            ):
+                return evidence_ids, {}, False, reference
+            started_at = operation.get("started_at")
+            observed_at = reference.get("observed_at")
+            if (
+                isinstance(started_at, (int, float))
+                and not isinstance(started_at, bool)
+                and isinstance(observed_at, (int, float))
+                and not isinstance(observed_at, bool)
+                and float(observed_at) < float(started_at)
+            ):
+                return evidence_ids, {}, False, reference
             try:
                 loaded = evidence_reader(reference)
             except Exception:
                 loaded = None
             if isinstance(loaded, Mapping):
-                return evidence_ids, loaded, True
-        return evidence_ids, {}, False
+                return evidence_ids, loaded, True, reference
+        return evidence_ids, {}, False, {}
+
+    def evidence_observed_product_version(value: Mapping[str, object]) -> str:
+        verification = _mapping(value.get("verification"))
+        for source in (value, verification):
+            for name in (
+                "observed_product_version",
+                "installed_version",
+                "active_version",
+                "firmware_version",
+            ):
+                candidate = source.get(name)
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
+        return ""
+
+    def target_binding_matches(
+        reference: Mapping[str, object],
+        *,
+        target_id: str,
+        operation_id: str,
+        expected_product_version: str,
+        observed_product_version: str,
+    ) -> bool:
+        raw_bindings = reference.get("target_bindings")
+        if not isinstance(raw_bindings, list):
+            return True
+        target_address = next(
+            (
+                str(target.get("address", ""))
+                for target in projection.get("targets", [])
+                if isinstance(target, Mapping)
+                and str(target.get("target_id", "")) == target_id
+            ),
+            "",
+        )
+        if not target_address:
+            return False
+        for raw_binding in raw_bindings:
+            if not isinstance(raw_binding, Mapping):
+                continue
+            expected = (
+                ("target_id", target_id),
+                ("target_address", target_address),
+                ("operation_id", operation_id),
+                ("expected_product_version", expected_product_version),
+                ("observed_product_version", observed_product_version),
+            )
+            if all(
+                not expected_value
+                or str(raw_binding.get(field, "")) == expected_value
+                for field, expected_value in expected
+            ) and str(raw_binding.get("target_id", "")) == target_id:
+                bound_expected = str(
+                    raw_binding.get("expected_product_version", "")
+                )
+                bound_observed = str(
+                    raw_binding.get("observed_product_version", "")
+                )
+                return not (
+                    bound_expected
+                    and bound_observed
+                    and bound_expected != bound_observed
+                )
+        return False
+
+    def multi_target_bindings_match(
+        reference: Mapping[str, object],
+        *,
+        targets: list[object],
+        operation_id: str,
+        expected_product_version: str,
+    ) -> bool:
+        raw_bindings = reference.get("target_bindings")
+        if not isinstance(raw_bindings, list):
+            return True
+        bindings = {
+            str(item.get("target_id", "")): item
+            for item in raw_bindings
+            if isinstance(item, Mapping) and item.get("target_id")
+        }
+        expected_target_ids = {
+            str(item.get("target_id", ""))
+            for item in targets
+            if isinstance(item, Mapping) and item.get("target_id")
+        }
+        if not expected_target_ids or set(bindings) != expected_target_ids:
+            return False
+        current_targets = {
+            str(item.get("target_id", "")): str(item.get("address", ""))
+            for item in projection.get("targets", [])
+            if isinstance(item, Mapping) and item.get("target_id")
+        }
+        for target_id in expected_target_ids:
+            binding = bindings[target_id]
+            current_address = current_targets.get(target_id, "")
+            if (
+                not current_address
+                or str(binding.get("target_address", "")) != current_address
+                or str(binding.get("operation_id", "")) != operation_id
+                or (
+                    expected_product_version
+                    and str(binding.get("expected_product_version", ""))
+                    != expected_product_version
+                )
+            ):
+                return False
+            bound_expected = str(binding.get("expected_product_version", ""))
+            bound_observed = str(binding.get("observed_product_version", ""))
+            if (
+                bound_expected
+                and bound_observed
+                and bound_expected != bound_observed
+            ):
+                return False
+        return True
 
     selected_operation_stages = {**_OPERATION_STAGES, **dict(operation_stages or {})}
     operation_receipts: dict[tuple[str, str], tuple[int, StageReceipt]] = {}
@@ -1666,8 +1850,45 @@ def aggregate_case_closeout(
         stage = selected_operation_stages.get(operation_name)
         if stage is None:
             continue
-        operation_evidence_ids, value, evidence_loaded = operation_evidence(operation)
+        (
+            operation_evidence_ids,
+            value,
+            evidence_loaded,
+            operation_reference,
+        ) = operation_evidence(operation)
         inputs = _mapping(operation.get("inputs"))
+        if operation_name != "upgrade_batch" and evidence_loaded:
+            expected_product_version = str(
+                inputs.get(
+                    "product_version",
+                    _mapping(projection.get("workflow_inputs")).get(
+                        "product_version", ""
+                    ),
+                )
+            )
+            raw_input_targets = inputs.get("targets")
+            bindings_match = (
+                multi_target_bindings_match(
+                    operation_reference,
+                    targets=raw_input_targets,
+                    operation_id=str(operation.get("operation_id", "")),
+                    expected_product_version=expected_product_version,
+                )
+                if isinstance(raw_input_targets, list)
+                and len(raw_input_targets) > 1
+                else target_binding_matches(
+                    operation_reference,
+                    target_id=str(
+                        inputs.get("target_id", operation.get("target_id", ""))
+                    ),
+                    operation_id=str(operation.get("operation_id", "")),
+                    expected_product_version=expected_product_version,
+                    observed_product_version=evidence_observed_product_version(value),
+                )
+            )
+            if not bindings_match:
+                value = {}
+                evidence_loaded = False
         summary = (
             _text_from(value, "summary", "root_cause")
             or str(operation.get("summary", ""))
@@ -1708,6 +1929,29 @@ def aggregate_case_closeout(
                             child_value[name] = value[name]
                     child_inputs = dict(inputs)
                     child_inputs["target_id"] = str(raw_target.get("target_id", ""))
+                    child_operation_id = str(
+                        raw_target.get(
+                            "operation_id",
+                            raw_target.get(
+                                "requested_operation_id",
+                                operation.get("operation_id", ""),
+                            ),
+                        )
+                    )
+                    child_evidence_loaded = evidence_loaded and target_binding_matches(
+                        operation_reference,
+                        target_id=str(raw_target.get("target_id", "")),
+                        operation_id=child_operation_id,
+                        expected_product_version=str(
+                            child_value.get(
+                                "product_version",
+                                inputs.get("product_version", ""),
+                            )
+                        ),
+                        observed_product_version=evidence_observed_product_version(
+                            child_value
+                        ),
+                    )
                     child_receipt = StageReceipt.create(
                         stage="upgrade",
                         producer=operation_name,
@@ -1723,15 +1967,10 @@ def aggregate_case_closeout(
                             },
                             "upgrade",
                             child_value,
-                            evidence_loaded=evidence_loaded,
+                            evidence_loaded=child_evidence_loaded,
                         ),
                         summary=str(raw_target.get("message", summary)),
-                        operation_id=str(
-                            raw_target.get(
-                                "operation_id",
-                                raw_target.get("requested_operation_id", operation.get("operation_id", "")),
-                            )
-                        ),
+                        operation_id=child_operation_id,
                         evidence_ids=operation_evidence_ids,
                         facts=_selected_facts("upgrade", child_value, child_inputs),
                         artifacts=_operation_artifacts("upgrade", child_value, child_inputs),
@@ -1805,7 +2044,7 @@ def aggregate_case_closeout(
     }
     phase_operation_by_type: dict[str, Mapping[str, object]] = {}
     for operation in phase_operations:
-        _evidence_ids, loaded, evidence_loaded = operation_evidence(operation)
+        _evidence_ids, loaded, evidence_loaded, _reference = operation_evidence(operation)
         if not evidence_loaded:
             continue
         phase_type = str(loaded.get("phase_type", ""))
@@ -1824,7 +2063,7 @@ def aggregate_case_closeout(
         )
         evidence_loaded = record.get("native_run_fact") is True
         if matching_operation is not None:
-            _evidence_ids, loaded, evidence_loaded = operation_evidence(
+            _evidence_ids, loaded, evidence_loaded, _reference = operation_evidence(
                 matching_operation
             )
             if evidence_loaded and str(loaded.get("phase_type", "")) != phase_type:
@@ -2145,6 +2384,12 @@ def aggregate_case_closeout(
         receipts=tuple(receipts),
         delivery_records=delivery_records,
         reasons=tuple(dict.fromkeys(reasons)),
+        delivery_stage=assess_delivery_stages(
+            [receipt.to_public_dict() for receipt in receipts]
+        ),
+        artifact_identities=identity_split(
+            [receipt.to_public_dict() for receipt in receipts]
+        ),
     )
 
 
@@ -2262,6 +2507,14 @@ def render_markdown(result: CaseCloseout) -> str:
         (
             "总体状态",
             _STATUS_ZH.get(result.closure_status, result.closure_status),
+        ),
+        (
+            "交付阶段",
+            result.delivery_stage.get("highest") or "未形成阶段证据",
+        ),
+        (
+            "下一阶段",
+            result.delivery_stage.get("next") or "全部阶段已验证",
         ),
         ("任务目标", result.acceptance_plan.goal),
         ("目标", targets),

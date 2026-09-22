@@ -11,6 +11,144 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "config_page.py"
 
 
 class ConfigPageTests(unittest.TestCase):
+    def test_state_exposes_one_loopback_entry_and_reason_without_secrets(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        with tempfile.TemporaryDirectory() as raw, page.LocalConfigurationServer(Path(raw)) as server:
+            state = server.state()
+            entry = state["configuration_entry"]
+            self.assertEqual(entry["url"], server.url)
+            self.assertEqual(entry["reason"], "configuration_required")
+            self.assertNotIn("password", json.dumps(state))
+
+    def test_existing_private_source_is_shown_and_kept_without_manual_import(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        with tempfile.TemporaryDirectory() as raw:
+            source = Path(raw) / 'credentials.env'
+            source.write_text('OPENUBMC_SSH_USER=fixture\nOPENUBMC_SSH_PASSWORD=existing-private-password\n')
+            source.chmod(0o600)
+            with page.LocalConfigurationServer(Path(raw), sources={'targets': source}) as server:
+                def request(path, data=None):
+                    req = Request(server.origin+path, headers={'X-OpenUBMC-Session': server.session_token,
+                        'Origin': server.origin, 'Content-Type': 'application/json'},
+                        data=json.dumps(data).encode() if data is not None else None)
+                    with urlopen(req, timeout=3) as response: return json.load(response)
+                state = request('/api/state')['targets']
+                config = state['config']
+                name = config['defaults']['bmc']['ssh']
+                self.assertEqual(config['credentials'][name]['user'], 'fixture')
+                self.assertTrue(config['credentials'][name]['password_set'])
+                config['credentials'][name]['user'] = 'updated'
+                config['credentials'][name]['password'] = {'action': 'keep', 'source': name}
+                saved = request('/api/save', {'kind': 'targets', 'expected_revision': None, 'config': config})
+                request('/api/activate', {'kind': 'targets', 'revision': saved['revision'], 'expected_active_revision': None})
+                from openubmc_target_runtime import CredentialResolver
+                selected = CredentialResolver(config_path=source, environ={}).resolve_local(
+                    task_id='existing-source', host='192.0.2.10', transport='ssh').credentials
+                self.assertEqual(selected.password, 'existing-private-password')
+                self.assertEqual(selected.user, 'updated')
+                self.assertNotIn('existing-private-password', json.dumps(state) + json.dumps(saved))
+                self.assertIn('OPENUBMC_SSH_USER=fixture', source.read_text())
+
+    def test_activation_checks_only_authorized_bmc_and_keeps_authentication_failure_visible(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        calls = []
+        target = {"ip": "192.0.2.10", "purpose": "bmc", "transport": "ssh"}
+        def checker(kind, config, selected, **kwargs):
+            calls.append(selected)
+            return {"verified": False, "code": "authentication_failed"}
+        with tempfile.TemporaryDirectory() as raw, page.LocalConfigurationServer(
+            Path(raw), checker=checker, authorized_targets=[target], focus_target=target["ip"]
+        ) as server:
+            def post(path, data):
+                req = Request(server.origin + path, headers={"X-OpenUBMC-Session": server.session_token,
+                    "Origin": server.origin, "Content-Type": "application/json"}, data=json.dumps(data).encode())
+                with urlopen(req, timeout=3) as response: return json.load(response)
+            saved = post("/api/save", {"kind": "targets", "expected_revision": None, "config": {
+                "schema_version": 1, "credentials": {"common": {"user": "fixture",
+                    "password": {"action": "replace", "value": "rejected-private-secret"}}},
+                "defaults": {"bmc": {"ssh": "common", "redfish": "common"}},
+                "devices": {"192.0.2.10": {"os_ip": "192.0.2.20"}}}})
+            result = post("/api/activate", {"kind": "targets", "revision": saved["revision"], "expected_active_revision": None})
+            self.assertEqual(calls, [target])
+            self.assertFalse(result["checks"][0]["verified"])
+            self.assertEqual(result["checks"][0]["code"], "authentication_failed")
+            self.assertNotIn("rejected-private-secret", json.dumps(result))
+
+    def test_closing_a_waiting_page_emits_cancellation_instead_of_success(self):
+        import subprocess
+        import sys
+        import threading
+        with tempfile.TemporaryDirectory() as raw:
+            process = subprocess.Popen([sys.executable, '-B', str(SCRIPT), '--config-home', raw,
+                '--no-browser', '--wait-for-save'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            timer = threading.Timer(10, process.kill); timer.start()
+            try:
+                url = process.stdout.readline().strip()
+                self.assertTrue(url.startswith('http://127.0.0.1:'))
+                origin, token = url.split('/#')
+                req = Request(origin+'/api/close', data=b'{}', headers={'X-OpenUBMC-Session': token,
+                    'Origin': origin, 'Content-Type': 'application/json'})
+                with urlopen(req, timeout=3) as response: self.assertTrue(json.load(response)['closed'])
+                stdout, stderr = process.communicate(timeout=5)
+                self.assertEqual(process.returncode, 0, stderr)
+                self.assertEqual(json.loads(stdout), {'event': 'configuration_cancelled', 'kind': 'targets'})
+            finally:
+                timer.cancel()
+                if process.poll() is None: process.kill()
+                process.communicate()
+
+    def test_focused_cli_reports_only_the_requested_saved_configuration_without_secrets(self):
+        import subprocess
+        import sys
+        import threading
+        with tempfile.TemporaryDirectory() as raw:
+            process = subprocess.Popen([sys.executable, '-B', str(SCRIPT), '--config-home', raw,
+                '--no-browser', '--kind', 'kb', '--wait-for-save'],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            timer = threading.Timer(10, process.kill)
+            timer.start()
+            try:
+                url = process.stdout.readline().strip()
+                self.assertTrue(url.startswith('http://127.0.0.1:'), url)
+                origin, token = url.split('/#')
+                def request(path, data=None):
+                    req = Request(origin + path, headers={'X-OpenUBMC-Session': token,
+                        'Origin': origin, 'Content-Type': 'application/json'},
+                        data=json.dumps(data).encode() if data is not None else None)
+                    with urlopen(req, timeout=3) as response:
+                        return json.load(response)
+                self.assertEqual(request('/api/state')['page_session']['kind'], 'kb')
+                for kind, config in [
+                    ('targets', {'schema_version': 1}),
+                    ('kb', {'username': 'fixture', 'password': {'action': 'replace', 'value': 'private-password'},
+                            'clientSecret': {'action': 'replace', 'value': 'private-oauth-secret'}}),
+                ]:
+                    saved = request('/api/save', {'kind': kind, 'expected_revision': None, 'config': config})
+                    request('/api/activate', {'kind': kind, 'revision': saved['revision'], 'expected_active_revision': None})
+                    if kind == 'targets':
+                        self.assertIsNone(process.poll())
+                        self.assertEqual(request('/api/state')['page_session']['kind'], 'kb')
+                stdout, stderr = process.communicate(timeout=5)
+                self.assertEqual(process.returncode, 0, stderr)
+                receipt = json.loads(stdout)
+                self.assertEqual(receipt['event'], 'configuration_saved')
+                self.assertEqual(receipt['kind'], 'kb')
+                self.assertEqual(receipt['revision'], saved['revision'])
+                self.assertTrue(receipt['configured'])
+                self.assertEqual(receipt['checks'], [])
+                self.assertNotIn('private-password', stdout + stderr)
+                self.assertNotIn('private-oauth-secret', stdout + stderr)
+            finally:
+                timer.cancel()
+                if process.poll() is None: process.kill()
+                process.communicate()
+
     def test_browser_session_guards_and_secret_keep_replace_remove(self):
         spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
         page = importlib.util.module_from_spec(spec)
@@ -95,7 +233,7 @@ class ConfigPageTests(unittest.TestCase):
                 )
                 self.assertFalse(removed["verified"])
 
-    def test_legacy_import_is_explicit_and_checks_require_a_selected_target(self):
+    def test_legacy_source_is_visible_without_activation_and_checks_require_a_selected_target(self):
         spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
         page = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(page)
@@ -138,9 +276,12 @@ class ConfigPageTests(unittest.TestCase):
                         return json.load(result)
 
                 state = request("/api/state")
-                self.assertNotIn(
+                self.assertIn(
                     "old", state["targets"]["config"].get("credentials", {})
                 )
+                self.assertIsNone(state["targets"]["revision"])
+                self.assertIsNone(state["targets"]["active_revision"])
+                self.assertNotIn("fixture-original", json.dumps(state))
                 imported = request(
                     "/api/import", {"kind": "targets", "expected_revision": None}
                 )

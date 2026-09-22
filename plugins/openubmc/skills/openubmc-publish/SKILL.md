@@ -56,6 +56,16 @@ remote, but never report credential values.
 
 ## Boundaries
 
+The ordinary Bingo product release package is built from the Manifest root by
+`openubmc-bingo-build` with:
+
+~~~bash
+bingo build -t publish -b <board> -bt release --stage stable
+~~~
+
+That command builds a product release package. This Skill only uploads an already-built Conan
+component with `conan upload`; Conan has no `conan publish` command.
+
 Do not use bmcgo build -u: it rebuilds before uploading and may force remote
 state. Do not use bmcgo publish as a synonym for this Skill; it is a product
 build target, not a Conan upload. Do not use --force, --only-recipe, or a

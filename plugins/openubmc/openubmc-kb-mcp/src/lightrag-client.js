@@ -25,6 +25,7 @@ export class LightRagClient {
   constructor(config, authClient, fetchImpl = globalThis.fetch) {
     this.baseUrl = config.lightragUrl.replace(/\/$/, "");
     this.configPath = config.configPath;
+    this.knowledgeMcpVersion = config.knowledgeMcpVersion;
     this.credentialsConfigured = config.credentialsConfigured !== false;
     this.auth = authClient;
     this.fetch = fetchImpl;
@@ -41,7 +42,11 @@ export class LightRagClient {
     const response = await this.fetch(`${this.baseUrl}${path}`, { ...options, headers });
     if (retry && response.status === 401) {
       await response.body?.cancel();
-      await this.auth.clearToken();
+      if (typeof this.auth.invalidateAccessToken === "function") {
+        await this.auth.invalidateAccessToken(token);
+      } else {
+        await this.auth.clearToken();
+      }
       return this.authenticatedRequest(path, options, false);
     }
     return parseResponse(response, `LightRAG ${path}`);
@@ -70,6 +75,7 @@ export class LightRagClient {
       if (!this.credentialsConfigured) {
         return {
           configured: false,
+          version: this.knowledgeMcpVersion,
           endpoint: this.baseUrl,
           config_path: this.configPath,
           detail: "OneID credentials are not configured"
@@ -79,7 +85,7 @@ export class LightRagClient {
         this.authenticatedRequest("/api/v1/rag/documents/pipeline_status", { signal }),
         this.authenticatedRequest("/api/v1/rag/documents/status_counts", { signal })
       ]);
-      return { configured: true, endpoint: this.baseUrl, pipeline, counts };
+      return { configured: true, version: this.knowledgeMcpVersion, endpoint: this.baseUrl, pipeline, counts };
     }, options.signal);
   }
 

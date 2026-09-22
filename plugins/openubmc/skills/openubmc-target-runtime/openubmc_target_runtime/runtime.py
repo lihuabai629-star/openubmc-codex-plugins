@@ -403,6 +403,24 @@ class CredentialResolver:
             self._local_cache[key] = resolved
             return CredentialResolution(resolved, cache_hit=False)
 
+    def associated_os(self, *, task_id: str, bmc_host: str) -> str | None:
+        """Return a configured association, never authorization to access the OS."""
+        import json
+        from .configuration import device_associations
+        from .credentials import read_private_credentials, normalize_credential_host
+        if not task_id.strip() or not bmc_host.strip():
+            raise ValueError("An association lookup requires a task and BMC")
+        with self._lock:
+            path, snapshot = self._selected_local_snapshot(task_id)
+            if not self._local_source.is_structured(snapshot[0]):
+                return None
+            config = json.loads(read_private_credentials(snapshot[0]))
+            association = device_associations(config).get(normalize_credential_host(bmc_host))
+            self._task_sources[task_id] = path
+            self._task_snapshots[task_id] = snapshot
+            self._remember_source_environment(task_id)
+            return association
+
     def _selected_local_snapshot(self, task_id: str):
         """Called with the resolver lock held."""
         from .configuration import activated_source

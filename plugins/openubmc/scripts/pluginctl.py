@@ -108,7 +108,9 @@ def dependency_root(content: dict[str, bytes], capability: str) -> Path:
         node = subprocess.run(['node', '--version'], env=node_environment(), timeout=10, check=True, capture_output=True, text=True).stdout.strip()
         if int(node.removeprefix('v').split('.')[0]) < 20:
             raise ValueError('KB requires Node 20 or newer')
-        identity.update(node=node, lock=hashlib.sha256(content['openubmc-kb-mcp/package-lock.json']).hexdigest())
+        package = json.loads(content['openubmc-kb-mcp/package.json'])
+        identity.update(node=node, lock=hashlib.sha256(content['openubmc-kb-mcp/package-lock.json']).hexdigest(),
+                       knowledge_mcp_version=package.get('version'))
     else:
         raise ValueError('Unknown dependency capability')
     key = hashlib.sha256(canonical(identity)).hexdigest()
@@ -344,7 +346,7 @@ def local_credentials_status(content: dict[str, bytes]) -> dict[str, object]:
             sys.modules.pop(name, None)
 
 
-def probe_server(command: str, content: dict[str, bytes], lock: dict) -> dict[str, object]:
+def probe_server(command: str, content: dict[str, bytes], lock: dict, knowledge_mcp_version: str | None = None) -> dict[str, object]:
     """Perform a bounded MCP initialize/tools/list probe through the public launcher."""
     request = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
                           'params': {'protocolVersion': '2024-11-05', 'capabilities': {},
@@ -369,12 +371,17 @@ def probe_server(command: str, content: dict[str, bytes], lock: dict) -> dict[st
             continue
         if isinstance(value, dict): messages.append(value)
     initialized = any(value.get('id') == 1 and isinstance(value.get('result'), dict) for value in messages)
-    server = next((value['result'].get('serverInfo') for value in messages if value.get('id') == 1 and isinstance(value.get('result'), dict)), {})
+    server_value = next((value['result'].get('serverInfo') for value in messages
+                         if value.get('id') == 1 and isinstance(value.get('result'), dict)), {})
+    server = server_value if isinstance(server_value, dict) else {}
     names = {tool.get('name') for value in messages if value.get('id') == 2
              for tool in value.get('result', {}).get('tools', [])}
     expected = {'observe', 'execute'} if command == 'runtime' else {'openubmc_kb_query', 'openubmc_kb_status', 'openubmc_kb_list'}
-    ok = initialized and names == expected and process.returncode == 0
-    return {'ok': ok, 'server': server, 'tools': sorted(names), 'stderr': stderr[-1000:] if not ok else ''}
+    version_matches = command != 'kb' or server.get('version') == knowledge_mcp_version
+    server_info_valid = isinstance(server_value, dict)
+    ok = initialized and server_info_valid and names == expected and process.returncode == 0 and version_matches
+    return {'ok': ok, 'server': server, 'version_matches_package': version_matches,
+            'tools': sorted(names), 'stderr': stderr[-1000:] if not ok else ''}
 
 
 def write_timing(path: Path | None, stage: str, started: float) -> None:
@@ -440,6 +447,9 @@ def main() -> int:
     parser.add_argument('--preview', action='store_true', help='Inspect migration without changing files')
     parser.add_argument('--target-plugin', default='openubmc@openubmc-public', help='Plugin registration to preserve during migration')
     parser.add_argument('--no-browser', action='store_true')
+    parser.add_argument('--kind', choices=['targets', 'kb', 'conan'], default='targets')
+    parser.add_argument('--focus-target')
+    parser.add_argument('--wait-for-save', action='store_true')
     parser.add_argument('--target', action='append', default=[])
     parser.add_argument('--purpose', choices=['bmc','os'], default='bmc')
     parser.add_argument('--transport', choices=['ssh','redfish'], default='ssh')
@@ -461,8 +471,11 @@ def main() -> int:
         started = time.monotonic()
         lock, content = verify()
         write_timing(args.timings, 'verify', started)
+        knowledge_package = json.loads(content['openubmc-kb-mcp/package.json'])
+        knowledge_mcp_version = knowledge_package.get('version')
         report = {'ok': True, 'source_commit': lock['source_commit'], 'version': lock['version'],
-                  'content_digest': lock['content_digest'], 'skills': lock['skills']}
+                  'content_digest': lock['content_digest'], 'skills': lock['skills'],
+                  'knowledge_mcp_version': knowledge_mcp_version}
         if args.command in ('migrate', 'repair-overrides', 'restore-legacy'):
             import types
             module = types.ModuleType('openubmc_plugin_install')
@@ -486,6 +499,9 @@ def main() -> int:
             report['dependencies'] = roots.get('runtime', roots.get('kb'))
         elif args.command == 'configure':
             page_args=['--purpose',args.purpose,'--transport',args.transport,'--home',str(args.home)]
+            page_args.extend(['--kind', args.kind])
+            if args.focus_target: page_args.extend(['--focus-target', args.focus_target])
+            if args.wait_for_save: page_args.append('--wait-for-save')
             if args.codex_home: page_args.extend(['--codex-home',str(args.codex_home)])
             if args.no_browser: page_args.append('--no-browser')
             for target in args.target: page_args.extend(['--target',target])
@@ -505,7 +521,7 @@ def main() -> int:
                     root = dependency_root(content, capability)
                     check_dependencies(root)
                     status.update(dependencies_ready=True, dependencies=str(root))
-                    health = probe_server(capability, content, lock)
+                    health = probe_server(capability, content, lock, knowledge_mcp_version)
                     status['startup_ready'] = health['ok']
                 except (OSError, ValueError, subprocess.SubprocessError) as error:
                     status['error'] = str(error)

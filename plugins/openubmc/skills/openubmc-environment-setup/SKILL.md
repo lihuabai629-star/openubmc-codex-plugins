@@ -1,6 +1,6 @@
 ---
 name: openubmc-environment-setup
-description: "Configure or repair an installed openUBMC plugin on Linux/WSL: 新电脑配置、配置密钥、默认 BMC 账号密码、按 IP 覆盖、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, required tools, migration, and installation health; device diagnosis belongs to openubmc-debug."
+description: "Configure or repair an installed openUBMC plugin on Linux/WSL: 账号缺失或认证失败、配置网页、默认 BMC 账号、关联 OS、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, required tools, migration, and installation health; device diagnosis belongs to openubmc-debug."
 ---
 
 # openUBMC plugin environment
@@ -57,15 +57,56 @@ An exact IP override selects a complete record; authentication failure never fal
 
 ### Change or check an account
 
-When the user needs to enter or change BMC/OS, KB or Conan credentials, open the local browser page:
+When local credentials are missing, authentication is rejected, or the user requests an account
+change, explain the specific reason and start the relevant page yourself. Do not make the user
+find the entry point or run the command. Reuse available credentials without opening a page.
+Configuration conflicts require diagnosing the selected source first; TLS, host identity and
+network failures are not reasons to ask for another password.
+
+If a credential may already have appeared in a persisted task, treat it as exposed and follow
+[Credential exposure response](references/credential-exposure-response.md). Identify affected
+accounts from non-secret target, purpose, record, revision and time metadata; never ask the user
+to paste the old value into chat or a command. Rotation stays an explicit operator action at the
+account authority, followed by local revision activation and capability verification.
 
 ```bash
-python3 -I <plugin-root>/scripts/pluginctl.py configure
+python3 -I -B <plugin-root>/scripts/pluginctl.py configure --kind targets --wait-for-save
 ```
 
-Keep the page process alive while the user edits. The page displays the Linux/WSL environment and exact local source, separates global BMC/OS defaults from IP overrides, and supports explicit import while retaining the original file. Secret fields support keep, replace and remove; values stay in the local page and Runtime. Ask for missing target or account context only, never ask the user to paste a password or application secret into chat.
+Use `--kind kb` or `--kind conan` for those accounts. Add `--focus-target <BMC IP>` to
+open that device's settings without authorizing a connection. The launcher attempts to open the
+browser and prints a session URL first. Always present that exact URL as a clickable configuration
+link in the conversation, even when browser launch was attempted. Do not claim a browser opened
+without evidence. Preserve the URL's fragment. Keep the process alive and retain its execution
+session while the user edits; wait in bounded intervals of at most 60 seconds, continuing unrelated
+work if available. Do not finish the task by asking the user to report that configuration is done.
 
-Saving creates a private revision; **Save and activate** selects it for subsequent Runtime/KB requests. Existing requests keep their original account. With an already authorized target, append `--target <ip> --purpose bmc|os --transport ssh|redfish`; activation then runs that bounded connection check. Without a target, saving performs no device probe. The page also offers explicit checks for selected targets and configured KB/Conan services. Report their actual status: saved and active do not mean verified.
+The page uses one BMC account for SSH and Redfish. Default OS credentials are optional; a device
+can associate an OS IP and override either account. Existing independent protocol records remain
+in advanced account management until explicitly unified. Secrets stay in the local browser and
+Runtime. Ask only for missing target context, never passwords or application secrets in chat.
+
+**保存** saves and activates a private revision for subsequent requests; in-flight requests retain
+their snapshot. With an already authorized connection check, append
+`--target <ip> --purpose bmc|os --transport ssh|redfish`. Only that scope is checked automatically.
+`--focus-target` and an associated OS address do not authorize probes. Without `--target`, saving
+performs no device probe. KB/Conan checks remain explicit page actions.
+
+With `--wait-for-save`, activation of the requested kind prints a `configuration_saved` JSON event
+containing the revision, local `configured` state and bounded `checks`, then closes the page service.
+Saving another category does not complete the request. Closing or expiration before saving emits
+`configuration_cancelled`. On a saved event, inspect local readiness and any check failures, then
+continue the already authorized task at its next Runtime request boundary without asking “配置好了
+吗”. Preserve the Run and mutation identities when resuming; a saved event never authorizes a new
+write or proves remote authentication. For missing fields or rejected authentication, reopen the
+matching page and explain the remaining reason. Cancellation is not completion; do not reopen
+automatically after the user closes it. Omit `--wait-for-save` for a general settings session.
+
+For an OS task associated with a known BMC, call
+`resolver.associated_os(task_id=..., bmc_host=...)` on the same `CredentialResolver` used above.
+It returns only the activated OS address or `None`, pins the same task snapshot, and opens no
+connection. Use that address only within the user's OS task scope. An explicit target takes
+precedence; a conflicting explicit target needs reconciliation instead of silent replacement.
 
 SSH checks preserve strict host identity verification, Redfish checks verify TLS, and no check retries a rejected IP override with global credentials. Conan authenticates only an existing named remote and uses the native per-user token cache. KB requires the user's authorized OAuth application settings; interactive authentication requirements remain visible as such. The plugin supplies no shared OAuth client secret.
 

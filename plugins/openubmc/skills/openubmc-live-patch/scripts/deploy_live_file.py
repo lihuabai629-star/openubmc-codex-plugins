@@ -28,6 +28,7 @@ import time
 from typing import Any, Callable
 
 from runtime_cli import RuntimeMutationFailed, run_runtime_mutation
+from openubmc_target_runtime import is_read_only_mdb_query
 
 
 ALLOWED_REMOTE_PREFIXES = ("/opt/bmc/apps/", "/opt/bmc/sr/", "/tmp/")
@@ -236,15 +237,33 @@ def ssh_stream_file(
     timeout: int,
 ) -> None:
     ssh_command = ["ssh"]
-    command_env = os.environ.copy()
-    command_env.pop("SSHPASS", None)
-    command_env.pop("OPENUBMC_SSH_PASSWORD", None)
-    command_env.pop("OPENUBMC_TELNET_PASSWORD", None)
+    secret_tokens = (
+        "PASSWORD",
+        "PASSWD",
+        "PASSPHRASE",
+        "SECRET",
+        "TOKEN",
+        "AUTHORIZATION",
+        "COOKIE",
+        "API_KEY",
+        "APIKEY",
+    )
+    command_env = {
+        name: value
+        for name, value in os.environ.items()
+        if not any(token in name.upper() for token in secret_tokens)
+        and name != "SSHPASS"
+    }
+    password_fd: int | None = None
     if password:
         if not shutil.which("sshpass"):
             raise LivePatchError("password SSH authentication requires sshpass in PATH")
-        ssh_command = ["sshpass", "-e", "ssh"]
-        command_env["SSHPASS"] = password
+        password_fd, write_fd = os.pipe()
+        try:
+            os.write(write_fd, (password + "\n").encode("utf-8"))
+        finally:
+            os.close(write_fd)
+        ssh_command = ["sshpass", "-d", str(password_fd), "ssh"]
     ssh_command.extend(["-o", f"BatchMode={'no' if password else 'yes'}"])
 
     host_key_options = {
@@ -271,13 +290,18 @@ def ssh_stream_file(
             f"cat > {shlex.quote(staging_payload)}",
         ]
     )
-    completed = subprocess.run(
-        ssh_command,
-        env=command_env,
-        input=local.read_bytes(),
-        capture_output=True,
-        timeout=timeout,
-    )
+    try:
+        completed = subprocess.run(
+            ssh_command,
+            env=command_env,
+            input=local.read_bytes(),
+            capture_output=True,
+            timeout=timeout,
+            pass_fds=((password_fd,) if password_fd is not None else ()),
+        )
+    finally:
+        if password_fd is not None:
+            os.close(password_fd)
     if completed.returncode != 0:
         detail = (
             completed.stderr.decode("utf-8", errors="ignore").strip()
@@ -331,10 +355,7 @@ def rollback_command(
         command.append("--no-remount")
     if ssh_user:
         command.extend(["--ssh-user", ssh_user])
-    if ssh_password:
-        command.extend(["--ssh-password", ssh_password])
-    if telnet_password:
-        command.extend(["--telnet-password", telnet_password])
+    del ssh_password, telnet_password
     if ssh_identity:
         command.extend(["--ssh-identity", str(ssh_identity)])
     if known_hosts:
@@ -365,12 +386,32 @@ def startup_status_from_logs(text: str) -> dict[str, Any]:
 
 def run_tool(command: list[str], timeout: int) -> dict[str, Any]:
     completed = subprocess.run(command, text=True, capture_output=True, timeout=timeout)
+    observation: dict[str, Any] = {}
+    try:
+        payload = json.loads(completed.stdout)
+    except (TypeError, json.JSONDecodeError):
+        payload = None
+    if isinstance(payload, dict):
+        result = payload.get("result")
+        result = result if isinstance(result, dict) else payload
+        for name in (
+            "boot_id",
+            "boot_time",
+            "target_clock",
+            "target_clock_epoch",
+            "target_uptime_seconds",
+            "effective_since_time",
+        ):
+            value = result.get(name)
+            if isinstance(value, str) and value:
+                observation[name] = value
     return {
         "cmd": command,
         "tool": Path(command[1]).name if len(command) > 1 else Path(command[0]).name,
         "returncode": completed.returncode,
         "stdout_tail": completed.stdout[-4000:],
         "stderr_tail": completed.stderr[-2000:],
+        "observation": observation,
     }
 
 
@@ -381,6 +422,10 @@ def run_health_check(
     verify_mdbctl: list[str],
     transcript: list[str],
     json_mode: bool,
+    since_timestamp: str = "",
+    expected_boot_id: str = "",
+    expected_clock_epoch: str = "",
+    expected_uptime_seconds: str = "",
 ) -> dict[str, Any]:
     scripts = debug_scripts_path()
     preflight_command = [sys.executable, "-B", str(scripts / "preflight_remote.py"), "--ip", ip, "--json"]
@@ -398,25 +443,97 @@ def run_health_check(
         "--since-boot",
         "--json",
     ]
+    if since_timestamp:
+        logs_command.extend(["--since-time", since_timestamp])
 
     deadline = time.monotonic() + timeout_seconds
     attempts: list[dict[str, Any]] = []
     framework_ready = False
+    observed_boot_id = ""
+    observed_boot_time = ""
+    observed_target_clock = ""
+    observed_clock_epoch = ""
+    observed_uptime_seconds = ""
+    boot_identity_status = "unavailable"
+    clock_status = "unavailable"
+    clock_drift_seconds: float | None = None
     while True:
         preflight = run_tool(preflight_command, timeout=90)
         logs = run_tool(logs_command, timeout=90)
         startup = startup_status_from_logs(logs["stdout_tail"])
+        logs_observation = logs.get("observation", {})
+        logs_observation = (
+            logs_observation if isinstance(logs_observation, dict) else {}
+        )
+        observed_boot_id = str(logs_observation.get("boot_id", ""))
+        observed_boot_time = str(logs_observation.get("boot_time", ""))
+        observed_target_clock = str(logs_observation.get("target_clock", ""))
+        observed_clock_epoch = str(
+            logs_observation.get("target_clock_epoch", "")
+        )
+        observed_uptime_seconds = str(
+            logs_observation.get("target_uptime_seconds", "")
+        )
+        if not expected_boot_id or not observed_boot_id:
+            boot_identity_status = "unavailable"
+        elif observed_boot_id != expected_boot_id:
+            boot_identity_status = "changed"
+        else:
+            boot_identity_status = "matched"
+        if not all(
+            (
+                since_timestamp,
+                observed_target_clock,
+                observed_boot_time,
+                expected_clock_epoch,
+                expected_uptime_seconds,
+                observed_clock_epoch,
+                observed_uptime_seconds,
+            )
+        ):
+            clock_status = "unavailable"
+            clock_drift_seconds = None
+        elif boot_identity_status == "changed":
+            clock_status = "rebooted"
+            clock_drift_seconds = None
+        else:
+            try:
+                clock_elapsed = int(observed_clock_epoch) - int(
+                    expected_clock_epoch
+                )
+                uptime_elapsed = float(observed_uptime_seconds) - float(
+                    expected_uptime_seconds
+                )
+            except ValueError:
+                clock_status = "invalid"
+                clock_drift_seconds = None
+            else:
+                clock_drift_seconds = clock_elapsed - uptime_elapsed
+                clock_status = (
+                    "continuous"
+                    if clock_elapsed >= 0
+                    and uptime_elapsed >= 0
+                    and abs(clock_drift_seconds) <= 5.0
+                    else "discontinuous"
+                )
+        boot_changed = boot_identity_status == "changed"
         framework_ready = (
             preflight["returncode"] == 0
             and logs["returncode"] == 0
             and startup["startup_normal"]
             and not startup["startup_errors_seen"]
+            and boot_identity_status == "matched"
+            and clock_status == "continuous"
         )
         attempt = {
             "elapsed_seconds": max(0, int(timeout_seconds - (deadline - time.monotonic()))),
             "preflight_ok": preflight["returncode"] == 0,
             "logs_ok": logs["returncode"] == 0,
             "startup_status": startup,
+            "boot_changed": boot_changed,
+            "boot_identity_status": boot_identity_status,
+            "clock_status": clock_status,
+            "clock_drift_seconds": clock_drift_seconds,
             "preflight": preflight,
             "logs": logs,
         }
@@ -467,6 +584,26 @@ def run_health_check(
         "verification_ok": verification_ok,
         "attempts": attempts,
         "verify_mdbctl": verification_results,
+        "since_timestamp": since_timestamp,
+        "expected_boot_id": expected_boot_id,
+        "expected_clock_epoch": expected_clock_epoch,
+        "expected_uptime_seconds": expected_uptime_seconds,
+        "observed_boot_id": observed_boot_id,
+        "observed_boot_time": observed_boot_time,
+        "observed_target_clock": observed_target_clock,
+        "observed_clock_epoch": observed_clock_epoch,
+        "observed_uptime_seconds": observed_uptime_seconds,
+        "boot_changed": boot_identity_status == "changed",
+        "boot_identity_status": boot_identity_status,
+        "clock_status": clock_status,
+        "clock_drift_seconds": clock_drift_seconds,
+        "verification_gap": (
+            "health_anchor_unavailable"
+            if boot_identity_status == "unavailable" or clock_status == "unavailable"
+            else "health_anchor_invalid"
+            if clock_status == "invalid"
+            else ""
+        ),
     }
 
 
@@ -597,6 +734,17 @@ def gate_error(args: argparse.Namespace) -> str:
         return "--apply requires authorization.live_patch=true (--authorize-live-patch)"
     if args.restart_scope is None:
         return "--apply requires explicit --restart-scope <none|skynet>"
+    return verification_command_error(args.verify_mdbctl)
+
+
+def verification_command_error(commands: list[str]) -> str:
+    for command in commands:
+        try:
+            parts = shlex.split(command)
+        except ValueError:
+            return f"invalid --verify-mdbctl shell syntax: {command!r}"
+        if not is_read_only_mdb_query(parts):
+            return f"unsupported read-only --verify-mdbctl command: {command!r}"
     return ""
 
 
@@ -675,6 +823,10 @@ def _runtime_execute(
     ]
     health = None
     if args.health_check or args.verify_mdbctl:
+        target_identity = journal.get("target_identity", {})
+        target_identity = (
+            target_identity if isinstance(target_identity, dict) else {}
+        )
         health = run_health_check(
             args.ip,
             args.health_wait if args.health_wait > 0 else args.health_timeout,
@@ -682,6 +834,10 @@ def _runtime_execute(
             args.verify_mdbctl,
             transcript,
             args.json,
+            str(target_identity.get("target_clock", "")),
+            str(target_identity.get("reboot_anchor", "")),
+            str(target_identity.get("target_clock_epoch", "")),
+            str(target_identity.get("target_uptime_seconds", "")),
         )
     target_existed = bool(mutation.get("target_existed", False))
     rollback = (
