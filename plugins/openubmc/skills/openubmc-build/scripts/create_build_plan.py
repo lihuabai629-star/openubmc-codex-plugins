@@ -66,16 +66,48 @@ class BuildPlanError(ValueError):
 
 
 def validate_routing_binding(plan: dict[str, object]) -> None:
-    """Fail closed when a plan declares a substituted tool without proof."""
+    """Bind a claimed substitution to frozen source, command, graph and gates."""
     routing = plan.get("routing")
     if not isinstance(routing, dict) or not routing.get("substitution_required"):
         return
     receipt = routing.get("equivalence")
-    if not isinstance(receipt, dict) or receipt.get("equivalent") is not True:
+    if not isinstance(receipt, dict) or receipt.get("claim_complete") is not True:
         raise ValueError("tool_equivalence_missing_from_plan")
     normalized = equivalence_receipt(receipt)
     if normalized.get("digest") != receipt.get("digest"):
         raise ValueError("tool_equivalence_digest_mismatch")
+    workspaces = plan.get("workspaces")
+    command = plan.get("command")
+    locks = plan.get("locks")
+    expectations = plan.get("expectations")
+    if not all(isinstance(value, dict) for value in (workspaces, command, locks, expectations)):
+        raise ValueError("tool_equivalence_plan_incomplete")
+    argv = command.get("argv")
+    if not isinstance(argv, list) or not argv:
+        raise ValueError("tool_equivalence_command_missing")
+    source_digest = "sha256:" + hashlib.sha256(json.dumps(
+        workspaces, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")).hexdigest()
+    if receipt.get("source") != source_digest:
+        raise ValueError("tool_equivalence_source_mismatch")
+    graph = locks.get("dependency_baseline")
+    if not isinstance(graph, dict) or receipt.get("dependency_graph") != "sha256:" + str(graph.get("sha256", "")):
+        raise ValueError("tool_equivalence_dependency_graph_unverified")
+    if receipt.get("options") != argv[1:]:
+        raise ValueError("tool_equivalence_options_mismatch")
+    profiles = [argv[index + 1] for index, value in enumerate(argv[:-1])
+                if value in {"-pr", "--profile", "-pr:h", "-pr:b", "--profile:host", "--profile:build"}]
+    if receipt.get("profile") not in profiles:
+        raise ValueError("tool_equivalence_profile_unverified")
+    artifact = expectations.get("artifact")
+    claimed_artifact = receipt.get("expected_artifact")
+    if (not isinstance(artifact, dict) or not isinstance(claimed_artifact, dict)
+            or claimed_artifact.get("kind") != artifact.get("kind")
+            or claimed_artifact.get("version") != artifact.get("expected_version")):
+        raise ValueError("tool_equivalence_artifact_mismatch")
+    gates = expectations.get("required_gates")
+    if not isinstance(gates, list) or receipt.get("release_gates") != gates:
+        raise ValueError("tool_equivalence_release_gates_mismatch")
 
 
 def run_git(root: Path, *args: str) -> bytes:
@@ -615,10 +647,22 @@ def main(argv: list[str] | None = None) -> int:
             except (TypeError, ValueError) as exc:
                 raise BuildPlanError("invalid_equivalence_receipt", str(exc)) from exc
         command_text = " ".join(command).lower()
+        if re.search(r"\bbingo\s+build\b", command_text):
+            raise BuildPlanError(
+                "bingo_build_handoff_required",
+                "an explicit bingo build belongs to openubmc-bingo-build",
+            )
         if re.search(r"\bconan\s+create\b", command_text) and equivalence is None:
             raise BuildPlanError(
                 "raw_conan_requires_equivalence",
                 "raw conan create cannot bypass the routed tool without an equivalence receipt",
+            )
+        if (args.mode == "product-artifact" and command
+                and Path(command[0]).name.lower() in {"ninja", "ninja.exe", "cmake", "cmake.exe"}
+                and equivalence is None):
+            raise BuildPlanError(
+                "tool_substitution_requires_equivalence",
+                "product build tool substitution requires a bound equivalence receipt",
             )
         if args.tool_substitution and equivalence is None:
             raise BuildPlanError(
@@ -1044,6 +1088,10 @@ def main(argv: list[str] | None = None) -> int:
                 "substitution_required": bool(args.tool_substitution or equivalence),
                 "equivalence": equivalence,
             }
+            try:
+                validate_routing_binding(plan)
+            except ValueError as exc:
+                raise BuildPlanError("tool_equivalence_unverified", str(exc)) from exc
         if args.reuse_evidence:
             plan["evidence_reuse"] = {"kind": args.reuse_evidence, "scope": "local-only"}
         plan["plan_id"] = semantic_plan_id(plan)

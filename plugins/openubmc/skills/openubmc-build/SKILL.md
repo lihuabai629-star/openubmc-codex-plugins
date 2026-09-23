@@ -17,6 +17,14 @@ Resolve every helper path relative to this `SKILL.md`. In examples, `<skill-dir>
 
 Run `scripts/build_route.py` before selecting a build tool. An explicit Bingo build command or Bingo CLI development request is a handoff and must not fall through to `bmcgo` or raw `conan create`. Product/HPM and component-package routes require their workspace precondition. Tool substitution requires the equivalence receipt described in [references/build-routing.md](references/build-routing.md).
 
+For a Windows/WSL task already owned by a Target Runtime Case, check the
+Runtime MCP protocol and continue the typed `execute` Run when its build
+operation is available. If unavailable, retain the exact host and failure
+reason before local command fallback. Local fallback output is build evidence
+only; it does not close a deployment or runtime-verification Gate. A complete
+tool-equivalence claim remains pending until the Build Plan binds it to actual
+checkout, command, dependency lock, artifact, and release gates.
+
 Choose one mode before any persistent write:
 
 | Mode | Use when | Default persistent writes |

@@ -26,6 +26,11 @@ final purpose, and authorization from that Case. A continuation is submitted thr
 Agent-facing `execute` operation with the persisted Run identity; the Runtime decides whether
 the next step is a Gate, Incident, reattach point, or terminal Outcome. Do not re-upload an HPM
 or reconstruct the operation from conversation history.
+On Windows/WSL, verify the Runtime MCP protocol and prefer this typed path
+while it is healthy. If it is unavailable, record the fallback reason, actual
+host, target scope, evidence boundary, and bounded call budget using the
+Debug package's `scripts/execution_router.py`; shell output alone cannot
+satisfy the deployment, verification, or rollback Gate.
 Upload, activation, reconnect, and fresh Debug verification stay in the same workflow. A mutation
 outcome unknown blocks automatic continuation until the same durable MutationJournal is reconciled
 with the same Case and operation identity. Upgrade results are domain operations, not
@@ -54,8 +59,7 @@ Before an upgrade write to a BMC, require all of the following:
 - one or more HTTPS BMC targets;
 - HPM absolute path, expected SHA-256, and expected product version;
 - a Redfish credential selector already carried by Target Runtime, explicit
-  Redfish environment variables, a direct internal-development Redfish password,
-  or a user-selected credentials file.
+  Redfish environment variables, or a user-selected credentials file.
 - When `upgrade_protocol=redfish` selects a legacy staged-upload target, an
   explicit BMC-reachable `image_uri` for the advertised `SimpleUpdate` action.
 
@@ -72,9 +76,9 @@ REDFISH_USERNAME=...
 REDFISH_PASSWORD=...
 ~~~
 
-Direct Redfish password arguments are accepted in internal development mode and
-may continue through the current Case workflow. Do not read SSH credentials as
-a Redfish fallback.
+Do not put Redfish passwords in Agent tool arguments or shell command lines.
+Resolve the selected credential locally through Target Runtime. Do not read SSH
+credentials as a Redfish fallback.
 
 ## Preflight
 

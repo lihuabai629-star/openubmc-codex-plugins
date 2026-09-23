@@ -46,7 +46,7 @@ _DIAGNOSTIC_REQUEST_FIELDS = (
     "source_correlation_requested",
 )
 _DIAGNOSTIC_VALUE_METADATA_FIELDS = frozenset(
-    {"content_complete", "content_compacted", "projection_truncated", "truncated"}
+    {"content_complete", "content_compacted", "projection_truncated", "truncated", "redaction_applied"}
 )
 _DIAGNOSTIC_SUMMARY_LOW_VALUE_FIELDS = _DIAGNOSTIC_VALUE_METADATA_FIELDS | {
     "bytes_returned",
@@ -1448,7 +1448,9 @@ def _tool_result(
             elif item["status"] == "available":
                 item["status"] = "not_checked"
                 item["gap"] = (
-                    "result_not_evaluable"
+                    "result_not_visible_after_redaction"
+                    if result.get("redaction_applied") is True
+                    else "result_not_evaluable"
                     if bounded_result
                     else "result_not_visible_after_redaction"
                 )
@@ -1499,7 +1501,9 @@ def _plain_result(
         **(
             {
                 "gap": (
-                    "result_not_evaluable"
+                    "result_not_visible_after_redaction"
+                    if selected.get("redaction_applied") is True
+                    else "result_not_evaluable"
                     if bounded
                     else "result_not_visible_after_redaction"
                     if selected
@@ -1548,7 +1552,9 @@ def _aggregate_tool_result(
                 gaps.append(
                     f"{name}: "
                     + (
-                        "result_not_evaluable"
+                        "result_not_visible_after_redaction"
+                        if result.get("redaction_applied") is True
+                        else "result_not_evaluable"
                         if bounded_result
                         else "result_not_visible_after_redaction"
                     )

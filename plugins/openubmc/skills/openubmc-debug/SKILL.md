@@ -7,12 +7,12 @@ description: "Diagnose openUBMC/BMC runtime problems: 设备不识别、传感�
 
 ## Scope and ownership
 
-Own read-only runtime diagnosis and post-change verification. Infer whether the request is:
+Own read-only diagnosis and post-change verification. The request is:
 
 - diagnosis: explain and localize a current or reproduced symptom;
 - delivery verification: verify requested behavior on the deployed target.
 
-Accept prose or a concise handoff; do not require a transport envelope. Keep diagnosis separate
+Accept prose or handoffs without a transport envelope. Keep diagnosis separate
 from implementation:
 
 - source or design change -> `openubmc-developer` or the matching specialist;
@@ -20,7 +20,6 @@ from implementation:
 - firmware upgrade or rollback -> `openubmc-upgrade`;
 - temporary runtime replacement -> `openubmc-live-patch`;
 - offline dump or log-bundle-only analysis -> `openubmc-log-analyzer`.
-
 
 ## Choose `observe` or `execute`
 
@@ -65,6 +64,7 @@ Use the default `openubmc-target-runtime` MCP through its semantic Agent Interfa
   `projection_truncated` and `content_compacted` describe the display; determine source
   completeness from the receipt's `truncated`, `content_complete`, freshness, coverage, and gaps.
 - Do not use compatibility or operator operations from the default Agent profile.
+Windows/WSL: see `references/windows-routing.md`.
 
 For a read-only diagnosis, replace the target and purpose in this complete `execute` Action:
 

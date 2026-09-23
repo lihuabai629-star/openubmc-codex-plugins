@@ -4,7 +4,14 @@ The packaged Build Skill owns local `bmcgo` validation, component package, and p
 
 The public preflight receipt is generated with `scripts/build_route.py --request ... --workspace ...`. A product or component request must pass its workspace precondition before a command is selected. A missing precondition stops the route and does not fall through to another build system.
 
-Replacing the selected tool requires an equivalence receipt. It must bind the same source identity, profile, options, dependency graph, expected artifact, and release gates. A missing field is a preflight failure; a successful command alone is not proof of equivalence.
+Replacing the selected tool first produces a claim receipt. `build_route.py` leaves
+`ready=false` and `plan_binding_required=true` even when the claim has every field.
+`create_build_plan.py` checks the claim against the frozen checkout identity,
+explicit command profile and options, dependency baseline lock, expected artifact,
+and required release gates before writing a Plan. Missing or unmatched evidence
+stops the substitution. A validation command without those product bindings cannot
+claim equivalence to the routed build tool; use the routed tool or an explicit Bingo
+handoff.
 
 Representative ownership examples:
 

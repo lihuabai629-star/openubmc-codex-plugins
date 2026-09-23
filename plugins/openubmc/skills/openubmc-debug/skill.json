@@ -51,6 +51,7 @@
     "references/optional-integrations.md",
     "references/remote-automation.md",
     "references/workflow.md",
+    "references/windows-routing.md",
     "scripts/_cli_common.py",
     "scripts/_comparison.py",
     "scripts/_debug_dump.py",

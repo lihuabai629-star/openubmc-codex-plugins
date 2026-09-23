@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError as FutureTimeout
+from contextvars import copy_context
 from dataclasses import dataclass, field
 from enum import Enum
 import os
@@ -13,6 +14,7 @@ import time
 
 from .capability import EffectClass
 from .contracts import RUNTIME_API_VERSION
+from .redaction import redact_effect_output, secret_redaction_request
 
 
 EFFECT_INTENT_SCHEMA = f"{RUNTIME_API_VERSION}/effect-intent-v1"
@@ -157,7 +159,16 @@ class LocalEffectRunner:
                 if effective_mode is EffectRunMode.RECOVER
                 else self._execute
             )
-            future = self._executor.submit(callback, intent)
+            request_context = copy_context()
+
+            def invoke() -> Mapping[str, object]:
+                with secret_redaction_request():
+                    result = redact_effect_output(callback(intent))
+                if not isinstance(result, Mapping):
+                    raise TypeError("Effect result must be an object")
+                return result
+
+            future = self._executor.submit(request_context.run, invoke)
             execution = EffectExecution(
                 future=future,
                 mode=effective_mode,

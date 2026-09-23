@@ -5,6 +5,7 @@ import re
 from collections.abc import Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
+from threading import Lock
 
 
 SECRET_KEY_TOKENS = (
@@ -50,7 +51,23 @@ class SecretMaterialError(ValueError):
     code = "secret_material_rejected"
 
 
-_REQUEST_SECRET_VALUES: ContextVar[tuple[str, ...] | None] = ContextVar(
+class _RequestSecrets:
+    """One request's secrets shared with its bounded worker threads."""
+
+    def __init__(self) -> None:
+        self._values: set[str] = set()
+        self._lock = Lock()
+
+    def add(self, values: set[str]) -> None:
+        with self._lock:
+            self._values.update(values)
+
+    def snapshot(self) -> tuple[str, ...]:
+        with self._lock:
+            return tuple(self._values)
+
+
+_REQUEST_SECRET_VALUES: ContextVar[_RequestSecrets | None] = ContextVar(
     "openubmc_request_secret_values",
     default=None,
 )
@@ -91,7 +108,8 @@ def redact_text(value: object, *, secret_values: tuple[str, ...] = ()) -> str:
     """Redact common inline secret forms while preserving selector names."""
 
     text = str(value or "")
-    active = _REQUEST_SECRET_VALUES.get() or ()
+    request = _REQUEST_SECRET_VALUES.get()
+    active = request.snapshot() if request is not None else ()
     for secret in sorted(set((*active, *secret_values)), key=len, reverse=True):
         if secret:
             text = text.replace(secret, "<redacted>")
@@ -109,11 +127,33 @@ def redact_text(value: object, *, secret_values: tuple[str, ...] = ()) -> str:
     return _URI_USERINFO.sub(r"\1<redacted>@", text)
 
 
+def redact_effect_output(value: object) -> object:
+    """Remove registered secrets before an Effect result crosses a worker boundary."""
+
+    if isinstance(value, Mapping):
+        def secret_field(key: object) -> bool:
+            name = str(key)
+            return "/" not in name and "\\" not in name and is_secret_key(name)
+
+        result = {
+            redact_text(key): "<redacted>" if secret_field(key) else redact_effect_output(item)
+            for key, item in value.items()
+        }
+        if any(secret_field(key) for key in value):
+            result["redaction_applied"] = True
+        return result
+    if isinstance(value, (list, tuple)):
+        return [redact_effect_output(item) for item in value]
+    if isinstance(value, str):
+        return redact_text(value)
+    return value
+
+
 def register_secret_values(values: Mapping[str, object]) -> None:
     """Add locally resolved values to the current request's redaction set."""
 
-    current = _REQUEST_SECRET_VALUES.get()
-    if current is None:
+    request = _REQUEST_SECRET_VALUES.get()
+    if request is None:
         return
     discovered = {
         str(value)
@@ -121,7 +161,7 @@ def register_secret_values(values: Mapping[str, object]) -> None:
         if is_secret_key(key) and isinstance(value, str) and value
     }
     if discovered:
-        _REQUEST_SECRET_VALUES.set(tuple(sorted(set(current) | discovered)))
+        request.add(discovered)
 
 
 def _redact_exception(exc: Exception) -> None:
@@ -141,9 +181,13 @@ def secret_redaction_request():
     """Keep locally resolved secrets available to every boundary in one call."""
 
     if _REQUEST_SECRET_VALUES.get() is not None:
-        yield
+        try:
+            yield
+        except Exception as exc:
+            _redact_exception(exc)
+            raise
         return
-    token = _REQUEST_SECRET_VALUES.set(())
+    token = _REQUEST_SECRET_VALUES.set(_RequestSecrets())
     try:
         yield
     except Exception as exc:
