@@ -500,6 +500,8 @@ class LocalConfigurationServer:
             if path == "/api/save":
                 config = _secret_edits(data["config"], self.editable_config(kind))
                 store.save(config, expected_revision=data["expected_revision"])
+            elif path == "/api/connect-and-remember":
+                return self.connect_and_remember(data)
             elif path == "/api/import":
                 text = read_private_text(store.source, max_bytes=1024 * 1024)
                 config = (
@@ -532,7 +534,79 @@ class LocalConfigurationServer:
                 raise ConfigurationError("Unknown local action")
             return self.view(kind)
 
-    def completion_receipt(self, kind):
+    def connect_and_remember(self, data):
+        if data.get("kind") != "targets" or set(data) != {
+            "kind", "target", "user", "password", "expected_revision", "expected_active_revision"
+        }:
+            raise ConfigurationError("Select a complete target account")
+        target = data["target"]
+        if not isinstance(target, dict) or set(target) != {"ip", "purpose", "transport"}:
+            raise ConfigurationError("Select the complete target scope")
+        try:
+            target = {**target, "ip": str(ipaddress.ip_address(target["ip"]))}
+        except (ValueError, TypeError):
+            raise ConfigurationError("Target requires a literal IP address") from None
+        if target["purpose"] not in {"bmc", "os"} or target["transport"] not in {"ssh", "redfish"}:
+            raise ConfigurationError("Invalid target purpose or transport")
+        user, password = data["user"], data["password"]
+        if not isinstance(user, str) or not user.strip() or not isinstance(password, str) or not password:
+            raise ConfigurationError("A complete username and password are required")
+        if "\0" in user or "\0" in password:
+            raise ConfigurationError("Invalid account value")
+
+        store = self.stores["targets"]
+        status = store.status()
+        if (status["revision"] != data["expected_revision"]
+                or status["active_revision"] != data["expected_active_revision"]
+                or status["revision"] != status["active_revision"]):
+            raise ConfigurationConflict("Configuration changed before connection check")
+        source_text = (read_private_text(store.source, max_bytes=1024 * 1024)
+                       if status["active_revision"] is None and
+                       (store.source.exists() or store.source.is_symlink()) else None)
+        config = copy.deepcopy(store.read_active() if status["active_revision"] else self.editable_config("targets"))
+        config.setdefault("schema_version", 1)
+        credentials = config.setdefault("credentials", {})
+        targets = config.setdefault("targets", {})
+        address = next((key for key in targets if str(ipaddress.ip_address(key.strip())) == target["ip"]), target["ip"])
+        references = targets.setdefault(address, {}).setdefault(target["purpose"], {})
+        old_name = references.get(target["transport"])
+        name = "remembered-" + secrets.token_hex(12)
+        while name in credentials:
+            name = "remembered-" + secrets.token_hex(12)
+        credentials[name] = {"user": user.strip(), "password": password}
+        references[target["transport"]] = name
+        if old_name and old_name != name:
+            used = [*config.get("defaults", {}).values(), *targets.values()]
+            if not any(old_name in refs.values() for purposes in used for refs in purposes.values()):
+                credentials.pop(old_name, None)
+        store._validate(config)
+
+        try:
+            result = (self.checker("targets", config, target, revision=status["active_revision"],
+                                   source=store.source) if self.checker
+                      else {"verified": False, "code": "check_unavailable"})
+        except Exception:
+            result = {"verified": False, "code": "connection_failed"}
+        allowed = {"authentication_failed", "network_error", "host_identity_failed", "tls_error",
+                   "interaction_required", "permission_denied", "timeout", "check_unavailable",
+                   "connection_failed", "credentials_missing"}
+        code = result.get("code") if isinstance(result, dict) else None
+        verified = code == "connected" and result.get("verified") is True
+        if not verified:
+            return {"verified": False, "code": code if code in allowed else "connection_failed", "target": target}
+        committed = store.save_and_activate(
+            config, expected_revision=status["revision"],
+            expected_active_revision=status["active_revision"], expected_source_text=source_text,
+        )
+        receipt = {"verified": True, "code": "connected", "target": target,
+                   "revision": committed["active_revision"], "checked_at": int(time.time()),
+                   "remembered": True}
+        self.verifications[("targets", json.dumps(target, sort_keys=True))] = receipt
+        if self.page_session["kind"] == "targets":
+            self.completion = self.completion_receipt("targets", verified_target=target)
+        return {**receipt, "configuration": self.view("targets")}
+
+    def completion_receipt(self, kind, *, verified_target=None):
         view = self.view(kind)
         readiness = view["readiness"]
         receipt = {
@@ -545,14 +619,14 @@ class LocalConfigurationServer:
             from openubmc_target_runtime import CredentialResolver
             from openubmc_target_runtime.credentials import CredentialConfigurationError
             resolver = CredentialResolver(config_path=self.stores[kind].source, environ={})
-            focus = self.page_session["focus_target"]
-            scopes = self.authorized_targets or [{"ip": focus or "default-configuration.invalid",
+            focus = verified_target["ip"] if verified_target else self.page_session["focus_target"]
+            scopes = [verified_target] if verified_target else self.authorized_targets or [{"ip": focus or "default-configuration.invalid",
                 "purpose": self.page_session["purpose"], "transport": self.page_session["transport"]}]
             receipt.update(configured=True, focus_target=focus, associated_os=None)
             try:
                 if focus:
                     receipt["associated_os"] = resolver.associated_os(task_id="configuration", bmc_host=focus)
-                    if not self.authorized_targets and self.page_session["purpose"] == "os":
+                    if not verified_target and not self.authorized_targets and self.page_session["purpose"] == "os":
                         if receipt["associated_os"] is None:
                             return {**receipt, "configured": False, "reason": "target_required"}
                         scopes[0]["ip"] = receipt["associated_os"]
@@ -645,7 +719,7 @@ def main():
     # opens a browser implicitly; callers opt in with --open-browser.
     parser.add_argument("--no-browser", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--kind", choices=["targets", "kb", "conan"], default="targets")
-    parser.add_argument("--focus-target", help="BMC IP to edit; does not authorize a connection")
+    parser.add_argument("--focus-target", help="Target IP to prefill; does not authorize a connection")
     parser.add_argument("--wait-for-save", action="store_true", help="Report a secret-free completion and exit after the requested configuration is activated")
     parser.add_argument("--target", action="append", default=[])
     parser.add_argument("--purpose", choices=["bmc", "os"], default="bmc")

@@ -503,7 +503,7 @@ def main() -> int:
             if args.focus_target: page_args.extend(['--focus-target', args.focus_target])
             if args.wait_for_save: page_args.append('--wait-for-save')
             if args.codex_home: page_args.extend(['--codex-home',str(args.codex_home)])
-            if args.no_browser: page_args.append('--no-browser')
+            page_args.append('--no-browser' if args.no_browser else '--open-browser')
             for target in args.target: page_args.extend(['--target',target])
             return launch('configure',content,lock,page_args=page_args)
         elif args.command in ('runtime', 'kb'):

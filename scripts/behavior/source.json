@@ -12,9 +12,9 @@
     "behavior/test_plugin_disable_migration.py": "893fd943d2cc4a129c15c1ea31e1e5211b0302f13aa6af43f63913c97d7f4387",
     "behavior/test_plugin_python_entrypoints.py": "77aa1442b9963c5e9a92ef96ad5d71cf22997d932a141e0c222f924567b0aa3c",
     "behavior/test_upgrade_task_states.py": "3fba0983ea5a074822c3857bdf5e690e35ca3c99870aba4bd9c79b4e09cbdeba",
-    "check_behavior.py": "fc5593b5b085a9a36fdb17d293da1c4ec40ed3c6254a70749911bfb0a9a9ec91",
+    "check_behavior.py": "3d7850b771a0c6a328a9aac1ebd5e8c10465e311abb37cb3a09539b4fb9a84d8",
     "host/package-lock.json": "3d456708625217a8fe548dda38925d1882444a2f40ec7209a5968e5d5d615b4c",
     "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5"
   },
-  "source_commit": "4d8ab64964eb7f57b42a5decb58fb24101cc4b40"
+  "source_commit": "fc4652408659e6dfa0672e062b08105648f57165"
 }

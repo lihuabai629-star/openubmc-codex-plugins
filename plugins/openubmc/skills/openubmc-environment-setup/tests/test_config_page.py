@@ -11,6 +11,150 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "config_page.py"
 
 
 class ConfigPageTests(unittest.TestCase):
+    def test_verified_target_account_is_remembered_for_a_new_task_without_changing_defaults(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        observed = []
+
+        def checker(kind, config, target, **_metadata):
+            observed.append((kind, config, target))
+            return {"verified": True, "code": "connected", "password": "must-not-return"}
+
+        with tempfile.TemporaryDirectory() as raw, page.LocalConfigurationServer(
+            Path(raw), checker=checker, wait_for_save=True
+        ) as server:
+            def post(path, data):
+                request = Request(server.origin + path, data=json.dumps(data).encode(), headers={
+                    "X-OpenUBMC-Session": server.session_token,
+                    "Origin": server.origin,
+                    "Content-Type": "application/json",
+                })
+                with urlopen(request, timeout=3) as response:
+                    return json.load(response)
+
+            initial = post("/api/save", {"kind": "targets", "expected_revision": None, "config": {
+                "schema_version": 1,
+                "credentials": {"common": {"user": "default", "password": {"action": "replace", "value": "default-secret"}}},
+                "defaults": {"bmc": {"ssh": "common", "redfish": "common"}},
+            }})
+            post("/api/activate", {"kind": "targets", "revision": initial["revision"], "expected_active_revision": None})
+            target = {"ip": "192.0.2.10", "purpose": "bmc", "transport": "ssh"}
+            result = post("/api/connect-and-remember", {
+                "kind": "targets", "target": target, "user": "special", "password": "local-only-secret",
+                "expected_revision": initial["revision"], "expected_active_revision": initial["revision"],
+            })
+            self.assertTrue(result["verified"])
+            self.assertEqual(result["code"], "connected")
+            self.assertEqual(observed[-1][1]["credentials"][observed[-1][1]["targets"][target["ip"]]["bmc"]["ssh"]]["password"], "local-only-secret")
+            self.assertNotIn("local-only-secret", json.dumps(result) + json.dumps(server.state()) + json.dumps(server.completion))
+            self.assertNotIn("must-not-return", json.dumps(result))
+            from openubmc_target_runtime import CredentialResolver
+            resolver = CredentialResolver(config_path=server.stores["targets"].source, environ={})
+            chosen = resolver.resolve_local(task_id="later-task", host=target["ip"], transport="ssh").credentials
+            other = resolver.resolve_local(task_id="other-task", host="192.0.2.11", transport="ssh").credentials
+            other_transport = resolver.resolve_local(task_id="redfish-task", host=target["ip"], transport="redfish").credentials
+            self.assertEqual((chosen.user, chosen.password), ("special", "local-only-secret"))
+            self.assertEqual((other.user, other.password), ("default", "default-secret"))
+            self.assertEqual((other_transport.user, other_transport.password), ("default", "default-secret"))
+            self.assertEqual(server.stores["targets"].source.parent.stat().st_mode & 0o077, 0)
+            snapshot = server.stores["targets"].source.parent / ".credentials.json.revisions" / (result["revision"] + ".json")
+            self.assertEqual(snapshot.stat().st_mode & 0o077, 0)
+
+    def test_rejected_connection_and_revision_race_leave_active_account_unchanged(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        with tempfile.TemporaryDirectory() as raw:
+            outcomes = iter([{"verified": False, "code": "authentication_failed"},
+                             {"verified": True, "code": "connected"}])
+            def checker(*_args, **_metadata):
+                result = next(outcomes)
+                if result["verified"]:
+                    store = server.stores["targets"]
+                    changed = store.save({"schema_version": 1}, expected_revision=None)
+                    store.activate(changed["revision"], expected_active_revision=None)
+                return result
+            with page.LocalConfigurationServer(Path(raw), checker=checker) as server:
+                def post(data):
+                    request = Request(server.origin + "/api/connect-and-remember",
+                        data=json.dumps(data).encode(), headers={"X-OpenUBMC-Session": server.session_token,
+                            "Origin": server.origin, "Content-Type": "application/json"})
+                    with urlopen(request, timeout=3) as response:
+                        return json.load(response)
+                data = {"kind": "targets", "target": {"ip": "192.0.2.20", "purpose": "os", "transport": "ssh"},
+                        "user": "fixture", "password": "rejected-secret", "expected_revision": None,
+                        "expected_active_revision": None}
+                failed = post(data)
+                self.assertEqual(failed["code"], "authentication_failed")
+                self.assertIsNone(server.stores["targets"].status()["active_revision"])
+                self.assertIsNone(server.stores["targets"].status()["revision"])
+                data["password"] = "racing-secret"
+                with self.assertRaises(HTTPError) as error:
+                    post(data)
+                self.assertEqual(error.exception.code, 409)
+                self.assertNotIn("racing-secret", error.exception.read().decode())
+                status = server.stores["targets"].status()
+                self.assertEqual(status["revision"], status["active_revision"])
+                self.assertNotIn("targets", server.stores["targets"].read_active())
+
+    def test_verified_explicit_os_ip_completes_without_a_bmc_association(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        with tempfile.TemporaryDirectory() as raw, page.LocalConfigurationServer(
+            Path(raw), checker=lambda *_args, **_metadata: {"verified": True, "code": "connected"},
+            purpose="os", transport="ssh", focus_target="192.0.2.20", wait_for_save=True,
+        ) as server:
+            request = Request(server.origin + "/api/connect-and-remember",
+                data=json.dumps({"kind": "targets", "target": {"ip": "192.0.2.20", "purpose": "os", "transport": "ssh"},
+                    "user": "os-user", "password": "os-local-secret", "expected_revision": None,
+                    "expected_active_revision": None}).encode(),
+                headers={"X-OpenUBMC-Session": server.session_token, "Origin": server.origin,
+                    "Content-Type": "application/json"})
+            with urlopen(request, timeout=3) as response:
+                self.assertTrue(json.load(response)["verified"])
+            self.assertTrue(server.completion["configured"])
+            self.assertEqual(server.completion["focus_target"], "192.0.2.20")
+            self.assertIsNone(server.completion["associated_os"])
+            self.assertNotIn("os-local-secret", json.dumps(server.completion))
+
+    def test_invalid_target_and_changed_legacy_source_cannot_be_remembered(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        with tempfile.TemporaryDirectory() as raw:
+            source = Path(raw) / "credentials.env"
+            source.write_text("OPENUBMC_SSH_USER=legacy\nOPENUBMC_SSH_PASSWORD=old-secret\n")
+            source.chmod(0o600)
+            calls = []
+            def checker(*_args, **_metadata):
+                calls.append(True)
+                source.write_text("OPENUBMC_SSH_USER=external\nOPENUBMC_SSH_PASSWORD=external-secret\n")
+                return {"verified": True, "code": "connected"}
+            with page.LocalConfigurationServer(Path(raw), sources={"targets": source}, checker=checker) as server:
+                def post(data):
+                    request = Request(server.origin + "/api/connect-and-remember",
+                        data=json.dumps(data).encode(), headers={"X-OpenUBMC-Session": server.session_token,
+                            "Origin": server.origin, "Content-Type": "application/json"})
+                    with urlopen(request, timeout=3) as response:
+                        return json.load(response)
+                data = {"kind": "targets", "target": {"ip": "example.invalid", "purpose": "bmc", "transport": "ssh"},
+                        "user": "new", "password": "candidate-secret", "expected_revision": None,
+                        "expected_active_revision": None}
+                with self.assertRaises(HTTPError) as error:
+                    post(data)
+                self.assertEqual(error.exception.code, 400)
+                self.assertEqual(calls, [])
+                data["target"]["ip"] = "192.0.2.30"
+                with self.assertRaises(HTTPError) as error:
+                    post(data)
+                self.assertEqual(error.exception.code, 409)
+                self.assertEqual(calls, [True])
+                self.assertNotIn("candidate-secret", error.exception.read().decode())
+                self.assertIsNone(server.stores["targets"].status()["active_revision"])
+                self.assertIn("external-secret", source.read_text())
+
     def test_state_exposes_one_loopback_entry_and_reason_without_secrets(self):
         spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
         page = importlib.util.module_from_spec(spec)

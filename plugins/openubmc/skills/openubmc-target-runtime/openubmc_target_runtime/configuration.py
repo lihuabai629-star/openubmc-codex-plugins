@@ -280,3 +280,38 @@ class LocalConfigurationStore:
             self._validate(_read(_snapshot(self.source, revision)))
             _atomic_write(_sidecar(self.source, 'active'), json.dumps({'schema': 'openubmc.configuration.v1', 'revision': revision}).encode())
             return self.status()
+
+    def save_and_activate(self, config: dict, *, expected_revision: str | None,
+                          expected_active_revision: str | None,
+                          expected_source_text: str | None) -> dict[str, object]:
+        """Commit a verified local edit without an intervening writer or pending draft."""
+        self._validate(config)
+        try:
+            content = (json.dumps(config, ensure_ascii=True) + '\n').encode()
+        except (TypeError, ValueError, RecursionError):
+            raise ConfigurationError('Configuration must be JSON data') from None
+        if len(content) > 1024 * 1024:
+            raise ConfigurationError('Configuration exceeds the supported byte limit')
+        with self._locked():
+            saved = _revision(self.source, 'saved')
+            active = _revision(self.source, 'active')
+            if saved != expected_revision or active != expected_active_revision or saved != active:
+                raise ConfigurationConflict('Configuration changed; refresh before remembering the account')
+            if active is None:
+                current_source = (read_private_text(self.source, max_bytes=1024 * 1024)
+                                  if self.source.exists() or self.source.is_symlink() else None)
+                if current_source != expected_source_text:
+                    raise ConfigurationConflict('Original credential source changed')
+            revision = uuid.uuid4().hex
+            snapshot = _snapshot(self.source, revision)
+            if snapshot.parent.is_symlink():
+                raise ConfigurationError('Configuration snapshots must remain local')
+            snapshot.parent.mkdir(mode=0o700, exist_ok=True)
+            info = snapshot.parent.stat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
+                raise ConfigurationError('Configuration snapshot directory must be private and current-user owned')
+            _atomic_write(snapshot, content)
+            marker = json.dumps({'schema': 'openubmc.configuration.v1', 'revision': revision}).encode()
+            _atomic_write(_sidecar(self.source, 'saved'), marker)
+            _atomic_write(_sidecar(self.source, 'active'), marker)
+            return self.status()
