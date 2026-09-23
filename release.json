@@ -6,7 +6,7 @@
   "release_scope": "codex-plugin",
   "release_tag": "v2.0.16",
   "source_commit": "4d8ab64964eb7f57b42a5decb58fb24101cc4b40",
-  "status": "candidate",
+  "status": "released",
   "version": "2.0.16",
   "workflow_release_baseline": "2.0.10"
 }

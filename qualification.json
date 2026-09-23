@@ -270,6 +270,6 @@
   "runtime_shutdown_verified": true,
   "schema": "openubmc.public-behavior.v1",
   "source_commit": "4d8ab64964eb7f57b42a5decb58fb24101cc4b40",
-  "status": "candidate",
+  "status": "released",
   "version": "2.0.16"
 }
