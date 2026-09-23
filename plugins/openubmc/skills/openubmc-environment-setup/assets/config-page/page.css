@@ -42,6 +42,11 @@ p { color: var(--muted); margin: 8px 0; font-size: 13px; }
 .field label { font-size: 12px; color: var(--muted); }
 input, select { font: inherit; color: #243247; background: #fff; border: 1px solid #cbd3df; border-radius: 6px; padding: 9px 10px; width: 100%; min-width: 0; }
 .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.remember { padding: 20px; margin: 0 0 30px; border: 1px solid #d8e5fb; border-radius: 10px; background: #f8fbff; }
+.remember h3 { margin: 0 0 4px; font-size: 16px; }
+.remember p { margin-bottom: 18px; }
+.remember .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.remember .actions { border: 0; margin-top: 0; padding-top: 18px; }
 .kb-grid { grid-template-columns: 1fr; max-width: 600px; }
 .account-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .account-form > details { border: 0; padding-top: 0; margin: 14px 0 20px; }
@@ -99,7 +104,7 @@ footer { max-width: 960px; margin: 20px auto 32px; padding: 0 28px; color: var(-
   main { padding: 22px 18px; }
   nav { gap: 24px; margin-bottom: 16px; }
   .section-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
-  .form-grid, .account-row, .account-grid { grid-template-columns: 1fr; }
+  .form-grid, .remember .form-grid, .account-row, .account-grid { grid-template-columns: 1fr; }
   .account-row td:nth-child(3) { grid-column: auto; }
   .actions { gap: 6px; }
   .actions button { padding: 9px 10px; }

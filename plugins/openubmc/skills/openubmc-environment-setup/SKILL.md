@@ -63,6 +63,16 @@ find the entry point or run the command. Reuse available credentials without ope
 Configuration conflicts require diagnosing the selected source first; TLS, host identity and
 network failures are not reasons to ask for another password.
 
+When a task has a target IP and the user wants its account remembered after a successful connection,
+start the targets page with `--focus-target <IP> --purpose bmc|os --transport ssh|redfish --wait-for-save`.
+Show the page URL and direct the user to **连接并记住这台设备**. The user enters the username and password
+there and explicitly starts a strict connection check. Only a verified connection creates an active
+IP-specific credential; a rejected check or concurrent configuration edit leaves the active account
+unchanged. The completion event is secret-free and subsequent Runtime requests use the newly active
+revision. A verified SSH scope does not verify Redfish, and a BMC account does not authorize OS access.
+Do not transfer a chat-pasted password to a tool or command; treat it as exposed and use the rotation
+procedure below before it is saved through the local page.
+
 If a credential may already have appeared in a persisted task, treat it as exposed and follow
 [Credential exposure response](references/credential-exposure-response.md). Identify affected
 accounts from non-secret target, purpose, record, revision and time metadata; never ask the user
@@ -73,7 +83,7 @@ account authority, followed by local revision activation and capability verifica
 python3 -I -B <plugin-root>/scripts/pluginctl.py configure --kind targets --wait-for-save
 ```
 
-Use `--kind kb` or `--kind conan` for those accounts. Add `--focus-target <BMC IP>` to
+Use `--kind kb` or `--kind conan` for those accounts. Add `--focus-target <target IP>` to
 open that device's settings without authorizing a connection. The launcher attempts to open the
 browser and prints a session URL first. Always present that exact URL as a clickable configuration
 link in the conversation, even when browser launch was attempted. Do not claim a browser opened
@@ -107,6 +117,27 @@ For an OS task associated with a known BMC, call
 It returns only the activated OS address or `None`, pins the same task snapshot, and opens no
 connection. Use that address only within the user's OS task scope. An explicit target takes
 precedence; a conflicting explicit target needs reconciliation instead of silent replacement.
+
+If the user explicitly confirms that a particular BMC IP and OS IP belong to the same device,
+record their association directly from the conversation. State the exact pair and ask only when
+the relationship is ambiguous; an unambiguous statement already confirms it. Never infer it
+from a login, shared account, or nearby address. Run this local command yourself:
+
+```bash
+python3 -B <plugin-root>/skills/openubmc-environment-setup/scripts/associate_device.py --bmc-ip <BMC-IP> --os-ip <OS-IP> --confirm-same-device
+```
+
+The command uses Runtime credential-source selection rules in the CLI environment. If the MCP
+entry selects a different explicit local source, pass its path with `--source <path>` so the
+association lands in the source used by that Runtime. It returns only address and revision
+metadata. If it returns `association_conflict`, show the existing and
+proposed OS addresses and ask for explicit replacement confirmation before rerunning with
+`--replace-existing --expected-os-ip <existing-OS-IP>`. The old address binding prevents
+replacement if the mapping changed after confirmation. If it returns `configuration_conflict`,
+reconcile the pending edit or revision before retrying. A later task sees the activated
+association; a task already holding a snapshot needs a request-boundary refresh. This address
+mapping never verifies credentials
+or authorizes an OS connection.
 
 SSH checks preserve strict host identity verification, Redfish checks verify TLS, and no check retries a rejected IP override with global credentials. Conan authenticates only an existing named remote and uses the native per-user token cache. KB requires the user's authorized OAuth application settings; interactive authentication requirements remain visible as such. The plugin supplies no shared OAuth client secret.
 

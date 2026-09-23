@@ -29,10 +29,12 @@
     "tests/test_bootstrap.py",
     "scripts/config_page.py",
     "scripts/config_checks.py",
+    "scripts/associate_device.py",
     "assets/config-page/index.html",
     "assets/config-page/page.css",
     "assets/config-page/page.js",
-    "tests/test_config_page.py"
+    "tests/test_config_page.py",
+    "tests/test_associate_device.py"
   ],
   "keywords": [
     "openubmc",

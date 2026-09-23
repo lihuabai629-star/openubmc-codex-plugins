@@ -20,6 +20,7 @@ from implementation:
 - firmware upgrade or rollback -> `openubmc-upgrade`;
 - temporary runtime replacement -> `openubmc-live-patch`;
 - offline dump or log-bundle-only analysis -> `openubmc-log-analyzer`.
+- Confirmed BMC/OS address association -> `openubmc-environment-setup`.
 
 ## Choose `observe` or `execute`
 
@@ -112,8 +113,7 @@ Use two to four complementary evidence surfaces for a composite causal claim:
 - log/file: bounded timeline, loaded configuration, transition, or startup evidence;
 - OS/hardware: host-side visibility only when explicitly relevant and accessible.
 
-One surface is sufficient only for a narrow value or definition lookup. Knowledge retrieval may
-route candidates, but it is not evidence and never blocks live or source collection.
+Use one surface only for a narrow lookup. Knowledge routes candidates but is not evidence.
 
 ### 4. Collect and correlate
 

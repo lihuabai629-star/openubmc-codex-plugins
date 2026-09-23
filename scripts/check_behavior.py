@@ -79,6 +79,25 @@ def check(plugin: Path, report: dict) -> None:
             report['behavior'][name] = {'passed': True, 'tests': int(count[1]) if count else None,
                                         'seconds': round(time.monotonic() - started, 3)}
             print(name + ': passed', flush=True)
+        feature_tests = plugin/'skills/openubmc-environment-setup/tests'
+        selectors = [
+            'test_associate_device.AssociateDeviceCliTests',
+            'test_config_page.ConfigPageTests.test_verified_target_account_is_remembered_for_a_new_task_without_changing_defaults',
+            'test_config_page.ConfigPageTests.test_rejected_connection_and_revision_race_leave_active_account_unchanged',
+            'test_config_page.ConfigPageTests.test_verified_explicit_os_ip_completes_without_a_bmc_association',
+            'test_config_page.ConfigPageTests.test_invalid_target_and_changed_legacy_source_cannot_be_remembered',
+        ]
+        started = time.monotonic()
+        result = command([sys.executable, '-B', '-m', 'unittest', *selectors],
+                         environment, cwd=feature_tests, timeout=90)
+        if 'skipped=' in result.stderr:
+            raise RuntimeError('published credential and association checks must not skip')
+        count = re.search(r'Ran (\d+) tests?', result.stderr)
+        report['behavior']['credential_recall_and_association'] = {
+            'passed': True, 'tests': int(count[1]) if count else None,
+            'seconds': round(time.monotonic() - started, 3),
+        }
+        print('credential_recall_and_association: passed', flush=True)
         node = command(['node', '--test', str(ROOT/'behavior/config.test.mjs')], environment, cwd=home)
         count = re.search(r'# tests (\d+)', node.stdout)
         report['behavior']['kb_loader'] = {'passed': True, 'tests': int(count[1]) if count else None}

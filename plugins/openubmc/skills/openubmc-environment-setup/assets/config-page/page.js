@@ -32,6 +32,7 @@ const reasons = {
   activation_required: "请先保存配置。",
   target_required: "请填写要检查的目标 IP。",
   confirmation_required: "请选择目标后点击检查连接。",
+  configuration_conflict: "配置已经变化，请刷新页面后重试。",
 };
 function node(tag, text, parent) {
   const e = document.createElement(tag);
@@ -143,6 +144,59 @@ function table(parent, headers) {
   return node("tbody", undefined, t);
 }
 let collect;
+function renderRemember() {
+  const form = $("remember");
+  form.hidden = kind !== "targets";
+  if (kind !== "targets") return;
+  const fields = $("remember-fields");
+  fields.replaceChildren();
+  const ip = input(fields, "设备 IP", state.page_session?.focus_target || "");
+  const purpose = select(fields, "目标", [["bmc", "BMC"], ["os", "OS"]], state.page_session?.purpose || "bmc");
+  const transport = select(fields, "协议", [["ssh", "SSH"], ["redfish", "Redfish"]], state.page_session?.transport || "ssh");
+  const user = input(fields, "连接用户名");
+  const password = input(fields, "连接密码", "", "password");
+  password.autocomplete = "new-password";
+  purpose.onchange = () => {
+    transport.querySelector('option[value="redfish"]').disabled = purpose.value === "os";
+    if (purpose.value === "os") transport.value = "ssh";
+  };
+  purpose.onchange();
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    if (dirty && !confirm("有尚未保存的修改，放弃修改并继续连接？")) return;
+    action(async () => {
+      const candidate = password.value;
+      try {
+        if (!ip.value.trim() || !user.value.trim() || !candidate) {
+          notice("请填写设备 IP、用户名和密码。", true);
+          return;
+        }
+        if (state.targets.revision !== state.targets.active_revision) {
+          notice("有尚未生效的配置，请先处理后再连接。", true);
+          return;
+        }
+        const result = await api("/api/connect-and-remember", {
+          kind: "targets",
+          target: { ip: ip.value.trim(), purpose: purpose.value, transport: transport.value },
+          user: user.value.trim(), password: candidate,
+          expected_revision: state.targets.revision,
+          expected_active_revision: state.targets.active_revision,
+        });
+        if (!result.verified) {
+          notice((reasons[result.code] || "连接未通过。") + " 凭据未保存。", true);
+          return;
+        }
+        state.targets = result.configuration;
+        expertTargets = separateBmcAccounts(state.targets.config);
+        render();
+        notice("连接成功，已为此 IP 记住账号。后续任务会自动使用。");
+        if (state.page_session?.wait_for_save) finishConfiguration();
+      } finally {
+        password.value = "";
+      }
+    });
+  };
+}
 function accountFields(parent, label, record = {}, source) {
   const group = node("section", undefined, parent);
   group.className = "account-form";
@@ -669,6 +723,7 @@ function render() {
       const read = records($("fields"), current.config, true);
       return () => ({ credentials: read() });
     })();
+  renderRemember();
   checks();
   document
     .querySelectorAll("[data-tab]")
@@ -694,11 +749,14 @@ async function save() {
   render();
   notice("配置已生效，后续请求会使用当前配置。");
   if (state.page_session?.wait_for_save && state.page_session.kind === kind) {
-    closed = true;
-    sessionStorage.removeItem("openubmc-configuration-session");
-    notice("配置已生效，可以回到原任务继续。连接检查结果以任务中的提示为准。");
-    document.querySelectorAll("input,select").forEach((e) => { e.disabled = true; });
+    finishConfiguration();
   }
+}
+function finishConfiguration() {
+  closed = true;
+  sessionStorage.removeItem("openubmc-configuration-session");
+  notice("配置已生效，可以回到原任务继续。连接检查结果以任务中的提示为准。");
+  document.querySelectorAll("input,select").forEach((e) => { e.disabled = true; });
 }
 $("activate").onclick = () => action(save);
 $("account-mode").onclick = () => {
@@ -748,7 +806,7 @@ action(async () => {
 
 function separateBmcAccounts(config) {
   return [config.defaults || {}, ...Object.values(config.targets || {})]
-    .some((entry) => entry.bmc?.ssh && entry.bmc?.redfish && entry.bmc.ssh !== entry.bmc.redfish);
+    .some((entry) => entry.bmc && entry.bmc.ssh !== entry.bmc.redfish);
 }
 
 $("finish").onclick = () =>
