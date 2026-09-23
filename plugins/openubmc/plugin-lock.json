@@ -1,5 +1,5 @@
 {
-  "content_digest": "86917c076422454fd0b7dc8d9aaa091dd656d9aa9e8004ff1d8083946a86e09f",
+  "content_digest": "61563615e09dac9d879063d8b513e043b3acbbd750154bddccb124e1408781a0",
   "files": {
     ".codex-plugin/plugin.json": "62395f71c592de2cc43cac403472fddb7a48866f6c5b1fe1b510cc351f17be39",
     ".mcp.json": "af8fe201eb83ca74ff89507b66e666a32e9fe88e589d2c6bc2efe660f23301e3",
@@ -23,7 +23,7 @@
     "openubmc-kb-mcp/src/version.js": "48263b169de3771d8c748869185d65a1c6237babcf180a2c6fa24ccb079e1cf1",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2",
     "scripts/install_plugin.py": "07da057730efb2df7ecd93e5634a74897894080e92630c73633717843b0e9db2",
-    "scripts/launch_runtime.py": "ba92f70887da2d098883e4abb991e57c908616c902ee28b8371cbb9a33f3c847",
+    "scripts/launch_runtime.py": "5ae13627c6b287f028d1e46a8f08ce60e36bc0d294ec735737dfc423db53988a",
     "scripts/plugin_admin.py": "5a318b23c561c71634e2cf62ae48413eed4e253453af713df6d6a099461b8144",
     "scripts/plugin_archive.py": "bc8a89c5f23982082741a36e74491e56fde5b7d7f067a28f560fb58cc23ea22d",
     "scripts/plugin_install.py": "d9d6ac18681da8a4217901f3f17edcadbc0a5d1cbcbb5891caf35e0887556cfe",
@@ -289,6 +289,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "95900c51cf05631fcd3e2b186a64cdcdd13c3315",
+  "source_commit": "4d8ab64964eb7f57b42a5decb58fb24101cc4b40",
   "version": "2.0.16"
 }
