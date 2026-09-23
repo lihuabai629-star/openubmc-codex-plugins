@@ -75,8 +75,8 @@ class ShellFallbackBudget:
     _seen: dict[str, int] = field(default_factory=dict)
 
     def admit(self, command: Sequence[str]) -> tuple[bool, str]:
-        if self.limit < 1:
-            raise RoutingError("shell fallback budget must be positive")
+        if not 1 <= self.limit <= 32:
+            raise RoutingError("shell fallback budget must be between 1 and 32")
         key = _digest(list(command))
         count = self._seen.get(key, 0) + 1
         self._seen[key] = count
@@ -96,6 +96,7 @@ class ExecutionRouter:
     structured_calls: int = 0
     shell_calls: int = 0
     host_mismatches: int = 0
+    host_transitions: int = 0
     _records: list[dict[str, object]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -117,14 +118,14 @@ class ExecutionRouter:
         shell_budget: int | None = None,
     ) -> dict[str, object]:
         operation = operation.strip().lower()
-        if operation not in SUPPORTED_OPERATIONS:
-            raise RoutingError(f"unsupported operation: {operation}")
+        if not operation or re.fullmatch(r"[a-z][a-z0-9-]{0,63}", operation) is None:
+            raise RoutingError("operation must be a bounded identifier")
         if not requested_scope.strip() or not evidence_boundary.strip():
             raise RoutingError("requested scope and evidence boundary are required")
         probe = probe or ProtocolProbe(False, self.expected_host, "probe_missing")
         if probe.host != self.expected_host:
             self.host_mismatches += 1
-        if probe.healthy and operation in SUPPORTED_OPERATIONS:
+        if probe.healthy and probe.host == self.expected_host and operation in SUPPORTED_OPERATIONS:
             self.structured_calls += 1
             record = {
                 "schema": SCHEMA,
@@ -137,10 +138,15 @@ class ExecutionRouter:
                 "fallback": None,
             }
         else:
-            reason = fallback_reason.strip() or probe.reason.strip() or "protocol_unavailable"
-            if not reason:
+            reason = (fallback_reason.strip()
+                      or ("protocol_host_mismatch" if probe.host != self.expected_host else "")
+                      or ("operation_unsupported" if operation not in SUPPORTED_OPERATIONS else "")
+                      or probe.reason.strip() or "protocol_unavailable")
+            if re.fullmatch(r"[a-z][a-z0-9_:-]{0,63}", reason) is None:
                 raise RoutingError("shell fallback requires a stable reason code")
             if shell_budget is not None:
+                if not 1 <= shell_budget <= 32:
+                    raise RoutingError("shell fallback budget must be between 1 and 32")
                 self.shell_budget.limit = shell_budget
             record = {
                 "schema": SCHEMA,
@@ -166,6 +172,12 @@ class ExecutionRouter:
         if not allowed:
             raise RoutingError(reason)
         self.shell_calls += 1
+        stages = [
+            "windows" if name.startswith(("powershell", "pwsh")) else
+            "wsl" if name.startswith("wsl") else "target"
+            for name in re.findall(r"(?i)\b(?:powershell(?:\.exe)?|pwsh(?:\.exe)?|wsl(?:\.exe)?|ssh(?:\.exe)?)\b", " ".join(command))
+        ]
+        self.host_transitions += sum(left != right for left, right in zip(stages, stages[1:]))
         entry = dict(record)
         fallback = dict(entry.get("fallback", {}))
         fallback["calls"] = self.shell_budget.calls
@@ -183,6 +195,7 @@ class ExecutionRouter:
             "fallback_calls": self.shell_calls,
             "host_accuracy": self.host_mismatches == 0,
             "host_mismatches": self.host_mismatches,
+            "host_transitions": self.host_transitions,
             "repetitions": self.shell_budget.repeated,
             "unresolved_work": sum(
                 1 for record in self._records
@@ -219,4 +232,3 @@ def probe_protocol(
         "" if healthy else "required_runtime_tools_missing",
         tools,
     )
-
