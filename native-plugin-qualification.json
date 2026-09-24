@@ -1,5 +1,5 @@
 {
-  "archive_sha256": "91e7eb1977474cda0aca9a66d503fd1dba3ba57441e3483bbb0167f390b5e261",
+  "archive_sha256": "6e1fb278c308b8c8b104ddb1a0205258a1333084a589c51ede845fc30bfb56e8",
   "bytecode_restart": {
     "generated_cache_count": 152,
     "mcp_health": {
@@ -34,7 +34,7 @@
     "verified_after_restart": true
   },
   "codex": "codex-cli 0.153.4",
-  "content_digest": "13c968b36ff89f01fb940de7677197f4ba7fb2ee126379b0a7e8658fd4bc6475",
+  "content_digest": "db0172bafff9185d047d17089111c4f8947e9479ef38df4a66266292fcfbcece",
   "deterministic_archive": true,
   "external_state_preserved": true,
   "files": 273,
@@ -75,20 +75,20 @@
     "runs": [
       {
         "active_requests": 0,
-        "codex_pid": 499812,
+        "codex_pid": 516977,
         "exit_reason": "client-terminated",
         "ownership_model": "bootstrap-supervised",
-        "runtime_pid": 499983,
-        "session_id": "aae67f7b4a424a39be6625ba4f478938",
+        "runtime_pid": 517152,
+        "session_id": "fb70d80c6c384a7eb97361d504d99c92",
         "skills_visible_outside_source": [
           "openubmc-debug",
           "openubmc-build",
           "openubmc-upgrade",
           "openubmc-environment-setup"
         ],
-        "source_commit": "9b3bb8464613663afcc023b458ddd17e39d80f39",
-        "supervisor_pid": 499938,
-        "thread_id": "01a0d356-1039-78b1-a75b-d0474cfd56cd",
+        "source_commit": "d273bd92afc46d92600564a1a7b200177b7ca1fb",
+        "supervisor_pid": 517100,
+        "thread_id": "01a0d38e-d193-7861-b5b1-a8cba7427b75",
         "tool_names": [
           "mcp__openubmc_kb__openubmc_kb_list",
           "mcp__openubmc_kb__openubmc_kb_query",
@@ -103,20 +103,20 @@
       },
       {
         "active_requests": 0,
-        "codex_pid": 500068,
+        "codex_pid": 517238,
         "exit_reason": "client-terminated",
         "ownership_model": "bootstrap-supervised",
-        "runtime_pid": 500252,
-        "session_id": "aae67f7b4a424a39be6625ba4f478938",
+        "runtime_pid": 517419,
+        "session_id": "fb70d80c6c384a7eb97361d504d99c92",
         "skills_visible_outside_source": [
           "openubmc-debug",
           "openubmc-build",
           "openubmc-upgrade",
           "openubmc-environment-setup"
         ],
-        "source_commit": "9b3bb8464613663afcc023b458ddd17e39d80f39",
-        "supervisor_pid": 500194,
-        "thread_id": "01a0d356-1f60-7b42-8f15-b87399506d62",
+        "source_commit": "d273bd92afc46d92600564a1a7b200177b7ca1fb",
+        "supervisor_pid": 517361,
+        "thread_id": "01a0d38e-e186-7092-987e-c156a46df7b8",
         "tool_names": [
           "mcp__openubmc_kb__openubmc_kb_list",
           "mcp__openubmc_kb__openubmc_kb_query",
@@ -134,10 +134,10 @@
   },
   "native_install": true,
   "native_thread_resume": {
-    "baseline_archive_sha256": "a273ec9cd09ac2fc36380d27ee421dff3ac386c8e953b86e1c0f516170e14642",
+    "baseline_archive_sha256": "91e7eb1977474cda0aca9a66d503fd1dba3ba57441e3483bbb0167f390b5e261",
     "configuration_preserved": true,
     "desktop_ui_verified": false,
-    "from_version": "2.0.17",
+    "from_version": "2.1.0",
     "native_upgrade": true,
     "old_cache_absent": true,
     "old_cache_removed_by": "native-client",
@@ -146,8 +146,8 @@
       "openubmc-target-runtime"
     ],
     "resume_error": null,
-    "thread_id": "01a0d358-f97f-7f63-b459-6fd8e2e76242",
-    "to_version": "2.1.0",
+    "thread_id": "01a0d38f-108b-7ea3-8cac-73110ee58d08",
+    "to_version": "2.1.1",
     "transport": "native-app-server-stdio"
   },
   "native_uninstall": true,
@@ -167,6 +167,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "9b3bb8464613663afcc023b458ddd17e39d80f39",
-  "version": "2.1.0"
+  "source_commit": "d273bd92afc46d92600564a1a7b200177b7ca1fb",
+  "version": "2.1.1"
 }
