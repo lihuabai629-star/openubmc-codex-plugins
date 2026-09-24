@@ -8,13 +8,13 @@
     "behavior/test_credential_commands.py": "879d31480aef97d36c54c4a6b1d59b1e0a50d9f924c7664a2b5fe36cce4cc0b4",
     "behavior/test_failure_gates.py": "cc57abdba373782e535100f645a17db5a27be5068f8eadbc6e0b891a6150bd2e",
     "behavior/test_openssh_timeouts.py": "f20e2ee205cde4e6a35afdff2f7beb0dd1556c5dff285f23ec83c304452c7fd6",
-    "behavior/test_plugin_credentials.py": "7fea9a411174eb9003a05aa45840fd8849a10bbf498e4021658360b411a4dbfc",
-    "behavior/test_plugin_disable_migration.py": "893fd943d2cc4a129c15c1ea31e1e5211b0302f13aa6af43f63913c97d7f4387",
-    "behavior/test_plugin_python_entrypoints.py": "77aa1442b9963c5e9a92ef96ad5d71cf22997d932a141e0c222f924567b0aa3c",
+    "behavior/test_plugin_credentials.py": "390a8385a68731d0e44c28504e2bf2e2d57ce54fada51184968e4e84f53571e7",
+    "behavior/test_plugin_disable_migration.py": "6e04e3c2c713c63647828b81782c53a43c81b7ce574b94fc344a07aebe2f505a",
+    "behavior/test_plugin_python_entrypoints.py": "973e98dc70ef422d5c6d628b5f0ceadf469d0444c0658439dabba08808088477",
     "behavior/test_upgrade_task_states.py": "3fba0983ea5a074822c3857bdf5e690e35ca3c99870aba4bd9c79b4e09cbdeba",
-    "check_behavior.py": "3d7850b771a0c6a328a9aac1ebd5e8c10465e311abb37cb3a09539b4fb9a84d8",
+    "check_behavior.py": "fc5593b5b085a9a36fdb17d293da1c4ec40ed3c6254a70749911bfb0a9a9ec91",
     "host/package-lock.json": "3d456708625217a8fe548dda38925d1882444a2f40ec7209a5968e5d5d615b4c",
     "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5"
   },
-  "source_commit": "fc4652408659e6dfa0672e062b08105648f57165"
+  "source_commit": "9b3bb8464613663afcc023b458ddd17e39d80f39"
 }

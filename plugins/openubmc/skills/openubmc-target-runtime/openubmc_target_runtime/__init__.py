@@ -258,6 +258,7 @@ from .mcp_lifecycle import (
     MCP_PROCESS_LIFECYCLE_SCHEMA,
     McpProcessLifecycle,
     cleanup_confirmed_orphaned_mcp_processes,
+    cleanup_retired_orphaned_mcp_processes,
     inspect_mcp_process_records,
 )
 from .run_engine import ObservationEngine, RunEngine, SemanticRuntime

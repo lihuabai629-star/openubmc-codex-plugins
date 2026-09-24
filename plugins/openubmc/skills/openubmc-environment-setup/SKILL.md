@@ -1,6 +1,6 @@
 ---
 name: openubmc-environment-setup
-description: "Configure or repair an installed openUBMC plugin on Linux/WSL: 账号缺失或认证失败、配置网页、默认 BMC 账号、关联 OS、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, required tools, migration, and installation health; device diagnosis belongs to openubmc-debug."
+description: "Configure or repair an installed openUBMC plugin on Windows, Linux or WSL: 账号缺失或认证失败、配置网页、默认 BMC 账号、关联 OS、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, WSL selection, required tools, migration, and installation health; device diagnosis belongs to openubmc-debug."
 ---
 
 # openUBMC plugin environment
@@ -14,9 +14,11 @@ python3 -I <plugin-root>/scripts/pluginctl.py doctor
 python3 -I <plugin-root>/scripts/pluginctl.py prepare --repair
 ```
 
-The MCP launchers prepare locked Python and npm dependencies on first startup. Subsequent starts verify and reuse the cache. Installation progress goes to stderr. A modified package or dependency cache fails verification; use the repair command for dependency drift and reinstall the selected marketplace version for package drift. Do not modify the installed package, bypass hashes or create duplicate loose Skill/MCP registrations.
+The MCP launchers check locked Python and npm dependencies on startup. When they are absent or damaged, both servers still initialize in setup mode. Use the setup tool offered in the task to prepare or repair them, then start a new task. A modified package fails closed to setup mode; reinstall the selected marketplace version. Do not modify the installed package, bypass hashes or create duplicate loose Skill/MCP registrations.
 
-Linux, Python 3.12 with pip, Node.js 20+ with npm, Git and Codex are the required host tools. On Debian/Ubuntu, install missing command-line tools when environment setup is requested. SDKs, compilers, Docker installation and Conan remotes belong to their respective workflows.
+Node.js 20+, Git and Codex are required on the Codex host. Linux also needs Python 3.12 with pip. Native Windows selects one WSL distribution and runs the packaged Linux backend there; Python, npm, credentials, Runtime history, builds and Conan stay in that WSL. One eligible distribution is selected automatically, while multiple distributions require an explicit local selection. SDKs, compilers, Docker installation and Conan remotes belong to their respective workflows.
+
+If `openubmc_setup_status` is available, the plugin is in recoverable setup mode. Use `openubmc_setup_select_wsl` when requested, `openubmc_setup_prepare` for the reported capability, and `openubmc_setup_open_configuration` to open the private browser page. Present the returned loopback URL to the user. Do not ask a Windows user to locate or run `pluginctl.py`.
 
 ## Private credentials
 
