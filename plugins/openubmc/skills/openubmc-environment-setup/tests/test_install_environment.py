@@ -36,6 +36,8 @@ EXPECTED_BUNDLE = (
     ("openubmc-log-analyzer", "openubmc-log-analyzer"),
     ("openubmc-developer", "openubmc-developer"),
     ("openubmc-build", "openubmc-build"),
+    ("openubmc-bingo-build", "openubmc-bingo-build"),
+    ("openubmc-bingo-development", "openubmc-bingo-development"),
     ("openubmc-upgrade", "openubmc-upgrade"),
     ("openubmc-live-patch", "openubmc-live-patch"),
     ("openubmc-dt-testing", "testing"),
@@ -842,7 +844,7 @@ class EnvironmentSetupTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def test_bundle_manifest_has_eleven_canonical_mappings(self) -> None:
+    def test_bundle_manifest_has_thirteen_canonical_mappings(self) -> None:
         self.assertEqual(installer.SKILL_BUNDLE, EXPECTED_BUNDLE)
         self.assertEqual(
             installer.TARGET_RUNTIME_SKILL_BUNDLE,
@@ -4930,7 +4932,7 @@ class EnvironmentSetupTests(unittest.TestCase):
         self.assertEqual(document["workflow"]["skill_profile"], "target-runtime")
         self.assertEqual(document["workflow"]["skill_count"], 7)
         self.assertEqual(document["planned_workflow"]["skill_profile"], "full")
-        self.assertEqual(document["planned_workflow"]["skill_count"], 11)
+        self.assertEqual(document["planned_workflow"]["skill_count"], 13)
         self.assertTrue(document["planned_workflow"]["openubmc_kb_managed"])
         self.assertEqual(document["knowledge_mcp"]["transport"], "stdio")
 

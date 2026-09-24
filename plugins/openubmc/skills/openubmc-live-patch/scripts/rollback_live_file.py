@@ -119,7 +119,8 @@ def _runtime_rollback(args: argparse.Namespace, plan: dict[str, Any]) -> int:
                 "action": "rollback",
                 "intent": args.intent or "live_patch",
                 "ip": args.ip,
-                "backup_path": args.backup,
+                # A created-target rollback has no backup; omit the optional field.
+                **({"backup_path": args.backup} if args.backup else {}),
                 "remote_path": args.remote,
                 "remove_created": args.remove_created,
                 "expected_current_sha256": args.expected_current_sha256,

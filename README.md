@@ -1,6 +1,6 @@
 # openUBMC for Codex
 
-**Current release:** 2.1.1
+**Current release:** 2.1.2
 
 Diagnose openUBMC systems, analyze log bundles, develop components, build firmware and verify delivery with persistent Runtime evidence.
 

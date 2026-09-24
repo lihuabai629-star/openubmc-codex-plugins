@@ -1,0 +1,7 @@
+interface:
+  display_name: "openUBMC Bingo Development"
+  short_description: "Develop and test the Bingo CLI source"
+  default_prompt: "Use $openubmc-bingo-development only for changes to the Bingo CLI source, parser, command registration, workspace detection, orchestration, tests, or packaging."
+
+policy:
+  allow_implicit_invocation: true

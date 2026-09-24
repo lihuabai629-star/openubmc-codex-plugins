@@ -366,8 +366,18 @@ def mutation_recovery_route(
         None,
     )
     if journal is not None:
-        disposition = getattr(journal, "recovery_disposition", None)
-        if not isinstance(disposition, MutationRecoveryDisposition):
+        raw_disposition = getattr(journal, "recovery_disposition", None)
+        if isinstance(raw_disposition, MutationRecoveryDisposition):
+            disposition = raw_disposition
+        elif isinstance(raw_disposition, Enum):
+            # Packaged domain backends may load the same Runtime under another module name.
+            try:
+                disposition = MutationRecoveryDisposition(raw_disposition.value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    "MutationJournal did not provide a valid recovery disposition"
+                ) from exc
+        else:
             raise ValueError(
                 "MutationJournal did not provide a valid recovery disposition"
             )
