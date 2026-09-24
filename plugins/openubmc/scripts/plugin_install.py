@@ -244,6 +244,21 @@ def loose_skill_overlaps(home: Path, skill_paths: list[str], codex_home: Path | 
     return sorted(overlaps)
 
 
+def actionable_loose_skill_overlaps(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
+                                    skill_names: list[str] | None = None) -> list[str]:
+    """Return exact-name loose Skills that are not already disabled in Codex."""
+    codex_root = (codex_home or home/'.codex').resolve()
+    config = codex_root/'config.toml'
+    before = config.read_bytes() if config.is_file() else b''
+    document = tomllib.loads(before.decode())
+    disabled = {
+        row.get('path') for row in document.get('skills', {}).get('config', [])
+        if row.get('enabled') is False
+    }
+    return [path for path in loose_skill_overlaps(
+        home, skill_paths, codex_root, skill_names=skill_names) if path not in disabled]
+
+
 class PlanSnapshot(NamedTuple):
     config: Path
     state_bytes: bytes
@@ -301,7 +316,7 @@ def _plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
     if source:
         targets.update(str(Path(source)/name) for name in skill_paths)
     links = []
-    exact_skill_files = set(loose_skill_overlaps(
+    exact_skill_files = set(actionable_loose_skill_overlaps(
         home, skill_paths, codex_root, skill_names=skill_names))
     roots = [codex_root/'skills', home/'.agents/skills', home/'.local/share/openubmc/codex-skill-links']
     for root in roots:

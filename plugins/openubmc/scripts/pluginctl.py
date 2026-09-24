@@ -656,14 +656,21 @@ def main() -> int:
             configuration = module.preview(args.home, skill_paths, args.codex_home,
                                            mode='repair-overrides', target_plugin=args.target_plugin,
                                            skill_names=skill_names)
-            overlaps = module.loose_skill_overlaps(
+            overlaps = module.actionable_loose_skill_overlaps(
                 args.home.resolve(), skill_paths, args.codex_home, skill_names=skill_names)
             configuration.setdefault('changes', {})['skills'] = overlaps
             configuration['would_change'] = bool(configuration.get('would_change') or overlaps)
             configuration['ready'] = configuration['ok'] and not configuration['would_change']
             if not configuration['ready']:
-                configuration['repair_action'] = ('pluginctl.py repair-overrides --preview; '
-                    'reconcile custom settings if reported, then pluginctl.py repair-overrides')
+                actions = []
+                if configuration.get('changes', {}).get('mcp_servers'):
+                    actions.append('pluginctl.py repair-overrides --preview; '
+                                   'pluginctl.py repair-overrides')
+                if overlaps:
+                    actions.append('pluginctl.py migrate --disable-only --preview; '
+                                   'pluginctl.py migrate --disable-only')
+                configuration['repair_action'] = ('reconcile custom settings if reported'
+                    if not actions else '; '.join(actions))
             report['codex_configuration'] = configuration
             report['ok'] = report['startup_ready'] and configuration['ready']
         print(json.dumps(report, sort_keys=True))

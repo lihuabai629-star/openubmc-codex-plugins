@@ -153,6 +153,10 @@ class DisableMigrationTests(unittest.TestCase):
         self.assertNotIn(str(unrelated), document)
         self.assertTrue((exact/'SKILL.md').is_file())
         self.assertTrue((unrelated/'SKILL.md').is_file())
+        repaired = self.cli('doctor', '--capability', 'runtime', success=False)
+        self.assertTrue(repaired['codex_configuration']['ready'])
+        self.assertFalse(repaired['codex_configuration']['would_change'])
+        self.assertEqual(repaired['codex_configuration']['changes']['skills'], [])
 
         self.cli('restore-legacy', '--transaction', applied['transaction'])
         self.assertEqual(self.config.read_text(), original)
