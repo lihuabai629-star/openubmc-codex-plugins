@@ -131,6 +131,7 @@ class PluginMaintenance:
         self.codex = Path(self.environment.get("CODEX_HOME", str(self.home/".codex")))
         self.preview_id = None
         self.preview_config = None
+        self.preview_operation = None
         self.transaction = None
 
     def command(self, *arguments):
@@ -178,30 +179,77 @@ class PluginMaintenance:
         if action == "status":
             report = self.command("doctor")
             config = report.get("codex_configuration", {})
+            config_home = Path(self.environment.get("XDG_CONFIG_HOME", str(self.home/".config")))
+            sources = {
+                "targets": Path(self.environment.get("OPENUBMC_CREDENTIALS_FILE") or config_home/"openubmc/credentials.json"),
+                "conan": config_home/"openubmc/conan.json",
+                "kb": Path(self.environment.get("OPENUBMC_KB_CONFIG") or config_home/"openubmc/kb-mcp.json"),
+            }
+            local_configuration = {}
+            for kind, source in sources.items():
+                try:
+                    state = LocalConfigurationStore(source, kind=kind).status()
+                    local_configuration[kind] = {
+                        "configured": state.get("active_revision") is not None,
+                        "active_revision": state.get("active_revision"),
+                    }
+                except ConfigurationError:
+                    local_configuration[kind] = {"configured": False, "active_revision": None, "error": "configuration_invalid"}
+            execution_host = self.environment.get("OPENUBMC_EXECUTION_HOST") or (
+                "wsl" if "microsoft" in os.uname().release.lower() else "linux"
+            )
             return {
                 "version": report.get("version"),
+                "source_commit": report.get("source_commit"),
                 "integrity": report.get("package_integrity", False),
                 "runtime": report.get("capabilities", {}).get("runtime", {}).get("startup_ready", False),
                 "kb": report.get("capabilities", {}).get("kb", {}).get("startup_ready", False),
+                "execution": {
+                    "host": execution_host,
+                    "wsl_distro": self.environment.get("OPENUBMC_SELECTED_WSL_DISTRO"),
+                    "native_windows_build_supported": False,
+                },
+                "dependencies": {
+                    name: {
+                        "ready": value.get("dependencies_ready", False),
+                        "startup_ready": value.get("startup_ready", False),
+                    }
+                    for name, value in report.get("capabilities", {}).items()
+                },
+                "local_configuration": local_configuration,
+                "knowledge_authentication": "not_checked",
+                "remote_target_authentication": "not_checked",
                 "configuration": {"ready": config.get("ready", False),
                     "conflict": bool(config.get("conflicts")),
-                    "servers": config.get("changes", {}).get("mcp_servers", [])},
+                    "servers": config.get("changes", {}).get("mcp_servers", []),
+                    "skills": config.get("changes", {}).get("skills", [])},
             }
         if action == "preview":
             before = self.config_bytes()
-            report = self.command("repair-overrides", "--preview")
+            status = self.command("doctor").get("codex_configuration", {})
+            operation = "repair-overrides" if status.get("changes", {}).get("mcp_servers") else "migrate"
+            arguments = (operation, "--preview") if operation == "repair-overrides" else (operation, "--disable-only", "--preview")
+            report = self.command(*arguments)
             if not report.get("ok") or before != self.config_bytes():
                 raise ConfigurationConflict("configuration_conflict")
             self.preview_id = secrets.token_urlsafe(24)
             self.preview_config = before
+            self.preview_operation = operation
             return {"preview_id": self.preview_id,
                     "servers": report["changes"]["mcp_servers"],
+                    "skills": report["changes"].get("skills", []),
+                    "operation": operation,
                     "would_change": report["would_change"]}
         if action == "apply":
-            if not self.preview_id or data.get("preview_id") != self.preview_id or self.config_bytes() != self.preview_config:
+            if not self.preview_id or not self.preview_operation or data.get("preview_id") != self.preview_id or self.config_bytes() != self.preview_config:
                 raise ConfigurationConflict("configuration_conflict")
             self.preview_id = None
-            report = self.command("repair-overrides", "--expected-config-digest", hashlib.sha256(self.preview_config).hexdigest())
+            operation = self.preview_operation
+            self.preview_operation = None
+            arguments = (operation, "--expected-config-digest", hashlib.sha256(self.preview_config).hexdigest())
+            if operation == "migrate":
+                arguments = (operation, "--disable-only", "--expected-config-digest", hashlib.sha256(self.preview_config).hexdigest())
+            report = self.command(*arguments)
             if not report.get("ok"):
                 raise ConfigurationConflict("configuration_conflict")
             self.transaction = report.get("transaction")

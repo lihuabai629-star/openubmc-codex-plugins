@@ -209,6 +209,41 @@ def legacy_owned_servers(document: dict, state: dict) -> set[str]:
     return owned
 
 
+def declared_skill_name(skill: Path) -> str | None:
+    """Read a bounded frontmatter name without adding a YAML dependency."""
+    try:
+        lines = skill.read_text(encoding='utf-8')[:65536].splitlines()
+    except (OSError, UnicodeError):
+        return None
+    if not lines or lines[0].strip() != '---':
+        return None
+    for line in lines[1:]:
+        if line.strip() == '---':
+            break
+        if line.startswith('name:'):
+            value = line.removeprefix('name:').strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+                value = value[1:-1]
+            return value if re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,127}', value) else None
+    return None
+
+
+def loose_skill_overlaps(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
+                         skill_names: list[str] | None = None) -> list[str]:
+    """Return exact-name loose Skill files that compete with this plugin."""
+    codex_root = (codex_home or home/'.codex').resolve()
+    names = set(skill_names if skill_names is not None else skill_paths)
+    overlaps = set()
+    for root in (codex_root/'skills', home/'.agents/skills', home/'.local/share/openubmc/codex-skill-links'):
+        if root.is_symlink() or not root.is_dir():
+            continue
+        for path in root.iterdir():
+            skill = path/'SKILL.md'
+            if skill.is_file() and declared_skill_name(skill) in names:
+                overlaps.add(str(skill.resolve()))
+    return sorted(overlaps)
+
+
 class PlanSnapshot(NamedTuple):
     config: Path
     state_bytes: bytes
@@ -235,6 +270,7 @@ def load_plan_snapshot(home: Path, codex_root: Path) -> PlanSnapshot:
 
 def _plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
           mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public',
+          skill_names: list[str] | None = None,
           activation_overrides: frozenset[str] = frozenset(),
           snapshot: PlanSnapshot | None = None) -> tuple[dict, bytes, bytes]:
     if mode not in {'remove', 'disable-only', 'repair-overrides'}:
@@ -265,6 +301,8 @@ def _plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
     if source:
         targets.update(str(Path(source)/name) for name in skill_paths)
     links = []
+    exact_skill_files = set(loose_skill_overlaps(
+        home, skill_paths, codex_root, skill_names=skill_names))
     roots = [codex_root/'skills', home/'.agents/skills', home/'.local/share/openubmc/codex-skill-links']
     for root in roots:
         if root.is_symlink():
@@ -272,15 +310,20 @@ def _plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
         if not root.is_dir():
             continue
         for path in root.iterdir():
+            exact_overlap = mode == 'disable-only' and str((path/'SKILL.md').resolve()) in exact_skill_files
+            # Exact-name loose Skills compete with the marketplace Skill even
+            # when an older installer left no usable ownership record.  A
+            # config-only disable is reversible and does not claim the files.
             if path.is_symlink() and str(path.resolve()) in targets:
                 links.append({'path': str(path), 'target': os.readlink(path)})
-            elif mode == 'disable-only' and (str(path) in state.get('links', {}) or path.name in skill_paths):
+            elif mode == 'disable-only' and not exact_overlap and str(path) in state.get('links', {}):
                 if str(path.resolve()) not in targets:
                     raise ValueError('Skill installation ownership conflicts at: ' + str(path))
     changes = {'skills': [], 'mcp_servers': sorted(owned_servers), 'plugins': []}
     if mode == 'disable-only':
         skill_files = {str((Path(target)/'SKILL.md').resolve()) for target in targets
                        if (Path(target)/'SKILL.md').is_file()}
+        skill_files.update(exact_skill_files)
         # Codex matches the canonical SKILL.md file, not the containing directory.
         current_rows = document.get('skills', {}).get('config', [])
         skill_files = {path for path in skill_files if not any(row.get('path') == path for row in current_rows)
@@ -300,12 +343,15 @@ def _plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
 
 
 def plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
-         mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public') -> tuple[dict, bytes, bytes]:
-    return _plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
+         mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public',
+         skill_names: list[str] | None = None) -> tuple[dict, bytes, bytes]:
+    return _plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin,
+                 skill_names=skill_names)
 
 
 def activation_plan(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
-                    target_plugin: str = 'openubmc@openubmc-public') -> tuple[dict, bytes, bytes]:
+                    target_plugin: str = 'openubmc@openubmc-public',
+                    skill_names: list[str] | None = None) -> tuple[dict, bytes, bytes]:
     """Compose legacy migration with recognized native-cache override repair."""
     codex_root = (codex_home or home/'.codex').resolve()
     snapshot = load_plan_snapshot(home, codex_root)
@@ -320,6 +366,7 @@ def activation_plan(home: Path, skill_paths: list[str], codex_home: Path | None 
         skill_paths,
         codex_root,
         target_plugin=target_plugin,
+        skill_names=skill_names,
         activation_overrides=frozenset(overrides),
         snapshot=snapshot,
     )
@@ -374,7 +421,8 @@ def validate_migration_links(record: dict) -> None:
 
 
 def preview(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
-            mode: str = 'disable-only', target_plugin: str = 'openubmc@openubmc-public') -> dict:
+            mode: str = 'disable-only', target_plugin: str = 'openubmc@openubmc-public',
+            skill_names: list[str] | None = None) -> dict:
     try:
         home = home.resolve()
         pending = pending_migration(home, codex_home, mode, target_plugin)
@@ -390,7 +438,8 @@ def preview(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
                 raise ValueError('Codex configuration changed during migration')
             after = (root/'after.toml').read_bytes()
         else:
-            record, before, after = plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
+            record, before, after = plan(home, skill_paths, codex_home, mode=mode,
+                                         target_plugin=target_plugin, skill_names=skill_names)
     except (ValueError, OSError) as error:
         return {'ok': False, 'mode': mode, 'conflicts': [str(error)], 'changed': False}
     return {'ok': True, 'mode': mode, 'preview': True, 'conflicts': [], 'changes': record['changes'],
@@ -398,7 +447,8 @@ def preview(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
 
 
 def migrate(home: Path, skill_paths: list[str], codex_home: Path | None = None, *,
-            mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public', expected_before_digest: str | None = None) -> dict:
+            mode: str = 'remove', target_plugin: str = 'openubmc@openubmc-public', expected_before_digest: str | None = None,
+            skill_names: list[str] | None = None) -> dict:
     home = home.resolve()
     journals = journal_root(home)
     journals.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -409,7 +459,8 @@ def migrate(home: Path, skill_paths: list[str], codex_home: Path | None = None, 
             root, record = pending
             before, after = (root/'before.toml').read_bytes(), (root/'after.toml').read_bytes()
         else:
-            record, before, after = plan(home, skill_paths, codex_home, mode=mode, target_plugin=target_plugin)
+            record, before, after = plan(home, skill_paths, codex_home, mode=mode,
+                                         target_plugin=target_plugin, skill_names=skill_names)
             if expected_before_digest is not None and record['before_digest'] != expected_before_digest:
                 raise ValueError('Codex configuration changed since preview')
             if before == after and (mode == 'disable-only' or not record['links']):

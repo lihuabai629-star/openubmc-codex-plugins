@@ -506,6 +506,50 @@ def cleanup_confirmed_orphaned_mcp_processes(
 ) -> list[int]:
     """Terminate only idle live processes whose owner death is confirmed."""
 
+    return _cleanup_matching_orphans(
+        lifecycle_root,
+        eligible=lambda status: (
+            status.get("task_id") == task_id
+            and status.get("session_id") == session_id
+        ),
+        process_alive=process_alive,
+        process_identity=process_identity,
+    )
+
+
+def cleanup_retired_orphaned_mcp_processes(
+    lifecycle_root: Path,
+    *,
+    current_source_commit: str,
+    process_alive: Callable[[int], bool] = _default_process_alive,
+    process_identity: Callable[[int], str] = _default_process_identity,
+) -> list[int]:
+    """Retire verified orphan MCPs from older immutable plugin sources."""
+
+    if not isinstance(current_source_commit, str) or len(current_source_commit) not in {40, 64}:
+        raise ValueError("current_source_commit must be a full source identity")
+    return _cleanup_matching_orphans(
+        lifecycle_root,
+        eligible=lambda status: (
+            status.get("component") in {"target-runtime", "knowledge-mcp"}
+            and isinstance(status.get("source_commit"), str)
+            and len(str(status["source_commit"])) in {40, 64}
+            and status.get("source_commit") != current_source_commit
+        ),
+        process_alive=process_alive,
+        process_identity=process_identity,
+    )
+
+
+def _cleanup_matching_orphans(
+    lifecycle_root: Path,
+    *,
+    eligible: Callable[[dict[str, object]], bool],
+    process_alive: Callable[[int], bool],
+    process_identity: Callable[[int], str],
+) -> list[int]:
+    """Signal a revalidated pidfd only when the caller's ownership rule matches."""
+
     cleaned: list[int] = []
     for status in inspect_mcp_process_records(
         lifecycle_root,
@@ -514,8 +558,7 @@ def cleanup_confirmed_orphaned_mcp_processes(
     ):
         process_id = int(status["process_id"])
         if (
-            status.get("task_id") != task_id
-            or status.get("session_id") != session_id
+            not eligible(status)
             or process_id == os.getpid()
             or status["lifecycle_state"] != "orphaned"
             or status["identity_verified"] is not True
@@ -551,6 +594,7 @@ def cleanup_confirmed_orphaned_mcp_processes(
                 continue
             if (
                 latest_status.get("lifecycle_state") != "orphaned"
+                or not eligible(latest_status)
                 or latest_status.get("ownership_identity_bound") is not True
                 or int(latest_status.get("process_id", -1)) != process_id
                 or str(latest_status.get("process_identity", "unknown"))

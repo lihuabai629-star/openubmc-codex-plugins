@@ -27,6 +27,12 @@ class DependencyCancelled(ValueError):
     pass
 
 
+class DependencyPreparationError(ValueError):
+    def __init__(self, code: str, message: str):
+        super().__init__(message)
+        self.code = code
+
+
 def _cancel_dependency_process(_signum, _frame):
     raise DependencyCancelled('Dependency preparation cancelled')
 
@@ -157,21 +163,53 @@ def _prepare_timeout(command: list[str]) -> float:
     return value
 
 
+def _dependency_failure_code(stage: str, output: bytes) -> str:
+    text = output[-1024 * 1024:].decode(errors='replace').lower()
+    if 'hashes' in text or 'hash mismatch' in text:
+        return 'dependency_hash_mismatch'
+    if 'proxy' in text or 'tunnel connection failed' in text:
+        return 'proxy_failure'
+    if any(value in text for value in ('could not resolve', 'temporary failure in name resolution',
+                                        'eai_again', 'enotfound', 'getaddrinfo', 'network is unreachable',
+                                        'enotcached')):
+        return 'registry_unavailable'
+    if stage == 'pip' and any(value in text for value in ('no module named pip', 'pip: not found')):
+        return 'pip_unavailable'
+    if stage == 'npm' and any(value in text for value in ('npm: not found', 'enoent')):
+        return 'npm_unavailable'
+    return 'dependency_prepare_failed'
+
+
 def _run_dependency_command(command: list[str], env: dict[str, str], *, timeout: float, stage: str, mutex_fd: int) -> None:
     """Stop the complete owned process group before cache cleanup or retry."""
     started=time.monotonic()
-    process = subprocess.Popen(command, env=env, stdout=sys.stderr, stderr=sys.stderr,
-                               start_new_session=True, pass_fds=(mutex_fd,))
+    output = tempfile.TemporaryFile()
+    try:
+        process = subprocess.Popen(command, env=env, stdout=output, stderr=subprocess.STDOUT,
+                                   start_new_session=True, pass_fds=(mutex_fd,))
+    except FileNotFoundError as exc:
+        output.close()
+        code = 'npm_unavailable' if stage == 'npm' else 'pip_unavailable'
+        print(json.dumps({'stage': stage, 'status': 'failed', 'error_code': code}, sort_keys=True),
+              file=sys.stderr, flush=True)
+        raise DependencyPreparationError(code, 'Required dependency tool is unavailable') from exc
     print(json.dumps({'stage':stage,'status':'started','pid':process.pid,'timeout_seconds':timeout}),file=sys.stderr,flush=True)
     try:
         try:
             return_code = process.wait(timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             print(json.dumps({'stage': stage, 'status': 'timeout'}, sort_keys=True), file=sys.stderr, flush=True)
-            raise ValueError('Dependency preparation timed out: ' + command[0]) from exc
+            raise DependencyPreparationError(
+                'dependency_prepare_timeout', 'Dependency preparation timed out') from exc
         if return_code:
-            print(json.dumps({'stage': stage, 'status': 'failed', 'exit_code': return_code}, sort_keys=True), file=sys.stderr, flush=True)
-            raise ValueError('Dependency preparation failed in ' + command[0] + ' (exit ' + str(return_code) + ')')
+            output.flush(); output.seek(0)
+            code = _dependency_failure_code(stage, output.read())
+            print(json.dumps({'stage': stage, 'status': 'failed', 'exit_code': return_code,
+                              'error_code': code}, sort_keys=True), file=sys.stderr, flush=True)
+            message = ('Dependency package hashes did not match'
+                       if code == 'dependency_hash_mismatch'
+                       else 'Dependency preparation failed in ' + stage)
+            raise DependencyPreparationError(code, message)
         print(json.dumps({'stage': stage, 'status': 'completed', 'pid':process.pid, 'elapsed_seconds':time.monotonic()-started}, sort_keys=True), file=sys.stderr, flush=True)
     finally:
         # Even a successfully reaped parent can leave descendants holding pipes.
@@ -180,6 +218,7 @@ def _run_dependency_command(command: list[str], env: dict[str, str], *, timeout:
         except ProcessLookupError:
             pass
         process.wait()
+        output.close()
 
 
 def prepare_dependencies(content: dict[str, bytes], repair: bool, *, capability: str, offline: bool = False, retries: int = 0,
@@ -245,7 +284,7 @@ def prepare_dependencies(content: dict[str, bytes], repair: bool, *, capability:
                         break
                     except DependencyCancelled:
                         raise
-                    except ValueError:
+                    except (ValueError, DependencyPreparationError):
                         if attempt == retries:
                             raise
             # Dependency identity covers the complete installed content, including
@@ -346,6 +385,69 @@ def local_credentials_status(content: dict[str, bytes]) -> dict[str, object]:
             sys.modules.pop(name, None)
 
 
+def local_configuration_status(content: dict[str, bytes]) -> dict[str, object]:
+    """Project active local revisions without reading secret configuration values."""
+    import types
+    prefix = '_verified_openubmc_configuration'
+    package = types.ModuleType(prefix)
+    package.__path__ = []
+    loaded = {prefix: package}
+    sys.modules[prefix] = package
+    try:
+        modules = {}
+        for name in ('credential_file', 'configuration'):
+            module = types.ModuleType(prefix + '.' + name)
+            module.__package__ = prefix
+            sys.modules[module.__name__] = loaded[module.__name__] = module
+            path = 'skills/openubmc-target-runtime/openubmc_target_runtime/' + name + '.py'
+            exec(compile(content[path], '<verified-' + name + '>', 'exec'), module.__dict__)
+            modules[name] = module
+        config_home = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home()/'.config')/'openubmc'
+        sources = {
+            'targets': config_home/'credentials.json',
+            'kb': config_home/'kb-mcp.json',
+            'conan': config_home/'conan.json',
+        }
+        result = {}
+        for kind, source in sources.items():
+            try:
+                status = modules['configuration'].LocalConfigurationStore(source, kind=kind).status()
+                result[kind] = {
+                    'configured': status.get('active_revision') is not None,
+                    'active_revision': status.get('active_revision'),
+                }
+            except modules['configuration'].ConfigurationError:
+                result[kind] = {
+                    'configured': False,
+                    'active_revision': None,
+                    'error': 'configuration_invalid',
+                }
+        return result
+    finally:
+        for name in loaded:
+            sys.modules.pop(name, None)
+
+
+def cleanup_retired_processes(content: dict[str, bytes], lock: dict) -> dict[str, object]:
+    """Retire only source-bound orphan MCPs from an older verified package."""
+    import types
+    module = types.ModuleType('_verified_openubmc_mcp_lifecycle')
+    path = 'skills/openubmc-target-runtime/openubmc_target_runtime/mcp_lifecycle.py'
+    exec(compile(content[path], '<verified-mcp-lifecycle>', 'exec'), module.__dict__)
+    configured = os.environ.get('OPENUBMC_MCP_LIFECYCLE_DIR', '').strip()
+    root = Path(configured).expanduser().absolute() if configured else (
+        Path.home()/'.local/state/openubmc-agent-workflow/mcp-processes').absolute()
+    before = module.inspect_mcp_process_records(root)
+    retired = [item for item in before if item.get('source_commit') != lock['source_commit']]
+    cleaned = module.cleanup_retired_orphaned_mcp_processes(
+        root, current_source_commit=lock['source_commit'])
+    after = module.inspect_mcp_process_records(root)
+    remaining = [item for item in after if item.get('process_running') is True
+                 and item.get('source_commit') != lock['source_commit']]
+    return {'ok': True, 'lifecycle_root': str(root), 'retired_records': len(retired),
+            'cleaned_processes': cleaned, 'remaining_retired_processes': len(remaining)}
+
+
 def probe_server(command: str, content: dict[str, bytes], lock: dict, knowledge_mcp_version: str | None = None) -> dict[str, object]:
     """Perform a bounded MCP initialize/tools/list probe through the public launcher."""
     request = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
@@ -436,7 +538,7 @@ def positive_timeout(value: str) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'configure', 'migrate', 'repair-overrides', 'restore-legacy'])
+    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'configure', 'migrate', 'repair-overrides', 'restore-legacy', 'cleanup-retired'])
     parser.add_argument('--home', type=Path, default=Path.home())
     parser.add_argument('--codex-home', type=Path, default=Path(os.environ['CODEX_HOME']) if os.environ.get('CODEX_HOME') else None)
     parser.add_argument('--transaction', default='')
@@ -476,15 +578,20 @@ def main() -> int:
         report = {'ok': True, 'source_commit': lock['source_commit'], 'version': lock['version'],
                   'content_digest': lock['content_digest'], 'skills': lock['skills'],
                   'knowledge_mcp_version': knowledge_mcp_version}
+        if args.command == 'cleanup-retired':
+            print(json.dumps(cleanup_retired_processes(content, lock), sort_keys=True))
+            return 0
         if args.command in ('migrate', 'repair-overrides', 'restore-legacy'):
             import types
             module = types.ModuleType('openubmc_plugin_install')
             exec(compile(content['scripts/plugin_install.py'], '<verified-plugin-install>', 'exec'), module.__dict__)
-            skill_paths = [item['path'] for item in json.loads(content['workflow.json'])['skills']]
+            skill_entries = json.loads(content['workflow.json'])['skills']
+            skill_paths = [item['path'] for item in skill_entries]
+            skill_names = [item['name'] for item in skill_entries]
             if args.command in ('migrate', 'repair-overrides'):
                 operation = module.preview if args.preview else module.migrate
                 binding = {'expected_before_digest': args.expected_config_digest} if not args.preview else {}
-                result = operation(args.home, skill_paths, args.codex_home, mode='repair-overrides' if args.command == 'repair-overrides' else args.migration_mode, target_plugin=args.target_plugin, **binding)
+                result = operation(args.home, skill_paths, args.codex_home, mode='repair-overrides' if args.command == 'repair-overrides' else args.migration_mode, target_plugin=args.target_plugin, skill_names=skill_names, **binding)
             else:
                 result = module.restore(args.home, args.transaction, args.codex_home)
             print(json.dumps(result, sort_keys=True)); return 0 if result['ok'] else 2
@@ -531,12 +638,28 @@ def main() -> int:
             report['dependencies_ready'] = all(item['dependencies_ready'] for item in report['capabilities'].values())
             report['credentials'] = local_credentials_status(content)
             report['credentials_configured'] = report['credentials']['configured']
+            report['local_configuration'] = local_configuration_status(content)
+            if report['credentials'].get('active_revision') is not None:
+                report['local_configuration']['targets'] = {
+                    'configured': report['credentials']['configured'],
+                    'active_revision': report['credentials']['active_revision'],
+                }
+            report['knowledge_authentication'] = 'not_checked'
+            report['remote_target_authentication'] = 'not_checked'
             report['startup_ready'] = report['dependencies_ready'] and all(item.get('ok') for item in report['mcp_health'].values())
             import types
             module = types.ModuleType('openubmc_plugin_install')
             exec(compile(content['scripts/plugin_install.py'], '<verified-plugin-install>', 'exec'), module.__dict__)
-            configuration = module.preview(args.home, [], args.codex_home,
-                                           mode='repair-overrides', target_plugin=args.target_plugin)
+            skill_entries = json.loads(content['workflow.json'])['skills']
+            skill_paths = [item['path'] for item in skill_entries]
+            skill_names = [item['name'] for item in skill_entries]
+            configuration = module.preview(args.home, skill_paths, args.codex_home,
+                                           mode='repair-overrides', target_plugin=args.target_plugin,
+                                           skill_names=skill_names)
+            overlaps = module.loose_skill_overlaps(
+                args.home.resolve(), skill_paths, args.codex_home, skill_names=skill_names)
+            configuration.setdefault('changes', {})['skills'] = overlaps
+            configuration['would_change'] = bool(configuration.get('would_change') or overlaps)
             configuration['ready'] = configuration['ok'] and not configuration['would_change']
             if not configuration['ready']:
                 configuration['repair_action'] = ('pluginctl.py repair-overrides --preview; '
@@ -545,6 +668,13 @@ def main() -> int:
             report['ok'] = report['startup_ready'] and configuration['ready']
         print(json.dumps(report, sort_keys=True))
         return 0 if report['ok'] else 2
+    except DependencyCancelled as error:
+        print(json.dumps({'ok': False, 'error_code': 'dependency_prepare_interrupted',
+                          'error': str(error)}), file=sys.stderr)
+        return 2
+    except DependencyPreparationError as error:
+        print(json.dumps({'ok': False, 'error_code': error.code, 'error': str(error)}), file=sys.stderr)
+        return 2
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(json.dumps({'ok': False, 'error': str(error)}), file=sys.stderr)
         return 2

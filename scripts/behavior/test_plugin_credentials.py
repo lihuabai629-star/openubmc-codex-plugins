@@ -95,6 +95,14 @@ class PluginCredentialTests(unittest.TestCase):
                                 'defaults': {'bmc': {'ssh': 'operator', 'redfish': 'operator'}},
                                 'targets': {}}, expected_revision=None)
             store.activate(saved['revision'], expected_active_revision=None)
+            kb = LocalConfigurationStore(home / '.config/openubmc/kb-mcp.json', kind='kb')
+            kb_saved = kb.save({'username': 'fixture', 'password': 'kb-local-secret',
+                                'clientSecret': 'client-local-secret'}, expected_revision=None)
+            kb.activate(kb_saved['revision'], expected_active_revision=None)
+            conan = LocalConfigurationStore(home / '.config/openubmc/conan.json', kind='conan')
+            conan_saved = conan.save({'credentials': {'stable': {'user': 'fixture',
+                                      'password': 'conan-local-secret'}}}, expected_revision=None)
+            conan.activate(conan_saved['revision'], expected_active_revision=None)
             env = {key: value for key, value in os.environ.items() if not key.startswith(('OPENUBMC_', 'XDG_', 'PYTHON'))}
             env.update(HOME=str(home), XDG_CONFIG_HOME=str(home / '.config'),
                        XDG_DATA_HOME=str(home / '.local/share'))
@@ -104,7 +112,13 @@ class PluginCredentialTests(unittest.TestCase):
             self.assertTrue(report['credentials_configured'], report['credentials'])
             self.assertEqual(report['credentials']['remote_authentication'], 'not_checked')
             self.assertEqual(report['credentials']['active_revision'], saved['revision'])
-            self.assertNotIn('only-local-doctor-secret', result.stdout + result.stderr)
+            self.assertEqual(report['local_configuration']['targets']['active_revision'], saved['revision'])
+            self.assertEqual(report['local_configuration']['kb']['active_revision'], kb_saved['revision'])
+            self.assertEqual(report['local_configuration']['conan']['active_revision'], conan_saved['revision'])
+            self.assertEqual(report['knowledge_authentication'], 'not_checked')
+            self.assertEqual(report['remote_target_authentication'], 'not_checked')
+            for secret in ('only-local-doctor-secret', 'kb-local-secret', 'client-local-secret', 'conan-local-secret'):
+                self.assertNotIn(secret, result.stdout + result.stderr)
 
     def test_doctor_reads_local_credentials_without_claiming_remote_authentication(self):
         with tempfile.TemporaryDirectory() as temporary:

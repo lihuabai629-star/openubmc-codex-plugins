@@ -831,12 +831,21 @@ async function pluginStatus() {
   }
   for (const [label, value] of [
     ["版本", result.version || "无法验证"],
+    ["执行环境", result.execution?.wsl_distro
+      ? `Windows → WSL ${result.execution.wsl_distro}`
+      : (result.execution?.host || "无法确认")],
     ["安装文件", result.integrity ? "完整" : "校验未通过，请重新安装市场版本"],
     ["Runtime", result.runtime ? "可启动" : "未就绪，可尝试修复依赖"],
     ["知识库", result.kb ? "可启动" : "未就绪，可尝试修复依赖"],
+    ["BMC / OS 凭据", result.local_configuration?.targets?.configured
+      ? `已激活 ${result.local_configuration.targets.active_revision}` : "尚未激活"],
+    ["知识库认证", result.knowledge_authentication === "not_checked"
+      ? (result.local_configuration?.kb?.configured ? "配置已激活，尚未登录验证" : "尚未配置")
+      : result.knowledge_authentication],
+    ["设备认证", "尚未连接检查"],
     ["启动配置", result.configuration.ready ? "未发现覆盖冲突" : result.configuration.conflict
       ? "存在自定义或冲突配置，请保留原配置并联系维护者处理"
-      : "发现旧启动覆盖，可预览修复"],
+      : "发现旧启动覆盖或同名 Skill，可预览修复"],
   ]) node("p", `${label}：${value}`, status);
 }
 $("plugin-check").onclick = () => action(pluginStatus);
@@ -845,9 +854,13 @@ $("plugin-preview").onclick = () => action(async () => {
   if (result.available === false) throw new Error("请从已安装的插件打开页面。");
   pluginPreview = result.preview_id;
   $("plugin-apply").hidden = !result.would_change;
+  const changes = [
+    result.servers.length ? `启动覆盖 ${result.servers.join("、")}` : "",
+    result.skills.length ? `同名 Skill ${result.skills.map((value) => value.split(/[\\/]/).slice(-2, -1)[0]).join("、")}` : "",
+  ].filter(Boolean).join("；");
   $("plugin-result").textContent = result.would_change
-    ? `将备份当前配置，并移除以下手工启动覆盖：${result.servers.join("、")}。插件将管理启动入口。`
-    : "没有需要清理的标准启动覆盖。";
+    ? `将备份当前配置并处理：${changes}。文件和凭据会保留。`
+    : "没有需要处理的旧启动覆盖或同名 Skill。";
 });
 $("plugin-apply").onclick = () => action(async () => {
   const result = await api("/api/plugin", { action: "apply", preview_id: pluginPreview });

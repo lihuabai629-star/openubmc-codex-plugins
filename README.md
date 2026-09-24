@@ -1,12 +1,12 @@
 # openUBMC for Codex
 
-**Current release:** 2.0.17
+**Current release:** 2.1.0
 
 Diagnose openUBMC systems, analyze log bundles, develop components, build firmware and verify delivery with persistent Runtime evidence.
 
 ## Install
 
-Requires Linux, Codex CLI 0.153.4, Python 3.12 with pip, Node.js 20+ with npm, and Git. Run this in the environment where Codex starts its MCP servers:
+Requires Codex CLI 0.153.4. Linux and WSL need Python 3.12 with pip, Node.js 20+ with npm, and Git. A native Windows installation also needs WSL with those Linux dependencies. Run:
 
 ```bash
 codex plugin marketplace add lihuabai629-star/openubmc-codex-plugins && codex plugin add openubmc@openubmc-public
@@ -15,6 +15,8 @@ codex plugin marketplace add lihuabai629-star/openubmc-codex-plugins && codex pl
 Alternatively, add `lihuabai629-star/openubmc-codex-plugins` as a Git marketplace in Codex, then install **openUBMC** from **Openubmc Public**. This is a community marketplace; OpenAI's default catalog is managed separately.
 
 Start a new Codex task after installation. The first startup downloads and verifies Python/npm dependencies; allow up to ten minutes on a slow connection. Later startups reuse the verified local cache. Credentials are configured separately.
+
+On Windows, the plugin starts from Codex directly and runs Runtime and knowledge-base work in WSL. One installed distribution is selected automatically. If several distributions are installed, ask Codex to check openUBMC setup and select one; the choice is saved locally. Missing WSL or dependencies opens a recoverable setup interface instead of preventing a task from starting.
 
 Try: “检查 openUBMC Runtime 状态，并说明缺少哪些配置。”
 
@@ -54,9 +56,9 @@ python3 -I <plugin-directory>/scripts/pluginctl.py doctor
 python3 -I <plugin-directory>/scripts/pluginctl.py prepare --repair
 ```
 
-Ask Codex: “打开 openUBMC 本机配置，检查插件状态。” The page shows the version, file integrity, Runtime/KB startup and user-level launch conflicts. It opens even when dependencies are missing. Preview recognized launch-override removal before applying it; the page offers guarded undo and separate dependency repair buttons. Custom wrappers and environment settings are retained for reconciliation.
+Ask Codex: “打开 openUBMC 本机配置，检查插件状态。” The setup flow reports the package, Windows/WSL execution host, dependencies, Runtime/KB protocol health, activated configuration revisions, duplicate registrations, KB authentication and remote target authentication separately. It can open the private loopback configuration page and repair recognized stale launch overrides or duplicate loose Skills. Custom wrappers and environment settings are retained for reconciliation.
 
-`doctor` checks the same local package and user-level configuration boundaries. Neither a healthy package nor a successful protocol resume proves that a particular desktop task has recovered: reopen that task and confirm its resume result. BMC and knowledge-service authentication require separate checks. Native Windows has not been qualified; use Linux or WSL.
+`doctor` checks the same local package and user-level configuration boundaries. Neither a healthy package nor a successful protocol resume proves that a particular desktop task has recovered: reopen that task and confirm its resume result. BMC and knowledge-service authentication require separate checks. On Windows, openUBMC target execution remains in the selected WSL distribution.
 
 ## License
 

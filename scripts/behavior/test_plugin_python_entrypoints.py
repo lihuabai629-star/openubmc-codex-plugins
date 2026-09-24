@@ -140,7 +140,7 @@ class PythonEntrypointTests(unittest.TestCase):
                 'doctor', 'mdbctl_remote', 'package_skill', 'preflight_checks',
                 'preflight_recommendations', 'preflight_remote', 'read_remote_file',
                 'target_runtime_cli', 'workflow_remote'),
-            'openubmc-environment-setup': ('install_environment',),
+            'openubmc-environment-setup': ('associate_device', 'install_environment'),
             'openubmc-live-patch': ('deploy_current_patch', 'deploy_live_file', 'infer_live_patch', 'rollback_live_file'),
             'openubmc-log-analyzer': ('package_skill', 'pull_bundle'),
             'openubmc-upgrade': ('artifact_identity', 'preflight_upgrade', 'redfish_credentials'),
