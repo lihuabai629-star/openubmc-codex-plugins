@@ -30,3 +30,28 @@ jobs:
           name: public-behavior
           path: ${{ runner.temp }}/public-behavior.json
           if-no-files-found: error
+
+  windows:
+    name: Windows native plugin bootstrap
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install locked Codex host
+        shell: pwsh
+        run: npm ci --ignore-scripts --no-audit --no-fund --prefix scripts/host
+      - name: Install plugin and initialize setup mode
+        shell: pwsh
+        run: |
+          $archive = Join-Path $env:RUNNER_TEMP "openubmc-marketplace.tar.gz"
+          tar -czf $archive -C plugins openubmc
+          if ($LASTEXITCODE -ne 0) { throw "Plugin archive staging failed" }
+          $codex = Resolve-Path "scripts/host/node_modules/.bin/codex.cmd"
+          ./scripts/qualify_windows_plugin.ps1 `
+            -Archive $archive `
+            -Codex $codex `
+            -WorkRoot (Join-Path $env:RUNNER_TEMP "openubmc-windows-marketplace") `
+            -MarketplaceRoot (Resolve-Path ".")
