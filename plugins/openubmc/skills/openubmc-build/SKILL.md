@@ -1,6 +1,6 @@
 ---
 name: openubmc-build
-description: "Build and test openUBMC components or firmware: 编译组件、生成代码、运行测试、打 HPM 包、构建失败。Use for bmcgo validation, component Conan packaging, or product HPM builds with verified local evidence. Explicit bingo commands and Bingo CLI development route to openubmc-bingo-development; environment setup routes to openubmc-environment-setup. Route firmware upload and activation to openubmc-upgrade, live symptoms to openubmc-debug, and package uploads to openubmc-publish."
+description: "Build and test openUBMC components or firmware: 编译组件、生成代码、运行测试、打 HPM 包、构建失败。Use for bmcgo validation, component Conan packaging, or product HPM builds with verified local evidence. Explicit Bingo builds route to openubmc-bingo-build, while Bingo CLI source development routes to openubmc-bingo-development. Route environment setup, firmware activation, live diagnosis, and package upload to their owning skills."
 ---
 
 # openUBMC Build

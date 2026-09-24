@@ -1,5 +1,5 @@
 {
-  "archive_sha256": "6e1fb278c308b8c8b104ddb1a0205258a1333084a589c51ede845fc30bfb56e8",
+  "archive_sha256": "9d454a5afc1eb5f7deb05e1acffc12e90945c73fd19e3d26c40c41623726d448",
   "bytecode_restart": {
     "generated_cache_count": 152,
     "mcp_health": {
@@ -34,10 +34,10 @@
     "verified_after_restart": true
   },
   "codex": "codex-cli 0.153.4",
-  "content_digest": "db0172bafff9185d047d17089111c4f8947e9479ef38df4a66266292fcfbcece",
+  "content_digest": "bcd94e47556c71a4f413782716f828109177c498f56fde679597e327f870b878",
   "deterministic_archive": true,
   "external_state_preserved": true,
-  "files": 273,
+  "files": 279,
   "mcp_health": {
     "kb": {
       "ok": true,
@@ -75,20 +75,20 @@
     "runs": [
       {
         "active_requests": 0,
-        "codex_pid": 516977,
+        "codex_pid": 728563,
         "exit_reason": "client-terminated",
         "ownership_model": "bootstrap-supervised",
-        "runtime_pid": 517152,
-        "session_id": "fb70d80c6c384a7eb97361d504d99c92",
+        "runtime_pid": 728737,
+        "session_id": "6c6c812fee9341e687c9fe8900372d73",
         "skills_visible_outside_source": [
           "openubmc-debug",
           "openubmc-build",
           "openubmc-upgrade",
           "openubmc-environment-setup"
         ],
-        "source_commit": "d273bd92afc46d92600564a1a7b200177b7ca1fb",
-        "supervisor_pid": 517100,
-        "thread_id": "01a0d38e-d193-7861-b5b1-a8cba7427b75",
+        "source_commit": "d7e256ed6b5d34671230483cbf584dacfd95319d",
+        "supervisor_pid": 728687,
+        "thread_id": "01a0d497-4392-7870-85cf-433dbfe5ed02",
         "tool_names": [
           "mcp__openubmc_kb__openubmc_kb_list",
           "mcp__openubmc_kb__openubmc_kb_query",
@@ -103,20 +103,20 @@
       },
       {
         "active_requests": 0,
-        "codex_pid": 517238,
+        "codex_pid": 728839,
         "exit_reason": "client-terminated",
         "ownership_model": "bootstrap-supervised",
-        "runtime_pid": 517419,
-        "session_id": "fb70d80c6c384a7eb97361d504d99c92",
+        "runtime_pid": 729017,
+        "session_id": "6c6c812fee9341e687c9fe8900372d73",
         "skills_visible_outside_source": [
           "openubmc-debug",
           "openubmc-build",
           "openubmc-upgrade",
           "openubmc-environment-setup"
         ],
-        "source_commit": "d273bd92afc46d92600564a1a7b200177b7ca1fb",
-        "supervisor_pid": 517361,
-        "thread_id": "01a0d38e-e186-7092-987e-c156a46df7b8",
+        "source_commit": "d7e256ed6b5d34671230483cbf584dacfd95319d",
+        "supervisor_pid": 728971,
+        "thread_id": "01a0d497-574e-7541-9370-a72302464bd5",
         "tool_names": [
           "mcp__openubmc_kb__openubmc_kb_list",
           "mcp__openubmc_kb__openubmc_kb_query",
@@ -134,10 +134,10 @@
   },
   "native_install": true,
   "native_thread_resume": {
-    "baseline_archive_sha256": "91e7eb1977474cda0aca9a66d503fd1dba3ba57441e3483bbb0167f390b5e261",
+    "baseline_archive_sha256": "6e1fb278c308b8c8b104ddb1a0205258a1333084a589c51ede845fc30bfb56e8",
     "configuration_preserved": true,
     "desktop_ui_verified": false,
-    "from_version": "2.1.0",
+    "from_version": "2.1.1",
     "native_upgrade": true,
     "old_cache_absent": true,
     "old_cache_removed_by": "native-client",
@@ -146,8 +146,8 @@
       "openubmc-target-runtime"
     ],
     "resume_error": null,
-    "thread_id": "01a0d38f-108b-7ea3-8cac-73110ee58d08",
-    "to_version": "2.1.1",
+    "thread_id": "01a0d498-049e-78d0-b3e0-6ddecec18ef1",
+    "to_version": "2.1.2",
     "transport": "native-app-server-stdio"
   },
   "native_uninstall": true,
@@ -155,6 +155,8 @@
   "reinstall": true,
   "schema": "openubmc.codex-plugin.qualification.v1",
   "skills": [
+    "openubmc-bingo-build",
+    "openubmc-bingo-development",
     "openubmc-build",
     "openubmc-debug",
     "openubmc-developer",
@@ -167,6 +169,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "d273bd92afc46d92600564a1a7b200177b7ca1fb",
-  "version": "2.1.1"
+  "source_commit": "d7e256ed6b5d34671230483cbf584dacfd95319d",
+  "version": "2.1.2"
 }

@@ -1,0 +1,7 @@
+interface:
+  display_name: "openUBMC Bingo Build"
+  short_description: "Run Bingo builds in verified openUBMC workspaces"
+  default_prompt: "Use $openubmc-bingo-build for explicit Bingo component or Manifest commands after identifying the workspace and requested artifact."
+
+policy:
+  allow_implicit_invocation: true

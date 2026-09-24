@@ -1,0 +1,27 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-bingo-development",
+  "version": "1.0.0",
+  "description": "Develop and test the openUBMC Bingo CLI source.",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": [
+    "openubmc-bingo-build",
+    "openubmc-build"
+  ],
+  "files": [
+    "SKILL.md",
+    "agents/openai.yaml",
+    "skill.json"
+  ],
+  "keywords": [
+    "openubmc",
+    "bingo",
+    "cli-development",
+    "command-parser",
+    "workspace-detection"
+  ],
+  "categories": [
+    "development"
+  ]
+}

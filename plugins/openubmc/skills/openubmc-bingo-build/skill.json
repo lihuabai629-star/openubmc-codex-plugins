@@ -1,0 +1,30 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-bingo-build",
+  "version": "1.0.0",
+  "description": "Run openUBMC Bingo component and product build workflows.",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": [
+    "openubmc-build",
+    "openubmc-bingo-development",
+    "openubmc-publish",
+    "openubmc-upgrade"
+  ],
+  "files": [
+    "SKILL.md",
+    "agents/openai.yaml",
+    "skill.json"
+  ],
+  "keywords": [
+    "openubmc",
+    "bingo",
+    "component-build",
+    "manifest",
+    "hpm"
+  ],
+  "categories": [
+    "development",
+    "delivery"
+  ]
+}

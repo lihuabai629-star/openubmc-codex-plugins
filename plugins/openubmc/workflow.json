@@ -1,6 +1,6 @@
 {
   "schema_version": "openubmc-agent-workflow.v1",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "integrated_baseline": "ceb46e8ca5542a4273128b1a4aa8606b2f5eaee0",
   "profiles": {
     "full": [
@@ -9,6 +9,8 @@
       "openubmc-log-analyzer",
       "openubmc-developer",
       "openubmc-build",
+      "openubmc-bingo-build",
+      "openubmc-bingo-development",
       "openubmc-upgrade",
       "openubmc-live-patch",
       "openubmc-dt-testing",
@@ -46,6 +48,14 @@
     {
       "name": "openubmc-build",
       "path": "openubmc-build"
+    },
+    {
+      "name": "openubmc-bingo-build",
+      "path": "openubmc-bingo-build"
+    },
+    {
+      "name": "openubmc-bingo-development",
+      "path": "openubmc-bingo-development"
     },
     {
       "name": "openubmc-upgrade",

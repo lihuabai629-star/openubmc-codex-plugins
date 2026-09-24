@@ -148,6 +148,8 @@ SKILL_BUNDLE: SkillBundle = (
     ("openubmc-log-analyzer", "openubmc-log-analyzer"),
     ("openubmc-developer", "openubmc-developer"),
     ("openubmc-build", "openubmc-build"),
+    ("openubmc-bingo-build", "openubmc-bingo-build"),
+    ("openubmc-bingo-development", "openubmc-bingo-development"),
     ("openubmc-upgrade", "openubmc-upgrade"),
     ("openubmc-live-patch", "openubmc-live-patch"),
     ("openubmc-dt-testing", "testing"),
