@@ -2,22 +2,22 @@
   "behavior": {
     "artifacts": {
       "passed": true,
-      "seconds": 4.573,
+      "seconds": 4.801,
       "tests": 4
     },
     "build": {
       "passed": true,
-      "seconds": 1.48,
+      "seconds": 1.522,
       "tests": 6
     },
     "credentials": {
       "passed": true,
-      "seconds": 0.82,
+      "seconds": 1.248,
       "tests": 9
     },
     "doctor": {
       "passed": true,
-      "seconds": 3.072,
+      "seconds": 4.939,
       "tests": 5
     },
     "kb_loader": {
@@ -26,27 +26,27 @@
     },
     "logs": {
       "passed": true,
-      "seconds": 0.131,
+      "seconds": 0.172,
       "tests": 3
     },
     "migration": {
       "passed": true,
-      "seconds": 7.537,
+      "seconds": 7.859,
       "tests": 17
     },
     "python_entrypoints": {
       "passed": true,
-      "seconds": 30.452,
+      "seconds": 40.099,
       "tests": 11
     },
     "ssh": {
       "passed": true,
-      "seconds": 4.532,
+      "seconds": 4.867,
       "tests": 4
     },
     "upgrade": {
       "passed": true,
-      "seconds": 6.012,
+      "seconds": 5.81,
       "tests": 2
     }
   },
@@ -62,7 +62,7 @@
   },
   "cold_dependencies": {
     "passed": true,
-    "seconds": 0.447
+    "seconds": 4.88
   },
   "community_checks": {
     "log_sha256": "6b49f104033c78be18b95686d458a349b977cca0ea0fe8e59ef7fe1782af37e9",
@@ -76,18 +76,6 @@
     "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2"
   },
-  "dependency_mode": "verified existing locked caches copied to isolated temporary home; no new installs",
-  "dependency_seeds": {
-    "kb": {
-      "capability_key": "b31c4ceaeb22e6499a1b8f16532afa2c89821dd8c24c4fc26f2d6933508cfe01",
-      "inventory_count": 3493
-    },
-    "runtime": {
-      "capability_key": "40fffacabe1039597404930af7d1add55055f74195fcf221af7751b573347e91",
-      "inventory_count": 337
-    }
-  },
-  "host_mode": "existing Codex CLI; exact scripts/host version not installed",
   "lock_provenance_checks": {
     "passed": true,
     "report_sha256": "f0f6213109a6292665df161dfd736dc694a4921975f2745824b7d6156dd3fa85",
@@ -122,18 +110,23 @@
       "version_matches_package": true
     }
   },
-  "observed_source_commit": "6d84997f13a916b66e938c419a2734c26794dc98",
+  "native_qualification": {
+    "archive_sha256": "0b73497c230e88cd20d55494c24a43107bdf378d8ccec6c4ce35c364c797cfea",
+    "codex": "codex-cli 0.153.4",
+    "ok": true,
+    "record": "native-plugin-qualification.json"
+  },
   "ordinary_python_cli_before_mcp": true,
   "package_integrity_after_checks": true,
   "passed": true,
   "platform": {
-    "codex": "codex-cli 0.161.0",
+    "codex": "codex-cli 0.153.4",
     "machine": "x86_64",
-    "node": "v20.18.0",
+    "node": "v20.20.2",
     "os": "Linux",
-    "python": "3.12.3"
+    "python": "3.12.15"
   },
-  "qualification_scope": "local package behavior with existing verified dependency caches",
+  "qualification_scope": "repository Linux/Windows CI and isolated native Codex installation",
   "record_checks": {
     "command": [
       "/usr/bin/python3",
@@ -146,18 +139,34 @@
     "tests": 135
   },
   "remote_business_qualification": "not_run",
+  "repository_ci": {
+    "conclusion": "success",
+    "head_sha": "691e5b3d905f5afd6d24d5dce6fa3ce7747fc400",
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "verify",
+        "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/37966199566/job/113941046083"
+      },
+      {
+        "conclusion": "success",
+        "name": "Windows native plugin bootstrap",
+        "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/37966199566/job/113941046260"
+      }
+    ],
+    "run_id": 37966199566,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/37966199566"
+  },
   "runtime_shutdown_verified": true,
   "schema": "openubmc.public-behavior.v1",
   "source_commit": "6d84997f13a916b66e938c419a2734c26794dc98",
-  "status": "local_linux_passed",
-  "total_seconds": 66.105,
+  "status": "passed",
   "unperformed": [
-    "hosted CI",
-    "native Windows/macOS qualification",
-    "exact locked Codex 0.153.4 host",
-    "fresh dependency installation",
     "real provider/device acceptance",
-    "installed Host measurements"
+    "installed Host workspace/measurement collection",
+    "desktop UI resume",
+    "native Windows WSL device execution",
+    "macOS qualification"
   ],
   "version": "2.1.3"
 }

@@ -6,9 +6,9 @@
     "repository": "lihuabai629-star/openubmc-codex-plugins",
     "skill_changes_commit": "61ef8c714d7532d28a5f1bf0aaebc60303911d10"
   },
-  "qualification": "local_linux_passed; see ../qualification.json for scope and limits",
-  "released": false,
-  "status": "candidate",
+  "qualification": "repository CI and native Codex 0.153.4 passed; see ../qualification.json",
+  "released": true,
+  "status": "released",
   "version": "2.1.3",
   "workflow": {
     "W01_commit": "a21f4f08049bcf1146af3a02b16fdd8e9b4e48f8",
