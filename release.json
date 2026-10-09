@@ -1,10 +1,10 @@
 {
   "base_distribution_commit": "758490a",
-  "content_digest": "d92e94b6075fa3b8523e006fe2ad45c35a991f961adccbfb10fcccd32d044cf1",
+  "content_digest": "94ee6d078b7aa594475084d2ab204eff882724ac95f918b6c14978e25c2a5ae0",
   "name": "openubmc",
   "qualification": "community-and-70-behavior-tests-passed; KB-cold-start-blocked",
   "release_scope": "codex-plugin",
-  "source_commit": "b532f3b87258b5bed5e206c1ee695a690b183d47",
+  "source_commit": "8973c30417e7c548ba427fbe9386e4ce3c23a2cd",
   "status": "candidate",
   "upgrade_baseline": "2.1.2",
   "version": "2.1.3"

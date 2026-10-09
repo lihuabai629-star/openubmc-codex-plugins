@@ -6,6 +6,8 @@ On Linux with Python 3.12, Node.js 20+, npm and Git:
 npm ci --ignore-scripts --no-audit --no-fund --prefix scripts/host
 export PATH="$PWD/scripts/host/node_modules/.bin:$PATH"
 python3 -I scripts/check_marketplace.py
+python3 -B scripts/check_community.py
+python3 -B scripts/check_records.py
 python3 -I scripts/check_behavior.py --output /tmp/openubmc-public-behavior.json
 ```
 

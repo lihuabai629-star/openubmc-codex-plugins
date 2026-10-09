@@ -43,6 +43,7 @@ from .run_engine import ObservationEngine, RunEngine, SemanticRuntime
 from .run_store import EventRunStore
 from .runtime_adapter import RuntimeSemanticAdapter
 from .semantic_runtime import SemanticRuntimePort
+from .workspace_context import WorkspaceSnapshot
 from .workflow import (
     DEFAULT_WORKFLOW_DEFINITIONS,
     WorkflowDefinitions,
@@ -110,11 +111,13 @@ class _AgentRuntimePort:
         *,
         task_id: str,
         operation_id: str,
+        workspace_context: WorkspaceSnapshot | None = None,
     ) -> dict[str, object]:
         return self._gateway.execute(
             arguments,
             task_id=task_id,
             operation_id=operation_id,
+            workspace_context=workspace_context,
         )
 
     def error(

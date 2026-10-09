@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "selection_ref": "selection-B",
+  "project_ref": "project-B",
+  "requested_machine_ref": "machine-B",
+  "requested_firmware_ref": "firmware-B",
+  "repositories": [{
+    "repo_ref": "repo-B",
+    "repo_class": "community",
+    "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "branch": "feature/B",
+    "dirty": true,
+    "identity_availability": "available",
+    "identity_source_ref": "source-B"
+  }],
+  "context_digest": "309a6577ffd15986c0e9daa12262e6e0361823c6eff46e4420d0536d9d5141d7"
+}

@@ -25,6 +25,7 @@ from .diagnostic_request import DiagnosticRequestPlan
 from .diagnosis_record import DiagnosisRecord, accepted_diagnosis_record
 from .incident import incident_recovery_policy
 from .mdb_query import MDB_QUERY_CORRECTION, is_read_only_mdb_query
+from .workspace_context import WorkspaceSnapshot
 
 
 SEMANTIC_RUNTIME_SCHEMA = f"{RUNTIME_API_VERSION}/semantic-runtime-v1"
@@ -1122,6 +1123,7 @@ class StartRun:
     targets: tuple[RunTarget, ...] = ()
     observation_ref: ObservationRef | None = None
     caller_deadline: float = 120.0
+    workspace_context: WorkspaceSnapshot | None = None
 
 
 @dataclass(frozen=True)
@@ -1300,6 +1302,8 @@ def run_command_semantic_input(command: RunCommand) -> Mapping[str, object]:
         "entry_arguments": dict(command.entry_arguments or {}),
         "purpose": command.purpose,
         "delivery_strategy": command.delivery_strategy,
+        **({"workspace_context": command.workspace_context.to_public_dict()}
+           if command.workspace_context is not None else {}),
         "observation_ref": (
             command.observation_ref.to_public_dict()
             if command.observation_ref is not None
@@ -1617,7 +1621,8 @@ def _bounded_diagnostic_scope(
 
 
 def decode_run_command(
-    action: Mapping[str, object], *, operation_id: str
+    action: Mapping[str, object], *, operation_id: str,
+    workspace_context: WorkspaceSnapshot | None = None,
 ) -> RunCommand:
     bounded_request(action)
     if "observation_receipt" in action:
@@ -1783,6 +1788,7 @@ def decode_run_command(
             targets=targets,
             observation_ref=observation_ref,
             caller_deadline=caller_deadline,
+            workspace_context=workspace_context,
         )
         _identity, digest = run_command_identity(
             command,

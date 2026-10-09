@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / 'plugins/openubmc'
@@ -18,9 +19,46 @@ def canonical(value):
 def refresh(source_commit):
     if not re.fullmatch(r'[a-f0-9]{40}', source_commit):
         raise ValueError('source commit must be a full SHA')
+    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
+    if source_commit != head:
+        raise ValueError('source commit must be the current committed candidate')
+    committed_files = set(subprocess.check_output(
+        ['git', 'ls-tree', '-r', '-z', '--name-only', source_commit, '--', 'plugins/openubmc'],
+        cwd=ROOT, text=True).split('\0')) - {''}
+    payload_files = set()
+    for path in PLUGIN.rglob('*'):
+        if '__pycache__' in path.parts:
+            continue
+        if path.is_symlink():
+            raise ValueError('plugin contains a symlink')
+        if path.is_file():
+            payload_files.add(path.relative_to(ROOT).as_posix())
+    if payload_files != committed_files:
+        raise ValueError('plugin payload inventory differs from committed source')
+    subprocess.run(['git', 'diff', '--exit-code', source_commit, '--', 'plugins/openubmc',
+                    ':!plugins/openubmc/scripts/launch_runtime.py', ':!plugins/openubmc/plugin-lock.json'],
+                   cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
+    for name in ('release.json', 'qualification.json', 'native-plugin-qualification.json'):
+        data = json.loads((ROOT / name).read_text())
+        if data.get('status') == 'released' or data.get('passed') is True:
+            raise ValueError('reset release qualification before refreshing a candidate')
     launcher = PLUGIN / 'scripts/launch_runtime.py'
-    source = launcher.read_text()
+    source = subprocess.check_output(
+        ['git', 'show', source_commit + ':plugins/openubmc/scripts/launch_runtime.py'],
+        cwd=ROOT, text=True)
     tree = ast.parse(source)
+    digest = hashlib.sha256(b'openubmc-target-runtime-content-v1\0')
+    package = PLUGIN / 'skills/openubmc-target-runtime/openubmc_target_runtime'
+    for path in sorted(package.rglob('*.py')):
+        if '__pycache__' in path.parts:
+            continue
+        if path.is_symlink():
+            raise ValueError('Runtime contains a symlink')
+        name = path.relative_to(package).as_posix().encode()
+        content = path.read_bytes()
+        digest.update(len(name).to_bytes(8, 'big')); digest.update(name)
+        digest.update(len(content).to_bytes(8, 'big')); digest.update(content)
+    source = re.sub(r'^EXPECTED_DIGEST = .*$', lambda _: 'EXPECTED_DIGEST = ' + repr('sha256:' + digest.hexdigest()), source, flags=re.M)
     roots = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign)
                  and getattr(n.targets[0], 'id', '') == 'COMPOSITION_ROOTS')
     files = {}
@@ -37,7 +75,8 @@ def refresh(source_commit):
     source = re.sub(r'^SOURCE_COMMIT = .*$', lambda _: 'SOURCE_COMMIT = ' + repr(source_commit), source, flags=re.M)
     launcher.write_text(source)
     lockpath = PLUGIN / 'plugin-lock.json'
-    lock = json.loads(lockpath.read_text())
+    lock = json.loads(subprocess.check_output(
+        ['git', 'show', source_commit + ':plugins/openubmc/plugin-lock.json'], cwd=ROOT, text=True))
     lock.pop('content_digest', None)
     lock['source_commit'] = source_commit
     lock['version'] = json.loads((PLUGIN / '.codex-plugin/plugin.json').read_text())['version']
@@ -50,8 +89,6 @@ def refresh(source_commit):
     for name in ('release.json', 'qualification.json', 'native-plugin-qualification.json'):
         p = ROOT / name
         data = json.loads(p.read_text())
-        if data.get('status') == 'released' or data.get('passed') is True:
-            raise ValueError('reset release qualification before refreshing a candidate')
         data.update(identity)
         p.write_bytes(canonical(data))
     p = ROOT / 'scripts/behavior/source.json'

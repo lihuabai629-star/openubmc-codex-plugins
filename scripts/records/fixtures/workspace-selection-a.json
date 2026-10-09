@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "selection_ref": "selection-A",
+  "project_ref": "project-A",
+  "requested_machine_ref": "machine-A",
+  "requested_firmware_ref": "firmware-A",
+  "repositories": [
+    {
+      "repo_ref": "repo-A",
+      "repo_class": "product",
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "branch": "main-A",
+      "dirty": false,
+      "identity_availability": "available",
+      "identity_source_ref": "source-A"
+    }
+  ],
+  "context_digest": "020327250db87ecf91bb4d317dd7357a3d5420bda5c0d626226531856bb7bf50"
+}
