@@ -2,22 +2,22 @@
   "behavior": {
     "artifacts": {
       "passed": true,
-      "seconds": 4.446,
+      "seconds": 4.573,
       "tests": 4
     },
     "build": {
       "passed": true,
-      "seconds": 0.936,
+      "seconds": 1.48,
       "tests": 6
     },
     "credentials": {
       "passed": true,
-      "seconds": 0.752,
+      "seconds": 0.82,
       "tests": 9
     },
     "doctor": {
       "passed": true,
-      "seconds": 2.802,
+      "seconds": 3.072,
       "tests": 5
     },
     "kb_loader": {
@@ -26,47 +26,106 @@
     },
     "logs": {
       "passed": true,
-      "seconds": 0.089,
+      "seconds": 0.131,
       "tests": 3
     },
     "migration": {
       "passed": true,
-      "seconds": 6.617,
+      "seconds": 7.537,
       "tests": 17
     },
     "python_entrypoints": {
       "passed": true,
-      "seconds": 25.456,
+      "seconds": 30.452,
       "tests": 11
     },
     "ssh": {
       "passed": true,
-      "seconds": 4.519,
+      "seconds": 4.532,
       "tests": 4
     },
     "upgrade": {
       "passed": true,
-      "seconds": 5.679,
+      "seconds": 6.012,
       "tests": 2
+    }
+  },
+  "code_review": {
+    "spec": {
+      "remaining_findings": 0,
+      "status": "passed"
+    },
+    "standards": {
+      "remaining_findings": 0,
+      "status": "passed"
     }
   },
   "cold_dependencies": {
     "passed": true,
-    "seconds": 81.666
+    "seconds": 0.447
   },
   "community_checks": {
+    "log_sha256": "6b49f104033c78be18b95686d458a349b977cca0ea0fe8e59ef7fe1782af37e9",
     "node_tests": 109,
     "passed": true,
+    "payload_unchanged_since_community_candidate": "8973c30417e7c548ba427fbe9386e4ce3c23a2cd",
     "python_tests": 28
   },
-  "content_digest": "94ee6d078b7aa594475084d2ab204eff882724ac95f918b6c14978e25c2a5ae0",
+  "content_digest": "559f9e587e13ea34eebb03adff3d00d84e65031620a0c3fc8aac737109b24aee",
   "dependency_locks": {
     "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2"
   },
-  "error": "command exited 2: {\"capabilities\": {\"kb\": {\"dependencies\": \"/tmp/openubmc-public-checks-oj6iow49/.local/share/openubmc/plugin-dependencies/kb/b31c4ceaeb22e6499a1b8f16532afa2c89821dd8c24c4fc26f2d6933508cfe01\", \"dependencies_ready\": true, \"startup_ready\": false}, \"runtime\": {\"dependencies\": \"/tmp/openubmc-public-checks-oj6iow49/.local/share/openubmc/plugin-dependencies/runtime/40fffacabe1039597404930af7d1add55055f74195fcf221af7751b573347e91\", \"dependencies_ready\": true, \"startup_ready\": true}}, \"codex_configuration\": {\"changes\": {\"links\": [], \"mcp_servers\": [], \"plugins\": [], \"skills\": []}, \"conflicts\": [], \"mode\": \"repair-overrides\", \"ok\": true, \"preview\": true, \"ready\": true, \"would_change\": false}, \"content_digest\": \"d92e94b6075fa3b8523e006fe2ad45c35a991f961adccbfb10fcccd32d044cf1\", \"credentials\": {\"active_revision\": null, \"capabilities\": {\"bmc_ssh\": false, \"os_redfish\": false, \"os_ssh\": false, \"redfish\": false, \"telnet\": false}, \"configured\": false, \"reason\": \"Complete the selected local credential capabilities\", \"remote_authentication\": \"not_checked\", \"status\": \"missing\"}, \"credentials_configured\": false, \"dependencies_ready\": true, \"knowledge_authentication\": \"not_checked\", \"knowledge_mcp_version\": \"1.3.0\", \"local_configuration\": {\"conan\": {\"active_revision\": null, \"configured\": false}, \"kb\": {\"active_revision\": null, \"configured\": false}, \"targets\": {\"active_revision\": null, \"configured\": false}}, \"mcp_health\": {\"kb\": {\"ok\": false, \"server\": {}, \"stderr\": \"node:internal/modules/esm/resolve:854\\n  throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);\\n        ^\\n\\nError [ERR_MODULE_NOT_FOUND]: Cannot find package '@modelcontextprotocol/sdk' imported from /tmp/openubmc-public-checks-oj6iow49/.cache/openubmc/plugin-executions/1048fe527232b9206257e7a640242a4e24143cd6ca9a29ae35aa9c7025bda50b/openubmc-kb-mcp/src/server.js\\n    at packageResolve (node:internal/modules/esm/resolve:854:9)\\n    at moduleResolve (node:internal/modules/esm/resolve:927:18)\\n    at defaultResolve (node:internal/modules/esm/resolve:1169:11)\\n    at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:542:12)\\n    at ModuleLoader.resolve (node:internal/modules/esm/loader:510:25)\\n    at ModuleLoader.getModuleJob (node:internal/modules/esm/loader:239:38)\\n    at ModuleWrap.<anonymous> (node:internal/modules/esm/module_job:96:40)\\n    at link (node:internal/modules/esm/module_job:95:36) {\\n  code: 'ERR_MODULE_NOT_FOUND'\\n}\\n\\nNode.js v20.18.0\\n\", \"tools\": [], \"version_matches_package\": false}, \"runtime\": {\"ok\": true, \"server\": {\"name\": \"openubmc-target-runtime\", \"version\": \"openubmc.target-runtime.v1\"}, \"stderr\": \"\", \"tools\": [\"execute\", \"observe\"], \"version_matches_package\": true}}, \"ok\": false, \"package_integrity\": true, \"remote_target_authentication\": \"not_checked\", \"skills\": [\"openubmc-bingo-build\", \"openubmc-bingo-development\", \"openubmc-build\", \"openubmc-debug\", \"openubmc-developer\", \"openubmc-dt-testing\", \"openubmc-environment-setup\", \"openubmc-live-patch\", \"openubmc-log-analyzer\", \"openubmc-lua-component\", \"openubmc-publish\", \"openubmc-qemu-testing\", \"openubmc-upgrade\"], \"source_commit\": \"b532f3b87258b5bed5e206c1ee695a690b183d47\", \"startup_ready\": false, \"version\": \"2.1.3\"}\n",
+  "dependency_mode": "verified existing locked caches copied to isolated temporary home; no new installs",
+  "dependency_seeds": {
+    "kb": {
+      "capability_key": "b31c4ceaeb22e6499a1b8f16532afa2c89821dd8c24c4fc26f2d6933508cfe01",
+      "inventory_count": 3493
+    },
+    "runtime": {
+      "capability_key": "40fffacabe1039597404930af7d1add55055f74195fcf221af7751b573347e91",
+      "inventory_count": 337
+    }
+  },
+  "host_mode": "existing Codex CLI; exact scripts/host version not installed",
+  "lock_provenance_checks": {
+    "passed": true,
+    "report_sha256": "f0f6213109a6292665df161dfd736dc694a4921975f2745824b7d6156dd3fa85",
+    "scenarios": 7
+  },
+  "mcp_startup": {
+    "kb": {
+      "ok": true,
+      "server": {
+        "name": "openubmc-kb-mcp-server",
+        "version": "1.3.0"
+      },
+      "stderr": "",
+      "tools": [
+        "openubmc_kb_list",
+        "openubmc_kb_query",
+        "openubmc_kb_status"
+      ],
+      "version_matches_package": true
+    },
+    "runtime": {
+      "ok": true,
+      "server": {
+        "name": "openubmc-target-runtime",
+        "version": "openubmc.target-runtime.v1"
+      },
+      "stderr": "",
+      "tools": [
+        "execute",
+        "observe"
+      ],
+      "version_matches_package": true
+    }
+  },
+  "observed_source_commit": "6d84997f13a916b66e938c419a2734c26794dc98",
   "ordinary_python_cli_before_mcp": true,
-  "passed": false,
+  "package_integrity_after_checks": true,
+  "passed": true,
   "platform": {
     "codex": "codex-cli 0.161.0",
     "machine": "x86_64",
@@ -74,11 +133,31 @@
     "os": "Linux",
     "python": "3.12.3"
   },
-  "release_blocker": "KB MCP cold startup cannot resolve @modelcontextprotocol/sdk",
+  "qualification_scope": "local package behavior with existing verified dependency caches",
+  "record_checks": {
+    "command": [
+      "/usr/bin/python3",
+      "-B",
+      "scripts/check_records.py"
+    ],
+    "export_scenarios": 20,
+    "log_sha256": "4ca8331ddbf43af7a1149e685e69277288b1c6c9708c661af4e5fb627b5e9ce3",
+    "passed": true,
+    "tests": 135
+  },
   "remote_business_qualification": "not_run",
-  "runtime_mcp_startup": "passed",
+  "runtime_shutdown_verified": true,
   "schema": "openubmc.public-behavior.v1",
-  "source_commit": "8973c30417e7c548ba427fbe9386e4ce3c23a2cd",
-  "status": "partial",
+  "source_commit": "6d84997f13a916b66e938c419a2734c26794dc98",
+  "status": "local_linux_passed",
+  "total_seconds": 66.105,
+  "unperformed": [
+    "hosted CI",
+    "native Windows/macOS qualification",
+    "exact locked Codex 0.153.4 host",
+    "fresh dependency installation",
+    "real provider/device acceptance",
+    "installed Host measurements"
+  ],
   "version": "2.1.3"
 }
