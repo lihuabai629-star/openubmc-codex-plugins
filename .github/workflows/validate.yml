@@ -21,6 +21,8 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund --prefix scripts/host
           echo "$PWD/scripts/host/node_modules/.bin" >> "$GITHUB_PATH"
       - run: python3 -I scripts/check_marketplace.py
+      - name: Check bundled community skill integrations
+        run: python3 -B scripts/check_community.py
       - name: Check final plugin behavior and cold MCP startup
         run: python3 -I scripts/check_behavior.py --output "$RUNNER_TEMP/public-behavior.json"
       - name: Upload behavior evidence
