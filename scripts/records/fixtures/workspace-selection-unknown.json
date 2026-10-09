@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "selection_ref": "selection-unknown",
+  "project_ref": "project-unknown",
+  "requested_machine_ref": null,
+  "requested_firmware_ref": null,
+  "repositories": [
+    {"repo_ref": "repo-unknown", "repo_class": "unknown", "commit": null,
+     "branch": null, "dirty": null, "identity_availability": "unavailable", "identity_source_ref": null},
+    {"repo_ref": "repo-partial", "repo_class": "internal", "commit": null,
+     "branch": "feature/partial", "dirty": null, "identity_availability": "partial", "identity_source_ref": "source-partial"}
+  ],
+  "context_digest": "9e11b02913b69769977349f2fe3952298aa0cdf5b603a865ee9a7471da956588"
+}

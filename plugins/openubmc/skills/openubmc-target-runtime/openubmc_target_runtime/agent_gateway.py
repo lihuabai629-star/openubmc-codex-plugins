@@ -1822,8 +1822,9 @@ class AgentGateway:
         *,
         task_id: str,
         operation_id: str,
+        workspace_context=None,
     ) -> dict[str, object]:
-        command = decode_run_command(action, operation_id=operation_id)
+        command = decode_run_command(action, operation_id=operation_id, workspace_context=workspace_context)
         turn = self.runtime.execute(
             command,
             task_id=task_id,

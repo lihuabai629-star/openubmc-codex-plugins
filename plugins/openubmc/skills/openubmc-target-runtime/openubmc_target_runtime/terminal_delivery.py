@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 import hashlib
@@ -12,6 +13,7 @@ from pathlib import Path
 import tempfile
 
 from .delivery_stage import DELIVERY_STAGES
+from .redaction import require_secret_free
 
 
 SCHEMA = "openubmc.terminal-answer/v1"
@@ -80,6 +82,7 @@ def outcome_fingerprint(
     *,
     delivery_stage: str = "unverified",
 ) -> str:
+    require_secret_free(outcome, boundary="terminal Outcome fingerprint")
     selected_stage = _text(delivery_stage) or "unverified"
     if selected_stage not in TERMINAL_DELIVERY_STAGES:
         raise TerminalAnswerError("unsupported delivery stage")
@@ -94,6 +97,8 @@ def render_final_answer(
     summary: str,
     delivery_stage: str,
     next_action: str = "",
+    next_stage: str = "",
+    required_evidence: str = "",
 ) -> str:
     status = _text(status).lower()
     if status not in TERMINAL_STATUSES:
@@ -111,13 +116,30 @@ def render_final_answer(
         "blocked": "受阻",
     }
     lines = [f"状态：{labels[status]}", f"交付阶段：{delivery_stage}", _text(summary)]
+    if delivery_stage == "unverified":
+        lines.append("交付结论：尚无已验证阶段。")
+    if _text(next_stage):
+        if next_stage not in DELIVERY_STAGES:
+            raise TerminalAnswerError("unsupported next delivery stage")
+        lines.append(f"下一未验证阶段：{next_stage}")
+        if _text(required_evidence):
+            lines.append(f"所需证据：{_text(required_evidence)}")
     if status != "completed":
-        lines.append(f"下一步：{_text(next_action) or '需要补充证据后继续。'}")
+        defaults = {
+            "partial": "核对剩余工作和所需证据后继续。",
+            "failed": "检查失败证据并确定修复或回滚动作。",
+            "cancelled": "如需重启任务，先核对已完成操作并重新明确授权。",
+            "blocked": "排查受阻条件，并明确下一项允许的操作。",
+        }
+        lines.append(f"下一步：{_text(next_action) or defaults[status]}")
     return "\n".join(lines)
 
 
-def audit_rollout_final(path: Path, *, task_id: str, prepared_at: str) -> tuple[str, str, str]:
-    """Read only the host's final event after the prepared answer boundary."""
+def audit_rollout_final(
+    path: Path, *, task_id: str, prepared_at: str, expected_text: str = "",
+    accept_final: Callable[[tuple[str, str, str]], bool] | None = None,
+) -> tuple[str, str, str]:
+    """Read a completed host turn after preparation, never an interrupted draft."""
     try:
         prepared_time = datetime.fromisoformat(prepared_at.replace("Z", "+00:00"))
         if prepared_time.tzinfo is None:
@@ -125,10 +147,12 @@ def audit_rollout_final(path: Path, *, task_id: str, prepared_at: str) -> tuple[
     except ValueError as exc:
         raise TerminalAnswerError("terminal preparation time is invalid") from exc
     session_id = ""
+    active_turn = ""
+    candidate: tuple[str, str, str] | None = None
     final: tuple[str, str, str] | None = None
     try:
         with Path(path).open("r", encoding="utf-8") as stream:
-            for line in stream:
+            while line := stream.readline(16 * 1024 * 1024 + 1):
                 if len(line) > 16 * 1024 * 1024:
                     raise TerminalAnswerError("rollout event exceeds the audit bound")
                 event = json.loads(line)
@@ -138,10 +162,38 @@ def audit_rollout_final(path: Path, *, task_id: str, prepared_at: str) -> tuple[
                 if not isinstance(payload, Mapping):
                     continue
                 if event.get("type") == "session_meta":
-                    session_id = _text(payload.get("id") or payload.get("session_id"))
+                    observed_id = _text(payload.get("id") or payload.get("session_id"))
+                    if session_id and session_id != observed_id:
+                        raise TerminalAnswerError("rollout has conflicting task identities")
+                    session_id = observed_id
+                if session_id != task_id:
+                    continue
+                if event.get("type") == "event_msg":
+                    kind = payload.get("type")
+                    turn_id = _text(payload.get("turn_id"))
+                    if kind == "task_started":
+                        active_turn, candidate = turn_id, None
+                    elif kind == "turn_aborted" and turn_id == active_turn:
+                        active_turn, candidate = "", None
+                    elif kind == "task_complete" and turn_id == active_turn:
+                        if final is None and candidate and payload.get("error") is None:
+                            try:
+                                completion_time = datetime.fromisoformat(
+                                    _text(event.get("timestamp")).replace("Z", "+00:00")
+                                )
+                            except ValueError:
+                                completion_time = None
+                            if (completion_time is not None and completion_time.tzinfo is not None
+                                    and completion_time >= datetime.fromisoformat(
+                                        candidate[2].replace("Z", "+00:00")
+                                    ) and (not expected_text or candidate[1] == expected_text)
+                                    and (accept_final is None or accept_final(candidate))):
+                                final = candidate
+                        active_turn, candidate = "", None
+                    continue
                 if (event.get("type") != "response_item" or payload.get("type") != "message"
                         or payload.get("role") != "assistant"
-                        or payload.get("phase") != "final_answer"):
+                        or payload.get("phase") != "final_answer" or not active_turn):
                     continue
                 content = payload.get("content")
                 if not isinstance(content, list):
@@ -157,13 +209,13 @@ def audit_rollout_final(path: Path, *, task_id: str, prepared_at: str) -> tuple[
                     continue
                 if observed_time.tzinfo is None or observed_time <= prepared_time:
                     continue
-                final = (_text(payload.get("id")), rendered, observed_at)
+                candidate = (_text(payload.get("id")), rendered, observed_at)
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise TerminalAnswerError("rollout final evidence is unreadable") from exc
     if session_id != task_id:
         raise TerminalAnswerError("rollout belongs to another task")
     if final is None or not final[0] or not final[1].strip():
-        raise TerminalAnswerError("rollout final event is missing")
+        raise TerminalAnswerError("rollout final event is missing or interrupted")
     return final
 
 
@@ -177,10 +229,16 @@ class TerminalAnswerStore:
         if not self.path.exists():
             return {}
         try:
+            if os.name == "nt":
+                from .windows_private import verify_private_path
+                verify_private_path(self.path.parent)
+                verify_private_path(self.path)
             value = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise TerminalAnswerError("terminal answer store is unreadable") from exc
-        return value if isinstance(value, dict) else {}
+        if not isinstance(value, dict):
+            raise TerminalAnswerError("terminal answer store is not an object")
+        return value
 
     def get(self, task_id: str) -> FinalAnswerRecord | None:
         raw = self._load().get(task_id)
@@ -203,17 +261,25 @@ class TerminalAnswerStore:
         )
 
     def _save(self, task_id: str, record: FinalAnswerRecord) -> None:
+        require_secret_free(record.to_public_dict(), boundary="terminal answer persistence")
         values = self._load()
         values[task_id] = record.to_public_dict()
-        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if os.name == "nt":
+            from .windows_private import ensure_private_directory, harden_new_file
+            ensure_private_directory(self.path.parent)
+        else:
+            self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent, text=True)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                if os.name == "nt":
+                    harden_new_file(Path(temporary))
                 json.dump(values, stream, ensure_ascii=False, sort_keys=True)
                 stream.write("\n")
                 stream.flush()
                 os.fsync(stream.fileno())
-            os.chmod(temporary, 0o600)
+            if os.name != "nt":
+                os.chmod(temporary, 0o600)
             os.replace(temporary, self.path)
         finally:
             Path(temporary).unlink(missing_ok=True)
@@ -227,6 +293,7 @@ class TerminalAnswerStore:
         delivery_stage: str,
         text: str,
     ) -> FinalAnswerRecord:
+        require_secret_free(text, boundary="terminal answer preparation")
         selected_stage = _text(delivery_stage) or "unverified"
         fingerprint = outcome_fingerprint(
             outcome,
@@ -288,7 +355,10 @@ class TerminalAnswerStore:
         prepared = self.get(task_id)
         if prepared is None or not prepared.prepared_at:
             raise TerminalAnswerError("terminal answer has no preparation boundary")
-        final = audit_rollout_final(path, task_id=task_id, prepared_at=prepared.prepared_at)
+        final = audit_rollout_final(
+            path, task_id=task_id, prepared_at=prepared.prepared_at,
+            expected_text=prepared.text,
+        )
         return self.acknowledge(
             task_id=task_id, run_id=run_id, outcome=outcome,
             delivery_stage=delivery_stage, text=final[1],

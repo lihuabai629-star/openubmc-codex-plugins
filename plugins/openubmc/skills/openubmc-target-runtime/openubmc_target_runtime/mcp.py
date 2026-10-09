@@ -2166,12 +2166,18 @@ class RuntimeMcpService:
         ]
         | None = None,
         artifact_store: LocalArtifactStore | None = None,
+        host_continuity=None,
+        host_context_provider=None,
         **registry_options: object,
     ) -> None:
         selected_context_mode = str(context_mode).strip().lower()
         if selected_context_mode not in {"authoritative", "shadow"}:
             raise ValueError("context_mode must be authoritative or shadow")
         self.backend = backend
+        self.host_continuity = host_continuity
+        if host_context_provider is not None and not callable(host_context_provider):
+            raise ValueError("host_context_provider must be callable")
+        self.host_context_provider = host_context_provider
         self.context_mode = selected_context_mode
         self.registry: TaskRunRegistry[TaskT] = TaskRunRegistry(
             factory=backend.open_task,
@@ -3098,11 +3104,30 @@ class RuntimeMcpService:
                     operation_id=operation_id,
                 )
             if name == "execute":
-                return self._runtime.agent.execute(
-                    arguments,
-                    task_id=task_id,
-                    operation_id=operation_id,
+                host_options = {}
+                if arguments.get("kind") == "start" and self.host_context_provider is not None:
+                    from .workspace_context import WorkspaceSnapshot, WorkspaceContextError
+                    try:
+                        selected = self.host_context_provider(task_id)
+                    except Exception as exc:
+                        raise WorkspaceContextError("Host workspace snapshot is unavailable") from exc
+                    if selected is not None:
+                        host_options["workspace_context"] = WorkspaceSnapshot(selected)
+                result = self._runtime.agent.execute(
+                    arguments, task_id=task_id, operation_id=operation_id, **host_options,
                 )
+                if self.host_continuity is not None:
+                    from .host_continuity import HostAnnotatedResult, SCHEMA
+                    try:
+                        metadata = self.host_continuity.capture(
+                            task_id, result, read_run=self._runtime.operator.read_case_projection,
+                        )
+                    except Exception as exc:
+                        metadata = {"schema": SCHEMA, "status": "unavailable",
+                                    "error_type": type(exc).__name__, "run_id": result.get("run_id", ""),
+                                    "next": "Preserve this Run identity; repair host storage. Do not repeat the device operation."}
+                    return HostAnnotatedResult(result, metadata)
+                return result
             raise ValueError(f"unknown Agent operation: {name}")
         self.interface_catalog.validate_arguments(name, arguments)
         return self.call_tool(
@@ -3496,7 +3521,7 @@ class JsonRpcMcpEndpoint:
             return self.session_task_id
         metadata = params.get("_meta")
         if isinstance(metadata, Mapping):
-            for key in ("codex/taskId", "taskId", "task_id"):
+            for key in ("codex/taskId", "taskId", "task_id", "threadId"):
                 value = metadata.get(key)
                 if isinstance(value, str) and value.strip():
                     return value.strip()
@@ -3840,6 +3865,9 @@ class JsonRpcMcpEndpoint:
                 result["structuredContent"] = value.envelope
         elif isinstance(value, dict):
             result["structuredContent"] = value
+        from .host_continuity import HostAnnotatedResult, META_KEY
+        if isinstance(value, HostAnnotatedResult):
+            result["_meta"] = {META_KEY: value.host_metadata}
         return result
 
     def handle(self, message: Mapping[str, object]) -> dict[str, object] | None:
