@@ -63,3 +63,9 @@ Ask Codex: “打开 openUBMC 本机配置，检查插件状态。” The setup 
 ## License
 
 [MulanPSL-2.0](LICENSE). Third-party dependencies retain their own licenses and are downloaded from their package registries.
+
+## Development candidate
+
+[2.1.3 community integration](docs/community-integration-2.1.3.md) adds local
+Developer checks and aligns Testing with bmcgo. This checkout is a candidate;
+2.1.2 remains the published baseline until release qualification completes.

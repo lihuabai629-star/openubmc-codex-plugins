@@ -208,3 +208,9 @@ change requires it.
   [hardware-vpd.md](references/hardware-vpd.md)
 - SR/DDS product records and effective product selection: [sr-dds-product-records.md](references/sr-dds-product-records.md)
 - ProfileSchema import/export, adapters, redaction, and compatibility: [profile-schema-import-export.md](references/profile-schema-import-export.md)
+
+## Local specialist checks
+
+For changed MDB/Redfish JSON, concurrency candidates, Web Backend contracts,
+Redfish revision comparisons or interface documentation coverage, read
+[references/community-checks.md](references/community-checks.md).

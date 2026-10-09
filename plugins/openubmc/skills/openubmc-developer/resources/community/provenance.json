@@ -1,0 +1,46 @@
+[
+  {
+    "skill": "code-compliance-precheck",
+    "source": "skills/code-compliance-precheck/",
+    "destination": "openubmc-developer/resources/community/compliance",
+    "revision": "795442e271988de97524406cd200363840875431",
+    "repository": "https://gitcode.com/openUBMC/skills-marketplace"
+  },
+  {
+    "skill": "openubmc-concurrency-audit",
+    "source": "skills/openubmc-concurrency-audit/",
+    "destination": "openubmc-developer/resources/community/concurrency",
+    "revision": "795442e271988de97524406cd200363840875431",
+    "repository": "https://gitcode.com/openUBMC/skills-marketplace"
+  },
+  {
+    "skill": "openubmc-rackmount-web-backend-plugin",
+    "source": "skills/openubmc-rackmount-web-backend-plugin/",
+    "destination": "openubmc-developer/resources/community/web-backend",
+    "revision": "795442e271988de97524406cd200363840875431",
+    "repository": "https://gitcode.com/openUBMC/skills-marketplace"
+  },
+  {
+    "skill": "openubmc-redfish-interface-diff",
+    "source": "skills/openubmc-redfish-interface-diff/",
+    "destination": "openubmc-developer/resources/community/redfish-diff",
+    "revision": "795442e271988de97524406cd200363840875431",
+    "repository": "https://gitcode.com/openUBMC/skills-marketplace"
+  },
+  {
+    "skill": "doc-sync-check",
+    "source": "skills/doc-sync-check/",
+    "destination": "openubmc-developer/resources/interface-coverage",
+    "revision": "795442e271988de97524406cd200363840875431",
+    "repository": "https://gitcode.com/openUBMC/skills-marketplace"
+  },
+  {
+    "skill": "openubmc-log-analyzer",
+    "repository": "https://gitcode.com/openUBMC/skills-marketplace",
+    "revision": "795442e271988de97524406cd200363840875431",
+    "destination": "openubmc-log-analyzer/scripts/pull_bundle.py",
+    "local_adaptations": [
+      "Adapt exact-byte-budget EOF fix to existing combined collector/analyzer; retain existing transport and analysis entrypoints. Audit CLI changes do not apply to this plugin."
+    ]
+  }
+]

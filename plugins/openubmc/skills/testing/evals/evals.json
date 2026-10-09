@@ -17,8 +17,8 @@
         "使用了 lu.assertEquals 验证返回值",
         "没有创建新的入口文件，复用了现有的 test/unit/test.lua",
         "确认 test.lua 中已有 require 'test_upgrade' 加载链",
-        "使用 bingo test -ut 运行",
-        "没有使用 bingo test --unit 等非官方命令"
+        "使用 bmcgo test -ut 运行",
+        "没有使用 bmcgo test --unit 等非官方命令"
       ]
     },
     {
@@ -36,7 +36,7 @@
         "使用了 lu.assertEquals 验证 SlotNumber 属性值",
         "没有创建新的 .conf 文件（复用现有配置）",
         "确认 service.json 中 test 依赖已包含所需组件",
-        "使用 bingo test -it 运行",
+        "使用 bmcgo test -it 运行",
         "理解了 test_network_adapter.lua 中 skynet.start → dbus_launch → uniqueservice → main 的调用链"
       ]
     },
@@ -63,17 +63,17 @@
       "expected_output": "运行覆盖率命令并解读结果文件",
       "files": [],
       "expectations": [
-        "使用 bingo test -ut -cov 运行覆盖率",
+        "使用 bmcgo test -ut -cov 运行覆盖率",
         "说明了查看 temp/coverage/luacov.report.html 获取可视化报告",
         "说明了查看 temp/coverage/dt_result.json 获取结构化结果",
         "提到了增量覆盖率的概念",
-        "没有使用 bingo test --coverage 等非官方命令",
+        "没有使用 bmcgo test --coverage 等非官方命令",
         "建议关注 upgrade 目录下各模块的行覆盖率"
       ]
     },
     {
       "id": 5,
-      "prompt": "我在 network_adapter 组件执行 bingo test -it 时卡住了，一直没有输出。conf 文件里 include_app 了 persistence、maca、hwdiscovery、ipmi_core，但 service.json 的 test 依赖里少了 libmgmt_protocol。帮我排查和修复。",
+      "prompt": "我在 network_adapter 组件执行 bmcgo test -it 时卡住了，一直没有输出。conf 文件里 include_app 了 persistence、maca、hwdiscovery、ipmi_core，但 service.json 的 test 依赖里少了 libmgmt_protocol。帮我排查和修复。",
       "expected_output": "识别出 service.json test 依赖缺失导致 IT 卡住，给出修复方案",
       "files": [
         "test/integration/test_network_adapter.conf",
