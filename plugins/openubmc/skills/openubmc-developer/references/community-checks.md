@@ -1,5 +1,7 @@
 # Local specialist checks
 
+Run these bounded checks in Linux or WSL.
+
 Use the checks relevant to the confirmed change, before the source handoff. Keep
 results in the current Developer phase; a scan does not introduce a new workflow
 stage. Run from this Skill directory. All inputs refer to a local source checkout.

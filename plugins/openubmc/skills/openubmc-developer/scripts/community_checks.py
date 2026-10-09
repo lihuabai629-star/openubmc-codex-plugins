@@ -64,6 +64,8 @@ def run_check(kind, repo, files=(), *, timeout=120, old_ref=None, new_ref=None, 
                    '--repo', str(repo), '--old-ref', refs[0], '--new-ref', refs[1], '--out-dir', str(Path(output).resolve())]
     else:
         raise ValueError('unknown check')
+    if os.name != "posix":
+        return {"status": "incomplete", "reason": "Run bounded community checks in Linux or WSL", "files": scoped}
     process = None
     try:
         with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
