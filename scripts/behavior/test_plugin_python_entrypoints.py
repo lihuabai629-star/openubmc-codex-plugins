@@ -180,6 +180,7 @@ class PythonEntrypointTests(unittest.TestCase):
         with source.open('a') as stream:
             stream.write('\nfrom pathlib import Path\nPath(' + repr(str(marker)) + ').touch()\n')
         commands = [(self.plugin/'skills/openubmc-debug/scripts/target_runtime_cli.py', '--help'),
+                    (self.plugin/'skills/openubmc-target-runtime/openubmc_target_runtime/release.py', '--help'),
                     ('-c', MODULE_IMPORT, self.plugin)]
         commands += [('-I', self.plugin/'scripts/pluginctl.py', server) for server in ('runtime', 'kb')]
         for snapshot_receipt in (False, True):
