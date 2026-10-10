@@ -1,5 +1,5 @@
 {
-  "content_digest": "5784a34dfe239da39811b3b109fa02fbb8fbdf39016be625d8be0771a8e55375",
+  "content_digest": "678e093fe6ead24537c8f768b23182459628c20992cfa8989759702ae8183d54",
   "files": {
     ".codex-plugin/plugin.json": "02ab7fb1769ffc3665d234dcead190113daf97ed99be29d118386e4d72075d81",
     ".mcp.json": "f22f424878d7fdea85e789f79e77766c3759c59dba4e3588734d58395c761cc2",
@@ -24,8 +24,8 @@
     "openubmc-kb-mcp/src/version.js": "48263b169de3771d8c748869185d65a1c6237babcf180a2c6fa24ccb079e1cf1",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2",
     "scripts/install_plugin.py": "612cc5a96b3c468bc932ad4e47797178204cb124397b424e51825c7079c70b5a",
-    "scripts/launch_host_hook.py": "904e908ecaca05caeb9651af6d78245f1b5823eb42a022de4db235d8ed72f4b7",
-    "scripts/launch_runtime.py": "0b304c8f1d53bfb1aef3cbf277f8f1a44e4368f33acca5fab3c6b3e450c616ab",
+    "scripts/launch_host_hook.py": "ebed6a8113ea0147f06df58817ce7dfdd5237dffbf06b9aebc31381cffb961ad",
+    "scripts/launch_runtime.py": "533d55588cbaee9ada28d75d6db6b4ae092177a69a0f02117bfbb574f8e22a97",
     "scripts/openubmc-bootstrap-host.js": "26c2a4c801e437dab21113f434c1831539dc20f66953b1925d275c1854426693",
     "scripts/openubmc-bootstrap-operations.js": "b26c79d09011e8577c4ddadcee33a6e4ced4b41b47dbba3c75436b61d0900358",
     "scripts/openubmc-continuity-hook.js": "3e45ae97e273cb7494574a7cf7bda907c6d3dde91f0048cad451cfcde14cc07f",
@@ -123,7 +123,7 @@
     "skills/openubmc-debug/scripts/diagnostic_advice.py": "605119d61f12d7bb2640dbde03cb5219d58a24e708d46518f29f791eb8b60bc8",
     "skills/openubmc-debug/scripts/doctor.py": "e061e2fafcbd60c03f6f2f637540259464c1e3667200b0f6face796955159573",
     "skills/openubmc-debug/scripts/execution_router.py": "131e1a46b05eaa9884d46a07d1fea53be3796e2a001f33c2a79b61009cae3306",
-    "skills/openubmc-debug/scripts/host_continuity.py": "87fc7f388febb3fab654c5014b266dfc7220764c5b01837f9e37a24727f5a603",
+    "skills/openubmc-debug/scripts/host_continuity.py": "716da32e88e160201ac63506f31c1f43b4b533f2bfe47576ae806042589329b7",
     "skills/openubmc-debug/scripts/mdbctl_remote.py": "31e8efbed8b07a57362849884d5cbbcbb7f6444498cb10a5d81981fd9c9e0a65",
     "skills/openubmc-debug/scripts/package_skill.py": "5a583ae401b049a9ba10f2b4ecea778d981bf271446640a93d530eb54c4b464b",
     "skills/openubmc-debug/scripts/preflight_checks.py": "34dd59abceddca4864c63f645823e725ea8463bc81e72006ae5537368904f838",
@@ -133,7 +133,7 @@
     "skills/openubmc-debug/scripts/source_trace.py": "04dbff8ed2aeaa95624bceed2b731531c7a101ab08861539f077afd100025e15",
     "skills/openubmc-debug/scripts/systemd_observation.py": "f9cee3e3b377e229fed589cdc4d1c67fd7ded25bd79bbc19d17fd454c794406f",
     "skills/openubmc-debug/scripts/target_runtime_cli.py": "779fee2086e2ebb46499aba58e3978c5f405f2f9cc09ca494939eba373b2548d",
-    "skills/openubmc-debug/scripts/target_runtime_mcp.py": "06e15c495dc01e71f4815f49154dbdc703073a3471a1a8b054543c8870cb838d",
+    "skills/openubmc-debug/scripts/target_runtime_mcp.py": "c6aeeb5fb4e5bb0b8247991653022c9cb2b5c1b2f6dd83ebe802a8bb75af2efb",
     "skills/openubmc-debug/scripts/workflow_remote.py": "af1b6ca217fb50bb77038e979bc2a031ca75e74a4ed985463f35d63ba90c1ab3",
     "skills/openubmc-debug/skill.json": "fe3bf81b63e93114158ffaff4e3f18e50e4adae1400622d6a462508cf42f0aed",
     "skills/openubmc-developer/SKILL.md": "27efb1a78d1285eeb61e4fd9f59300fef9459f0c1b93dacda90d2e24602524e6",
@@ -348,6 +348,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "b762c265997ffbba38630f7ea2f1017068086418",
+  "source_commit": "255f5937a8c0e21adaf669333ee705cf29a07237",
   "version": "2.1.5"
 }
