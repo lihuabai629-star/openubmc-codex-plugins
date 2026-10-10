@@ -1,5 +1,6 @@
 """Source drift and receipt acceptance through the installed Host and MCP seam."""
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -16,14 +17,19 @@ from test_mcp_contracts import FakeDebugBackend
 
 class SourceOperationTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=Path.home() if os.name == 'nt' else None)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        if os.name == 'nt':
+            from openubmc_target_runtime.windows_private import _harden
+            _harden(self.root, directory=True)
         self.state = self.root / 'state'
         self.host = InstalledHostRecords(self.state, environment={})
         self.project = self.root / 'project'
         self.project.mkdir()
         self.git('init', '-q')
+        self.git('config', 'user.name', 'Fixture')
+        self.git('config', 'user.email', 'fixture@example.test')
         (self.project / 'source').write_text('initial')
         self.git('add', '.')
         self.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test', 'commit', '-qm', 'initial')
