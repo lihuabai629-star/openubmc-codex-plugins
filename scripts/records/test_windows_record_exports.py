@@ -2,6 +2,7 @@
 import os
 import importlib
 import runpy
+import subprocess
 from pathlib import Path
 import tempfile
 import time
@@ -21,7 +22,7 @@ windows_private = importlib.import_module(api["RECORD_PACKAGE_NAME"] + ".windows
 @unittest.skipUnless(os.name == "nt", "requires native Windows ACL APIs")
 class WindowsRecordExportTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = tempfile.TemporaryDirectory(dir=Path.home())
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         handoff = HostContinuity(self.root / "host", record_schema_version=2).handoff("task", read_run=lambda run: None)
@@ -52,6 +53,8 @@ class WindowsRecordExportTests(unittest.TestCase):
         WindowsPrivateError = windows_private.WindowsPrivateError
         target = self.root / "shared"
         target.mkdir()
+        subprocess.run(["icacls.exe", str(target), "/grant", "*S-1-5-32-545:(R)"],
+                       check=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
         with self.assertRaises((ValueError, WindowsPrivateError)):
             RecordExportStore(target).write(self.document)
         self.assertEqual(list(target.iterdir()), [])

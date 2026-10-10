@@ -38,6 +38,7 @@ def command(argv, environment, *, cwd, timeout=180):
 
 
 def qualify(codex, output):
+    codex = str(Path(codex).resolve())
     version = subprocess.check_output([codex, '--version'], text=True).strip()
     if version != 'codex-cli 0.153.4':
         raise ValueError('qualification requires the locked Codex 0.153.4')
