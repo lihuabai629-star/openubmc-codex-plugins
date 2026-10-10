@@ -33,15 +33,19 @@ def _reference(value, *, optional=False):
     return value
 
 
+def _branch_is_representable(value):
+    return (isinstance(value, str) and bool(value) and len(value.encode("utf-8")) <= 256
+            and not value.startswith(("/", "\\")) and ":" not in value
+            and all(ord(c) >= 33 for c in value))
+
+
 def _repository(raw):
     if not isinstance(raw, Mapping) or set(raw) - _REPO_FIELDS:
         _invalid()
     commit, branch, dirty = raw.get("commit"), raw.get("branch"), raw.get("dirty")
     if commit is not None and (not isinstance(commit, str) or _COMMIT.fullmatch(commit) is None):
         _invalid()
-    if branch is not None and (not isinstance(branch, str) or not branch
-            or len(branch.encode("utf-8")) > 256 or branch.startswith(("/", "\\"))
-            or ":" in branch or any(ord(c) < 33 for c in branch)):
+    if branch is not None and not _branch_is_representable(branch):
         _invalid()
     if dirty is not None and type(dirty) is not bool:
         _invalid()

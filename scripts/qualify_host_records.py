@@ -117,10 +117,11 @@ def qualify(codex, output):
         config = [part for key, value in settings.items() for part in ('-c', key+'='+value)]
         flags = ['--json', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox',
                  '--dangerously-bypass-hook-trust', '--model', 'gpt-5.6-sol', *config]
-        tasks = []
+        tasks, projects = [], []
         try:
             for name in ('project-a', 'project-b'):
                 project = root / name
+                projects.append(project)
                 project.mkdir()
                 command(['git', 'init', '-q'], environment, cwd=project)
                 (project / 'source').write_text(name)
@@ -157,6 +158,41 @@ def qualify(codex, output):
             if (len(recovered['runs']) != 1 or recovered['runs'][0]['run_id'] != tasks[0]['run_id']
                     or recovered['runs'][0]['run_record']['workspace_binding'] != tasks[0]['binding']):
                 raise ValueError('native resume changed the old Run or its workspace binding')
+            server.start_run, server.calls, server.outputs = True, 0, []
+            command([codex, '-C', str(projects[1]), 'exec', 'resume', *flags, tasks[0]['task_id'],
+                     'Start one more local fixture Run in the newly selected project.'], environment, cwd=projects[1])
+            switched = json.loads(command([*cli, 'records', '--task-id', tasks[0]['task_id']], environment, cwd=root))
+            records = {row['run_id']: row['run_record'] for row in switched['runs']}
+            old = records.get(tasks[0]['run_id'])
+            new = [row for run_id, row in records.items() if run_id != tasks[0]['run_id']]
+            if (len(records) != 2 or old['workspace_binding'] != tasks[0]['binding'] or len(new) != 1
+                    or new[0]['workspace_binding']['snapshot']['project_ref'] !=
+                       tasks[1]['binding']['snapshot']['project_ref']):
+                raise ValueError('installed project switch did not preserve the old binding and freeze the new one')
+            producer = root / 'provider-report.json'
+            producer_report = {'schema': 'openubmc.provider-requests/v1', 'task_ref': tasks[0]['task_id'],
+                'provider_ref': 'provider:fixture', 'evidence_kind': 'synthetic', 'inventory_complete': True,
+                'provider_requests': [{'invocation_ref': 'invocation:fixture', 'run_ref': None,
+                    'usage': {'input_tokens': 10, 'output_tokens': 2, 'cached_tokens': 0}}]}
+            producer.write_text(json.dumps(producer_report))
+            measurement_environment = {**environment, 'OPENUBMC_HOST_PROVIDER_REPORT': str(producer),
+                'OPENUBMC_HOST_PROVIDER_REF': 'provider:fixture', 'OPENUBMC_HOST_EVIDENCE_KIND': 'synthetic'}
+            def measured_records():
+                return json.loads(command([*cli, 'records', '--task-id', tasks[0]['task_id']],
+                                          measurement_environment, cwd=root))
+            measured = measured_records()
+            if (measured['task_aggregate']['usage_totals']['input_tokens'] != 10
+                    or measured['task_aggregate']['usage_totals']['unattributed_invocation_count'] != 1
+                    or any(row['run_record']['usage']['input_tokens'] is not None for row in measured['runs'])):
+                raise ValueError('installed producer registration confused Task-only and Run usage')
+            producer.unlink()
+            missing = measured_records()
+            if (missing['task_aggregate']['usage_totals']['input_tokens'] is not None
+                    or {row['run_id'] for row in missing['runs']} != set(records)):
+                raise ValueError('installed measurement source failure changed Runtime records or fabricated usage')
+            producer.write_text(json.dumps(producer_report))
+            if measured_records()['task_aggregate']['usage_totals']['input_tokens'] != 10:
+                raise ValueError('installed measurement source did not recover on a fresh read')
             exported = json.loads(command([*cli, 'export-records', '--task-id', tasks[0]['task_id'],
                                           '--output-directory', str(root / 'exports')], environment, cwd=root))
             checked = json.loads(command([*cli, 'verify-records', '--record-file', exported['path']], environment, cwd=root))
@@ -170,6 +206,8 @@ def qualify(codex, output):
                 'codex': version, 'version': identity['version'], 'source_commit': identity['source_commit'],
                 'content_digest': identity['content_digest'], 'native_hooks': True, 'two_project_bindings': True,
                 'native_resume_preserved_run': True, 'fresh_v2_records': True, 'unknown_usage_retained': True,
+                'same_task_project_switch': True, 'registered_task_only_measurements': True,
+                'measurement_source_failure_and_recovery': True,
                 'installed_export_verified': True, 'live_model_tested': False, 'live_device_tested': False,
                 'network_scope': 'loopback only', 'desktop_ui_tested': False}
             output.write_text(json.dumps(report, indent=2, sort_keys=True)+'\n')

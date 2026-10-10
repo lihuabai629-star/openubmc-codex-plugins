@@ -98,6 +98,18 @@ class InstalledHostRecordTests(unittest.TestCase):
             context = self.host.workspace_context("task")
         self.assertEqual(context["repositories"][0]["commit"], self.git(self.project, "rev-parse", "HEAD"))
 
+    def test_valid_git_branch_outside_record_bound_does_not_block_start(self):
+        for branch in ("a" * 150 + "/" + "b" * 151, "\u5206" * 44 + "/" + "\u540d" * 44):
+            with self.subTest(branch_bytes=len(branch.encode("utf-8"))):
+                self.git(self.project, "checkout", "-qb", branch)
+                self.select(self.project)
+                run = self.start(self.service(), "start-" + str(len(branch.encode("utf-8"))))
+                record = next(row["run_record"] for row in self.handoff()["runs"] if row["run_id"] == run)
+                observed = record["workspace_binding"]["snapshot"]["repositories"][0]
+                self.assertIsNone(observed["branch"])
+                self.assertEqual(observed["commit"], self.git(self.project, "rev-parse", "HEAD"))
+                self.assertFalse(observed["dirty"])
+
     def test_fsmonitor_program_is_not_executed_by_observer(self):
         if os.name == "nt":
             self.skipTest("POSIX executable fixture")
@@ -171,6 +183,24 @@ class InstalledHostRecordTests(unittest.TestCase):
         report.update(inventory_complete=True, task_ref="other-task")
         path.write_text(json.dumps(report))
         self.assertEqual(self.handoff()["task_aggregate"]["measurement_source"]["status"], "unavailable")
+
+    def test_explicit_null_run_attribution_keeps_each_run_usage_unknown(self):
+        self.select(self.project)
+        service = self.service()
+        self.start(service, "first")
+        self.start(service, "second")
+        report, path = self.report()
+        for row in report["provider_requests"]:
+            row["run_ref"] = None
+        path.write_text(json.dumps(report))
+        handoff = self.handoff()
+        self.assertEqual(handoff["task_aggregate"]["usage_totals"]["input_tokens"], 30)
+        self.assertEqual(handoff["task_aggregate"]["usage_totals"]["unattributed_invocation_count"], 2)
+        for row in handoff["runs"]:
+            usage = row["run_record"]["usage"]
+            self.assertEqual(usage["status"], "unavailable")
+            for field in ("input_tokens", "output_tokens", "cached_tokens", "invocation_count"):
+                self.assertIsNone(usage[field])
 
     def test_unknown_usage_is_not_zero_even_when_physical_inventory_is_complete(self):
         self.select(self.project)

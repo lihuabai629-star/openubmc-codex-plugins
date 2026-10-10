@@ -15,7 +15,7 @@ import tempfile
 
 from .host_continuity import HostContinuity, _identity
 from .measurements import JsonMeasurementReader, ProviderReportReader
-from .workspace_context import WorkspaceSnapshot
+from .workspace_context import WorkspaceSnapshot, _branch_is_representable
 
 
 def _ref(kind, value):
@@ -99,7 +99,8 @@ class InstalledHostRecords:
                 commit = headers.get("branch.oid")
                 repo["commit"] = commit if re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", commit or "") else None
                 branch = headers.get("branch.head")
-                repo["branch"] = None if branch == "(detached)" else branch
+                repo["branch"] = (branch if branch != "(detached)" and _branch_is_representable(branch)
+                                  else None)
                 repo["dirty"] = any(not line.startswith("# ") for line in lines)
                 repo["identity_availability"] = "available" if repo["commit"] else "partial"
             except (OSError, ValueError, subprocess.SubprocessError):

@@ -308,7 +308,7 @@ class ProviderReportReader:
                 complete = False
                 continue
             _reference(identity)
-            attributed = attributed and "run_ref" in row
+            attributed = attributed and row.get("run_ref") is not None
             usage = row.get("usage")
             usage = usage if isinstance(usage, Mapping) else {}
             details = usage.get("input_tokens_details")
