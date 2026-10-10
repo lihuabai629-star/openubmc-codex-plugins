@@ -1,0 +1,13 @@
+{
+  "integration": "Host composition only; existing Domain Adapters preserved.",
+  "plugin_base": {
+    "commit": "45f754ba7c160f4058d41973e2b38450946e9891",
+    "repository": "lihuabai629-star/openubmc-codex-plugins"
+  },
+  "status": "candidate",
+  "version": "2.1.4",
+  "workflow": {
+    "installed_host_records_commit": "96d008aea4d80e88316a49917a406352cf7d9736",
+    "repository": "lihuabai629-star/openubmc-agent-workflow"
+  }
+}

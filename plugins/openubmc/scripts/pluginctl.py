@@ -500,7 +500,7 @@ def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | 
         os.execvpe(argv[0], argv, node_environment())
         return 0
     started = time.monotonic()
-    dependencies = dependency_root(content, "runtime" if command == "configure" else command)
+    dependencies = dependency_root(content, "runtime" if command in {"configure", "host-hook", "records", "export-records", "verify-records", "prune-records"} else command)
     write_timing(timings, 'dependency_identity', started)
     if not (dependencies/'receipt.json').is_file():
         raise ValueError('Dependencies are not prepared; run pluginctl.py prepare')
@@ -514,7 +514,12 @@ def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | 
     env = node_environment()
     env['OPENUBMC_MCP_SOURCE_COMMIT'] = lock['source_commit']
     env['OPENUBMC_PLUGIN_CONTENT_DIGEST'] = lock['content_digest']
-    if command == 'runtime':
+    if command in {'host-hook', 'records', 'export-records', 'verify-records', 'prune-records'}:
+        host_command = {'host-hook': 'hook', 'records': 'handoff', 'export-records': 'export', 'verify-records': 'verify', 'prune-records': 'prune'}[command]
+        argv = [sys.executable, '-I', '-B', '-c',
+                'import sys,runpy;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name="__main__")',
+                str(snapshot/'python-packages'), str(snapshot/'scripts/launch_host_hook.py'), host_command, *(page_args or [])]
+    elif command == 'runtime':
         argv = [sys.executable, '-I', '-B', '-c',
                 'import sys,runpy;sys.path.insert(0,sys.argv[1]);runpy.run_path(sys.argv[2],run_name="__main__")',
                 str(snapshot/'python-packages'), str(snapshot/'scripts/launch_runtime.py')]
@@ -538,7 +543,13 @@ def positive_timeout(value: str) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'configure', 'migrate', 'repair-overrides', 'restore-legacy', 'cleanup-retired'])
+    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'host-hook', 'records', 'export-records', 'verify-records', 'prune-records', 'configure', 'migrate', 'repair-overrides', 'restore-legacy', 'cleanup-retired'])
+    parser.add_argument('--task-id')
+    parser.add_argument('--output-directory', type=Path)
+    parser.add_argument('--record-file', type=Path)
+    parser.add_argument('--evidence', type=Path)
+    parser.add_argument('--before-timestamp', type=float)
+    parser.add_argument('--apply', action='store_true')
     parser.add_argument('--home', type=Path, default=Path.home())
     parser.add_argument('--codex-home', type=Path, default=Path(os.environ['CODEX_HOME']) if os.environ.get('CODEX_HOME') else None)
     parser.add_argument('--transaction', default='')
@@ -613,6 +624,17 @@ def main() -> int:
             page_args.append('--no-browser' if args.no_browser else '--open-browser')
             for target in args.target: page_args.extend(['--target',target])
             return launch('configure',content,lock,page_args=page_args)
+        elif args.command in {'records', 'export-records', 'verify-records', 'prune-records'}:
+            host_args = []
+            for flag in ('task_id', 'output_directory', 'record_file', 'evidence', 'before_timestamp'):
+                value = getattr(args, flag)
+                if value is not None:
+                    host_args.extend(['--' + flag.replace('_', '-'), str(value)])
+            if args.apply:
+                host_args.append('--apply')
+            return launch(args.command, content, lock, page_args=host_args)
+        elif args.command == 'host-hook':
+            return launch('host-hook', content, lock, args.timings)
         elif args.command in ('runtime', 'kb'):
             if args.prepare_on_start and not (dependency_root(content, args.command)/'receipt.json').is_file():
                 prepare_for_start(content, args.command)

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts/records'))
 sys.path.insert(0, str(ROOT / 'plugins/openubmc/skills/openubmc-target-runtime'))
 suite = unittest.defaultTestLoader.loadTestsFromNames([
-    'test_record_export', 'test_workspace_run_record', 'test_run_measurements',
+    'test_installed_host_records', 'test_windows_record_exports', 'test_record_export', 'test_workspace_run_record', 'test_run_measurements',
     'test_host_continuity', 'test_terminal_delivery', 'test_mcp_contracts',
 ])
 raise SystemExit(0 if unittest.TextTestRunner(verbosity=2).run(suite).wasSuccessful() else 1)

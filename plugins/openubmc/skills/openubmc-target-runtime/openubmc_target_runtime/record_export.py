@@ -297,9 +297,12 @@ class RecordExportStore:
         self.root = Path(root).absolute()
 
     def _private_root(self):
-        # Runtime execution uses Linux/WSL. Native Windows requires its existing
-        # private-path authority rather than treating POSIX modes as an ACL.
-        if os.name == "nt" or any(path.is_symlink() for path in (self.root, *self.root.parents)):
+        if os.name == "nt":
+            from .windows_private import verify_private_path
+            if self.root.exists():
+                verify_private_path(self.root)
+            return
+        if any(path.is_symlink() for path in (self.root, *self.root.parents)):
             raise RecordExportError()
         if self.root.exists():
             info = self.root.stat()
@@ -309,27 +312,44 @@ class RecordExportStore:
     def write(self, document):
         digest = verify_export(document)
         self._private_root()
-        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if os.name == "nt":
+            from .windows_private import ensure_private_directory
+            ensure_private_directory(self.root)
+        else:
+            self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._private_root()
         destination = self.root / (digest.removeprefix("sha256:") + ".json")
         encoded = _canonical(document) + b"\n"
         if destination.exists() or destination.is_symlink():
-            if destination.is_symlink() or destination.stat().st_nlink != 1 or destination.stat().st_mode & 0o077 or destination.read_bytes() != encoded:
+            if not self._private_file(destination) or destination.read_bytes() != encoded:
                 raise RecordExportError()
             return destination
         descriptor, name = tempfile.mkstemp(prefix=".export-", dir=self.root)
         try:
             with os.fdopen(descriptor, "wb") as stream:
+                if os.name == "nt":
+                    from .windows_private import harden_new_file
+                    harden_new_file(Path(name))
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.link(name, destination)
         except FileExistsError:
-            if destination.is_symlink() or destination.stat().st_nlink != 1 or destination.read_bytes() != encoded:
+            if not self._private_file(destination) or destination.read_bytes() != encoded:
                 raise RecordExportError()
         finally:
             Path(name).unlink(missing_ok=True)
         return destination
+
+    def _private_file(self, path):
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or path.is_symlink():
+            return False
+        if os.name == "nt":
+            from .windows_private import verify_private_path
+            verify_private_path(path)
+            return True
+        return info.st_uid == os.getuid() and not info.st_mode & 0o077
 
     def prune(self, *, before_timestamp, dry_run=True):
         if type(before_timestamp) not in (int, float) or not math.isfinite(before_timestamp) or type(dry_run) is not bool or self.root.is_symlink():
@@ -345,6 +365,8 @@ class RecordExportStore:
             if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_mtime >= before_timestamp:
                 continue
             try:
+                if not self._private_file(path):
+                    continue
                 document = JsonMeasurementReader(path)(None, ())
                 digest = verify_export(document)
             except Exception:

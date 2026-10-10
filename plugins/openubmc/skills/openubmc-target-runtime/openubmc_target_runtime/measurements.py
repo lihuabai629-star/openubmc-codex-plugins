@@ -259,7 +259,8 @@ class ProviderReportReader:
     Old reports without physical invocation identities never acquire synthetic IDs.
     """
 
-    def __init__(self, path: Path, *, task_id, provider_ref, evidence_kind, inventory_complete=False):
+    def __init__(self, path: Path, *, task_id, provider_ref, evidence_kind, inventory_complete=False,
+                 producer_inventory=False):
         _reference(task_id)
         _reference(provider_ref)
         if evidence_kind not in ("observed", "synthetic") or type(inventory_complete) is not bool:
@@ -269,6 +270,9 @@ class ProviderReportReader:
         self.provider_ref = provider_ref
         self.evidence_kind = evidence_kind
         self.inventory_complete = inventory_complete
+        if type(producer_inventory) is not bool:
+            raise MeasurementError()
+        self.producer_inventory = producer_inventory
 
     def __call__(self, task_id, run_refs):
         if task_id != self.task_id:
@@ -283,6 +287,14 @@ class ProviderReportReader:
         if not isinstance(requests, list) or len(requests) > 256:
             raise MeasurementError()
         complete = self.inventory_complete
+        if self.producer_inventory:
+            if (report.get("schema") != "openubmc.provider-requests/v1"
+                    or report.get("task_ref") != task_id
+                    or report.get("provider_ref") != self.provider_ref
+                    or report.get("evidence_kind") != self.evidence_kind
+                    or type(report.get("inventory_complete")) is not bool):
+                raise MeasurementError()
+            complete = report["inventory_complete"]
         attributed = True
         invocations = []
         for row in requests:

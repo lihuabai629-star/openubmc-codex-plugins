@@ -3512,11 +3512,17 @@ class JsonRpcMcpEndpoint:
         service: RuntimeMcpService,
         *,
         session_task_id: str | None = None,
+        bind_session_task: bool = False,
     ) -> None:
         self.service = service
+        if bind_session_task and not session_task_id:
+            raise ValueError("A bound Host Task requires its identity")
+        self._host_task_id = session_task_id if bind_session_task else None
         self.session_task_id = session_task_id or f"mcp-session-{uuid.uuid4().hex}"
 
     def task_id_for_params(self, params: object) -> str:
+        if self._host_task_id:
+            return self._host_task_id
         if not isinstance(params, Mapping):
             return self.session_task_id
         metadata = params.get("_meta")

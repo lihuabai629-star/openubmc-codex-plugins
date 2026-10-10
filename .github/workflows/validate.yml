@@ -27,6 +27,18 @@ jobs:
         run: python3 -B scripts/check_records.py
       - name: Check final plugin behavior and cold MCP startup
         run: python3 -I scripts/check_behavior.py --output "$RUNNER_TEMP/public-behavior.json"
+      - name: Qualify installed Host records with native Codex
+        run: >-
+          python3 -B scripts/qualify_host_records.py
+          --codex scripts/host/node_modules/.bin/codex
+          --output "$RUNNER_TEMP/installed-host-records.json"
+      - name: Upload installed Host record evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-host-records
+          path: ${{ runner.temp }}/installed-host-records.json
+          if-no-files-found: error
       - name: Upload behavior evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,6 +59,14 @@ jobs:
       - name: Install locked Codex host
         shell: pwsh
         run: npm ci --ignore-scripts --no-audit --no-fund --prefix scripts/host
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check native Windows record export ACLs
+        shell: pwsh
+        env:
+          PYTHONPATH: plugins/openubmc/skills/openubmc-target-runtime
+        run: python -B -m unittest discover -s scripts/records -p test_windows_record_exports.py
       - name: Install plugin and initialize setup mode
         shell: pwsh
         run: |
