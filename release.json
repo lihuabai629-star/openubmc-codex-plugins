@@ -1,8 +1,28 @@
 {
+  "archive_sha256": "030f822a8fa1688dcdaf758eea2efefab5f1b31a3315f883722384c6650cb423",
+  "base_distribution_commit": "45f754ba7c160f4058d41973e2b38450946e9891",
   "content_digest": "55240c8e9def20b6ea79ee44cf49c9a748d73d12c84542d470d3d03f8ab78adf",
-  "passed": false,
-  "schema": null,
+  "hosted_ci": {
+    "plugin_payload": {
+      "conclusion": "success",
+      "head_commit": "05c36b580e65fc47c44e8de6bfaaca1f69815f0c",
+      "run_id": 38019143378,
+      "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38019143378"
+    },
+    "workflow": {
+      "conclusion": "success",
+      "head_commit": "b4571b518a32e638cc0654828263470182c033f7",
+      "run_id": 38019135774,
+      "url": "https://github.com/lihuabai629-star/openubmc-agent-workflow/actions/runs/38019135774"
+    }
+  },
+  "name": "openubmc",
+  "payload_commit": "05c36b580e65fc47c44e8de6bfaaca1f69815f0c",
+  "qualification": "repository-native-installed-host-and-public-behavior-passed",
+  "release_scope": "codex-plugin",
+  "release_tag": "v2.1.4",
   "source_commit": "4ec806efdd0181d56f4aedd4c01d681557891cb0",
-  "status": "candidate",
+  "status": "released",
+  "upgrade_baseline": "2.1.3",
   "version": "2.1.4"
 }

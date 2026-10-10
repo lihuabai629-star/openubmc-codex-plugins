@@ -1,6 +1,6 @@
 # openUBMC for Codex
 
-**Current release:** 2.1.3
+**Current release:** 2.1.4
 
 Diagnose openUBMC systems, analyze log bundles, develop components, build firmware and verify delivery with persistent Runtime evidence.
 
@@ -46,6 +46,8 @@ python3 -I <plugin-root>/scripts/pluginctl.py migrate --disable-only
 The helper disables owned legacy entries, retains files, links, credentials and history, and preserves `openubmc@openubmc-public`. Start a new Codex task to load the saved state. Restore with `restore-legacy --transaction <id>`; later configuration or ownership changes require reconciliation. The explicit `migrate --remove` route remains available for removing owned loose registrations and links.
 
 ## Local status and recovery
+
+For Run provenance, measurement registration and private exports, see [Installed Host records](docs/installed-host-records.md).
 
 For Python integrations, follow the packaged [entrypoint and import guide](plugins/openubmc/PYTHON.md).
 
