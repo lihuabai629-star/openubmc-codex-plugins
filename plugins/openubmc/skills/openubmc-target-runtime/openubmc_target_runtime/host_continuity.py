@@ -70,12 +70,13 @@ class HostContinuity:
     No method invokes execute, observe, credentials, or a target transport.
     """
 
-    def __init__(self, root: Path, *, measurement_reader=None, record_schema_version=1):
+    def __init__(self, root: Path, *, measurement_reader=None, record_schema_version=1, evidence_reader=None):
         if type(record_schema_version) is not int or record_schema_version not in (1, 2):
             raise ValueError("Unsupported Run record schema version")
         if measurement_reader is not None and not callable(measurement_reader):
             raise ValueError("Host measurement reader must be callable")
         self.root = Path(root).expanduser().resolve()
+        self.evidence_reader = evidence_reader
         self.measurement_reader = measurement_reader
         self.record_schema_version = record_schema_version
 
@@ -301,6 +302,7 @@ class HostContinuity:
 
         handoff = self.handoff(task_id, read_run=read_run)
         evidence = None
+        evidence_reader = evidence_reader or self.evidence_reader
         if evidence_reader is not None:
             try:
                 evidence = evidence_reader(task_id, tuple(handoff["task_aggregate"]["run_refs"]))

@@ -10,11 +10,11 @@
     "behavior/test_openssh_timeouts.py": "f20e2ee205cde4e6a35afdff2f7beb0dd1556c5dff285f23ec83c304452c7fd6",
     "behavior/test_plugin_credentials.py": "390a8385a68731d0e44c28504e2bf2e2d57ce54fada51184968e4e84f53571e7",
     "behavior/test_plugin_disable_migration.py": "f4caae8e61d441a286578585f9ff258c452311028e15db5294a0564e7892a580",
-    "behavior/test_plugin_python_entrypoints.py": "973e98dc70ef422d5c6d628b5f0ceadf469d0444c0658439dabba08808088477",
+    "behavior/test_plugin_python_entrypoints.py": "37f11472e6b7f6e1f5b337b55a1365d32c087b66943aed0cbe2a3c60a73881a8",
     "behavior/test_upgrade_task_states.py": "3fba0983ea5a074822c3857bdf5e690e35ca3c99870aba4bd9c79b4e09cbdeba",
     "check_behavior.py": "fc5593b5b085a9a36fdb17d293da1c4ec40ed3c6254a70749911bfb0a9a9ec91",
     "host/package-lock.json": "3d456708625217a8fe548dda38925d1882444a2f40ec7209a5968e5d5d615b4c",
     "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5"
   },
-  "source_commit": "4ec806efdd0181d56f4aedd4c01d681557891cb0"
+  "source_commit": "b5c933c3b60d8ba89dbcd67257bb95a05c5ff8d8"
 }

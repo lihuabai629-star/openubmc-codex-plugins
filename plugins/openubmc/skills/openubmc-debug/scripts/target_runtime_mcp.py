@@ -10,7 +10,6 @@ if __name__ == '__main__':
     _openubmc_guard = _openubmc_Path(__file__).parent / '_plugin_entrypoint.py'
     _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
 
-
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
@@ -1280,6 +1279,10 @@ def _runtime_state_dir() -> Path:
     configured = os.environ.get("OPENUBMC_TARGET_RUNTIME_STATE_DIR", "").strip()
     if configured:
         return Path(configured).expanduser().resolve()
+    if os.name == "nt":
+        local = Path(os.environ.get("XDG_STATE_HOME") or os.environ.get("LOCALAPPDATA")
+                     or Path.home() / "AppData" / "Local")
+        return (local / "openubmc" / "runtime-state").resolve()
     return (Path.home() / ".local" / "state" / "openubmc-target-runtime").resolve()
 
 
@@ -1370,7 +1373,11 @@ def create_service():
     state_dir = _runtime_state_dir()
     host_records = runtime.InstalledHostRecords(state_dir)
     artifact_dir = state_dir / "artifacts"
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        private = importlib.import_module(runtime.__name__ + ".windows_private")
+        private.ensure_private_directory(artifact_dir)
+    else:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
     artifact_store = runtime.LocalArtifactStore(
         content_root=artifact_dir / "content",
         repository=runtime.SQLiteArtifactRepository(
@@ -1428,8 +1435,11 @@ def create_service():
     )
     return runtime.RuntimeMcpService(
         orchestrated_backend,
+        credential_memory=runtime.VerifiedCredentialMemory(),
         host_continuity=host_records.continuity,
         host_context_provider=host_records.workspace_context,
+        source_checker=host_records.check_source,
+        operation_evidence_kind=os.environ.get("OPENUBMC_HOST_EVIDENCE_KIND", "observed"),
         interface_profile=os.environ.get(
             "OPENUBMC_TARGET_RUNTIME_INTERFACE_PROFILE", "agent"
         ),
@@ -1529,7 +1539,7 @@ def main() -> int:
     ).strip()
     if configured_lifecycle_root:
         lifecycle_root = Path(configured_lifecycle_root)
-    elif os.environ.get("OPENUBMC_TARGET_RUNTIME_STATE_DIR", "").strip():
+    elif os.name == "nt" or os.environ.get("OPENUBMC_TARGET_RUNTIME_STATE_DIR", "").strip():
         lifecycle_root = state_dir / "mcp-processes"
     else:
         lifecycle_root = (

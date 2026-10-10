@@ -72,6 +72,11 @@ _REQUEST_SECRET_VALUES: ContextVar[_RequestSecrets | None] = ContextVar(
     default=None,
 )
 
+_REDACTION_MARKER = re.compile(r"[:=@\s]")
+_CLI_SECRET_ARGUMENT = re.compile(
+    r"(?i)(--(?:password|passwd|passphrase|secret|token|api-key)\s+)"
+    r"(?:\"[^\"]*\"|'[^']*'|\S+)"
+)
 _SECRET_ASSIGNMENT = re.compile(
     r"(?i)((?<![a-z0-9_.-])[\"']?[a-z0-9_.-]{0,128}"
     r"(?:password|passwd|passphrase|secret|token|authorization|cookie|"
@@ -110,13 +115,15 @@ def redact_text(value: object, *, secret_values: tuple[str, ...] = ()) -> str:
     text = str(value or "")
     request = _REQUEST_SECRET_VALUES.get()
     active = request.snapshot() if request is not None else ()
+    # Every syntax matcher below needs a delimiter or whitespace. Most Run
+    # fields are plain identifiers; avoid six regex passes for those fields.
+    # Registered values still take precedence even when the text is plain.
+    if not active and not secret_values and _REDACTION_MARKER.search(text) is None:
+        return text
     for secret in sorted(set((*active, *secret_values)), key=len, reverse=True):
         if secret:
             text = text.replace(secret, "<redacted>")
-    text = re.sub(
-        r"(?i)(--(?:password|passwd|passphrase|secret|token|api-key)\s+)(?:\"[^\"]*\"|'[^']*'|\S+)",
-        r"\1<redacted>", text,
-    )
+    text = _CLI_SECRET_ARGUMENT.sub(r"\1<redacted>", text)
     text = _PRIVATE_KEY.sub("<private-key-redacted>", text)
     text = _AUTHORIZATION_HEADER.sub("Authorization: <redacted>", text)
     text = _SECRET_ASSIGNMENT.sub(
@@ -205,7 +212,7 @@ def _secret_material_path(
         for key, item in value.items():
             name = str(key)
             candidate = (*path, name)
-            if is_secret_key(name):
+            if is_secret_key(name) or redact_text(name) != name:
                 return candidate
             found = _secret_material_path(item, candidate)
             if found is not None:

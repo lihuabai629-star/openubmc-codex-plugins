@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Mapping
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 import gzip
@@ -271,6 +272,10 @@ _DEBUG_DOMAIN_ARGUMENTS = {
 
 
 def _process_start_marker(pid: int) -> str:
+    if os.name == "nt":
+        from .mcp_lifecycle import _windows_process_state
+        alive, identity = _windows_process_state(pid)
+        return identity if alive and identity != "unknown" else ""
     try:
         raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -283,6 +288,10 @@ def _process_start_marker(pid: int) -> str:
 def _process_owner_is_active(pid: int, started: str) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        from .mcp_lifecycle import _windows_process_state
+        alive, identity = _windows_process_state(pid)
+        return alive and identity != "unknown" and (not started or identity == started)
     observed = _process_start_marker(pid)
     if observed:
         return not started or observed == started
@@ -367,7 +376,7 @@ def _sanitize(value: object) -> object:
                 except (TypeError, ValueError):
                     continue
                 continue
-            if is_secret_key(name):
+            if is_secret_key(name) or redact_text(name) != name:
                 continue
             sanitized[name] = _sanitize(item)
         return sanitized
@@ -1080,6 +1089,7 @@ def project_case(
                 "workflow_attempt",
                 "workflow_input_fingerprint",
                 "workflow_target_epoch",
+                "source_check_status",
             ):
                 if name in payload:
                     operation[name] = payload[name]
@@ -1250,6 +1260,11 @@ def project_case(
                 name = str(operation.get("operation", ""))
                 if name and name not in _WORKFLOW_CONTROL_OPERATIONS:
                     completed_counts[name] = completed_counts.get(name, 0) + 1
+            if isinstance(payload.get("record_receipts"), list):
+                receipts = operation.setdefault("record_receipts", [])
+                for receipt in payload["record_receipts"]:
+                    if receipt not in receipts:
+                        receipts.append(receipt)
             operation["terminal_revision"] = revision
             operation["settled_at"] = created_at
             operation["last_progress_at"] = created_at
@@ -2590,21 +2605,55 @@ class SQLiteRuntimeRepository:
         owner_is_active: Callable[[int, str], bool] = _process_owner_is_active,
     ) -> None:
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            from .windows_private import ensure_private_directory, verify_private_path
+            ensure_private_directory(self.path.parent)
+            if self.path.exists():
+                verify_private_path(self.path)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._clock = clock
         self._owner_pid = os.getpid()
         self._owner_started = _process_start_marker(self._owner_pid)
         self._owner_token = uuid.uuid4().hex
         self._owner_is_active = owner_is_active
+        self._connection: sqlite3.Connection | None = None
         self._initialize()
 
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+    @contextmanager
+    def _connect(self):
+        connection = self._connection
+        if os.name == "nt" and self.path.exists():
+            from .windows_private import verify_private_path
+            verify_private_path(self.path)
+        if connection is None:
+            created = not self.path.exists()
+            # Public methods hold _lock; initialization runs before the repository
+            # is published. One connection avoids a WAL close/checkpoint per read.
+            connection = sqlite3.connect(
+                self.path, timeout=30, check_same_thread=False
+            )
+            try:
+                if os.name == "nt" and created:
+                    from .windows_private import harden_new_file
+                    harden_new_file(self.path)
+                connection.row_factory = sqlite3.Row
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("PRAGMA synchronous=NORMAL")
+            except BaseException:
+                connection.close()
+                raise
+            self._connection = connection
+        with connection:
+            yield connection
+
+    def close(self) -> None:
+        with self._lock:
+            connection = self._connection
+            self._connection = None
+            if connection is not None:
+                connection.close()
 
     def _initialize(self) -> None:
         with self._connect() as connection:
@@ -5344,7 +5393,7 @@ class ContextRuntime:
             value = {
                 "ok": False,
                 "status": "failed",
-                "error": str(exc),
+                "error": redact_text(exc),
                 "canonical_error": error,
             }
             envelope = self._envelope(

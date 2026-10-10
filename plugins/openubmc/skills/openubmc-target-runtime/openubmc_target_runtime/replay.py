@@ -44,7 +44,7 @@ def redact_replay_value(value: object) -> object:
         public: dict[str, object] = {}
         for key, item in value.items():
             name = str(key)
-            if name == "_credential_values" or is_secret_key(name):
+            if name == "_credential_values" or is_secret_key(name) or redact_text(name) != name:
                 continue
             public[name] = redact_replay_value(item)
         return public

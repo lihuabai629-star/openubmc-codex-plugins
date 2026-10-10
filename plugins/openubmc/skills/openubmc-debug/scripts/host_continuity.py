@@ -29,7 +29,7 @@ def _default_state_dir() -> Path:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("handoff", "notes", "answer", "audit", "hook", "export", "verify", "prune"))
+    parser.add_argument("command", choices=("handoff", "notes", "answer", "audit", "hook", "export", "verify", "prune", "test-record"))
     parser.add_argument("--task-id")
     parser.add_argument("--run-id")
     parser.add_argument("--state-dir", default=os.environ.get(
@@ -44,6 +44,10 @@ def main(argv=None) -> int:
     parser.add_argument("--producer-commit", default=os.environ.get("OPENUBMC_MCP_SOURCE_COMMIT"))
     parser.add_argument("--before-timestamp", type=float)
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--repo-ref")
+    parser.add_argument("--command-ref")
+    parser.add_argument("--timeout", type=float, default=600)
+    parser.add_argument("--test-command", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.command not in {"hook", "verify", "prune"} and not args.task_id:
         parser.error("--task-id is required")
@@ -53,6 +57,8 @@ def main(argv=None) -> int:
         parser.error("--record-file is required")
     if args.command == "prune" and args.before_timestamp is None:
         parser.error("--before-timestamp is required")
+    if args.command == "test-record" and not all((args.run_id, args.repo_ref, args.command_ref, args.test_command)):
+        parser.error("test-record requires --run-id, --repo-ref, --command-ref and --test-command")
     if args.command in {"answer", "audit"} and not args.run_id:
         parser.error("--run-id is required for answer/audit")
     if args.command == "notes" and args.notes_file is None:
@@ -86,8 +92,12 @@ def main(argv=None) -> int:
                         evidence = JsonMeasurementReader(args.evidence)(None, ())
                     except Exception:
                         pass
-                document = export_task_records(store.handoff(args.task_id, read_run=read_run),
-                    producer_commit=args.producer_commit, evidence_snapshot=evidence)
+                if args.evidence:
+                    document = export_task_records(store.handoff(args.task_id, read_run=read_run),
+                        producer_commit=args.producer_commit, evidence_snapshot=evidence)
+                else:
+                    document = store.export_records(args.task_id, read_run=read_run,
+                        producer_commit=args.producer_commit)
                 path = RecordExportStore(args.output_directory).write(document)
                 value = {"path": str(path), "content_digest": document["content_digest"]}
         elif args.command == "hook":
@@ -99,6 +109,12 @@ def main(argv=None) -> int:
                 raise ValueError("hook event must be an object")
             host_records.capture_selection(event)
             value = store.handle_hook(event, read_run=read_run)
+        elif args.command == "test-record":
+            value = runtime.TestRecordRunner(host_records, evidence_kind=os.environ.get(
+                "OPENUBMC_HOST_EVIDENCE_KIND", "observed")).run(args.task_id, args.run_id,
+                args.repo_ref, args.command_ref, args.test_command, timeout=args.timeout)
+            print(json.dumps(value, sort_keys=True))
+            return 0 if value["status"] == "passed" else 1
         elif args.command == "notes":
             with args.notes_file.open(encoding="utf-8") as stream:
                 body = stream.read(24 * 1024 + 1)

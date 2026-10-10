@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 import threading
@@ -14,7 +16,7 @@ import time
 from typing import Protocol
 
 from .contracts import RUNTIME_API_VERSION
-from .redaction import redact_text
+from .redaction import redact_text, require_secret_free
 from .replay import CaseReplayBundle, CaseReplayService, redact_replay_value
 
 
@@ -163,6 +165,7 @@ class InMemorySessionOutcomeRepository:
             return self._records.get(outcome_id)
 
     def save(self, record: SessionOutcomeRecord) -> None:
+        require_secret_free(record.to_public_dict(), boundary="Session Outcome persistence")
         with self._lock:
             self._records[record.outcome_id] = record
 
@@ -180,7 +183,13 @@ class InMemorySessionOutcomeRepository:
 class SQLiteSessionOutcomeRepository:
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            from .windows_private import ensure_private_directory, verify_private_path
+            ensure_private_directory(self.path.parent)
+            if self.path.exists():
+                verify_private_path(self.path)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         with self._connect() as connection:
             connection.execute(
@@ -189,12 +198,24 @@ class SQLiteSessionOutcomeRepository:
                 "created_at REAL NOT NULL, updated_at REAL NOT NULL)"
             )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
+        created = not self.path.exists()
+        if os.name == "nt" and not created:
+            from .windows_private import verify_private_path
+            verify_private_path(self.path)
         connection = sqlite3.connect(self.path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+        try:
+            if os.name == "nt" and created:
+                from .windows_private import harden_new_file
+                harden_new_file(self.path)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def get(self, outcome_id: str) -> SessionOutcomeRecord | None:
         with self._lock, self._connect() as connection:
@@ -209,7 +230,9 @@ class SQLiteSessionOutcomeRepository:
         )
 
     def save(self, record: SessionOutcomeRecord) -> None:
-        document = json.dumps(record.to_public_dict(), ensure_ascii=True, sort_keys=True)
+        public = record.to_public_dict()
+        require_secret_free(public, boundary="Session Outcome persistence")
+        document = json.dumps(public, ensure_ascii=True, sort_keys=True)
         with self._lock, self._connect() as connection:
             connection.execute(
                 "INSERT INTO session_outcomes "

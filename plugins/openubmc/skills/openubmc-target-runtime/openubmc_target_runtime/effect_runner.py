@@ -15,6 +15,7 @@ import time
 from .capability import EffectClass
 from .contracts import RUNTIME_API_VERSION
 from .redaction import redact_effect_output, secret_redaction_request
+from .tracing import RunTracer, TraceSettings
 
 
 EFFECT_INTENT_SCHEMA = f"{RUNTIME_API_VERSION}/effect-intent-v1"
@@ -111,11 +112,13 @@ class LocalEffectRunner:
         recover: Callable[[EffectIntent], Mapping[str, object]],
         *,
         max_workers: int = 4,
+        tracing: RunTracer | None = None,
     ) -> None:
         if max_workers <= 0:
             raise ValueError("EffectRunner max_workers must be positive")
         self._execute = execute
         self._recover = recover
+        self.tracing = tracing or RunTracer(TraceSettings())
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix="openubmc-effect",
@@ -162,8 +165,11 @@ class LocalEffectRunner:
             request_context = copy_context()
 
             def invoke() -> Mapping[str, object]:
-                with secret_redaction_request():
-                    result = redact_effect_output(callback(intent))
+                with self.tracing.span(
+                    "runtime.effect", run_id=intent.run_id, effect_id=intent.effect_id,
+                ):
+                    with secret_redaction_request():
+                        result = redact_effect_output(callback(intent))
                 if not isinstance(result, Mapping):
                     raise TypeError("Effect result must be an object")
                 return result

@@ -8,6 +8,7 @@ import json
 from collections.abc import Mapping
 import os
 from pathlib import Path
+import re
 
 
 RUNTIME_API_VERSION = "openubmc.target-runtime.v1"
@@ -35,6 +36,13 @@ def _fingerprint(payload: Mapping[str, object]) -> str:
 
 def _selector_token(kind: str, value: str) -> str:
     return _fingerprint({"kind": kind, "value": value})
+
+
+def _environment_selector(value: str) -> str:
+    """Reject inline values accidentally supplied as named local selectors."""
+    if value and (len(value) > 128 or re.fullmatch(r"[A-Z_][A-Z0-9_]*", value) is None or "_" not in value):
+        raise ValueError("local credential selector must be an environment variable name")
+    return value
 
 
 def _normalized_local_path(value: str) -> str:
@@ -65,6 +73,8 @@ class CredentialSelector:
         identity_file: str,
         environ: Mapping[str, str],
     ) -> "CredentialSelector":
+        user_env = _environment_selector(user_env)
+        password_env = _environment_selector(password_env)
         file_sources = tuple(
             env_name for env_name in _CREDENTIAL_FILE_ENV_NAMES if env_name in environ
         )
@@ -122,6 +132,8 @@ class CredentialSelector:
         password_env: str,
         environ: Mapping[str, str],
     ) -> "CredentialSelector":
+        user_env = _environment_selector(user_env)
+        password_env = _environment_selector(password_env)
         file_sources = tuple(
             env_name for env_name in _CREDENTIAL_FILE_ENV_NAMES if env_name in environ
         )
@@ -170,6 +182,8 @@ class CredentialSelector:
         password_env: str,
         environ: Mapping[str, str],
     ) -> "CredentialSelector":
+        user_env = _environment_selector(user_env)
+        password_env = _environment_selector(password_env)
         file_sources = tuple(
             env_name for env_name in _CREDENTIAL_FILE_ENV_NAMES if env_name in environ
         )

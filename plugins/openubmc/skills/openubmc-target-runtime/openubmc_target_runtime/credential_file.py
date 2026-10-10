@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 import os
 from pathlib import Path
 import stat
+import sys
 
 
 GENERAL_CREDENTIALS_FILE_ENV = "OPENUBMC_CREDENTIALS_FILE"
@@ -28,6 +29,16 @@ ALLOWED_CREDENTIAL_KEYS = frozenset(
 
 class CredentialFileError(ValueError):
     """Credential source could not be read without weakening its local boundary."""
+
+
+def configuration_home(environ: Mapping[str, str] | None = None) -> Path:
+    source = os.environ if environ is None else environ
+    selected = source.get("XDG_CONFIG_HOME")
+    if selected:
+        return Path(selected).expanduser()
+    if sys.platform == "win32":
+        return Path(source.get("LOCALAPPDATA") or Path(source.get("USERPROFILE") or Path.home()) / "AppData" / "Local")
+    return Path(source.get("HOME") or Path.home()) / ".config"
 
 
 def credential_completeness(values: Mapping[str, str]) -> dict[str, object]:
@@ -86,6 +97,13 @@ def read_private_text(
         raise CredentialFileError(
             f"credentials file must not be a symbolic link: {normalized}"
         )
+    if sys.platform == 'win32' and normalized.exists():
+        from .windows_private import WindowsPrivateError, verify_private_path
+        try:
+            verify_private_path(normalized.parent, safe_parent=True)
+            verify_private_path(normalized)
+        except WindowsPrivateError:
+            raise CredentialFileError('credentials file must be private to the current Windows user') from None
     flags = (
         os.O_RDONLY
         | getattr(os, "O_CLOEXEC", 0)
@@ -119,7 +137,7 @@ def read_private_text(
                 f"credentials file must be owned by the current user: {normalized}"
             )
         mode = stat.S_IMODE(info.st_mode)
-        if mode & 0o077:
+        if sys.platform != 'win32' and mode & 0o077:
             raise CredentialFileError(
                 "credentials file permissions must be 0600 or stricter: "
                 f"{normalized} (mode {mode:04o})"
@@ -230,8 +248,7 @@ def load_selected_credentials_file(
     path = selected_credentials_path(environ, env_names=env_names)
     if path is None:
         source = os.environ if environ is None else environ
-        config_home = source.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-        standard = Path(config_home) / "openubmc" / "credentials.env"
+        standard = configuration_home(source) / "openubmc" / "credentials.env"
         if not (standard.exists() or standard.is_symlink()):
             return {}
         path = standard

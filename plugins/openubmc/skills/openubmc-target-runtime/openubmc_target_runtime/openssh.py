@@ -7,9 +7,11 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from .contracts import TargetSpec
+from .redaction import SecretMaterialError, redact_text, require_secret_free
 from .runtime import ResolvedSshCredentials
 
 
@@ -31,9 +33,35 @@ class OpenSshUnavailable(RuntimeError):
 
 class OpenSshMasterError(RuntimeError):
     def __init__(self, result: subprocess.CompletedProcess[str]) -> None:
-        message = (result.stderr or result.stdout or "").strip()
+        message = redact_text(result.stderr or result.stdout or "").strip()
         super().__init__(message or "OpenSSH ControlMaster could not be established")
         self.result = result
+
+
+def _launch_error(exc: Exception) -> OpenSshUnavailable:
+    return OpenSshUnavailable(f"OpenSSH launch failed ({type(exc).__name__})")
+
+
+def _safe_child_result(
+    result: subprocess.CompletedProcess[str], password: str,
+) -> subprocess.CompletedProcess[str]:
+    """Keep child echo and captured timeout output out of receipts and errors."""
+    secrets = (password,) if password else ()
+    return subprocess.CompletedProcess(
+        [redact_text(item, secret_values=secrets) for item in result.args],
+        result.returncode,
+        redact_text(result.stdout, secret_values=secrets),
+        redact_text(result.stderr, secret_values=secrets),
+    )
+
+
+def _require_safe_child_metadata(
+    command: list[str], environment: dict[str, str], password: str,
+) -> None:
+    if password and any(password in value for value in (*command, *environment.values())):
+        raise SecretMaterialError("credential value is not accepted in subprocess metadata")
+    require_secret_free(command, boundary="subprocess argv")
+    require_secret_free(environment, boundary="subprocess environment")
 
 
 @dataclass
@@ -51,6 +79,11 @@ class OpenSshMaster:
 
 class OpenSshControlMasterTransport:
     """Small canonical OpenSSH ControlMaster transport shared by Skills."""
+
+    def __new__(cls, *args, **kwargs):
+        if cls is OpenSshControlMasterTransport and sys.platform == "win32":
+            return ParamikoSshTransport(*args, **kwargs)
+        return super().__new__(cls)
 
     def __init__(
         self,
@@ -178,13 +211,19 @@ class OpenSshControlMasterTransport:
             f"ControlPath={master.control_path}",
             master.destination,
         ]
+        environment = self._environment(credentials)
+        try:
+            _require_safe_child_metadata(command, environment, credentials.password)
+        except SecretMaterialError:
+            master.tempdir.cleanup()
+            raise
         try:
             result = subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
                 timeout=self.connect_timeout,
-                env=self._environment(credentials),
+                env=environment,
                 input=(credentials.password + "\n" if credentials.password else None),
             )
         except subprocess.TimeoutExpired:
@@ -194,7 +233,16 @@ class OpenSshControlMasterTransport:
                 "",
                 f"SSH authentication timed out after {self.connect_timeout}s",
             )
-        if result.returncode != 0 or not self.check_master(master):
+        except (OSError, UnicodeError, ValueError) as exc:
+            master.tempdir.cleanup()
+            raise _launch_error(exc) from None
+        result = _safe_child_result(result, credentials.password)
+        try:
+            healthy = result.returncode == 0 and self.check_master(master)
+        except Exception:
+            self.close_master(master)
+            raise
+        if not healthy:
             self.close_master(master)
             raise OpenSshMasterError(result)
         return master
@@ -213,16 +261,21 @@ class OpenSshControlMasterTransport:
     def check_master(self, master: OpenSshMaster) -> bool:
         if master.closed or not Path(master.control_path).exists():
             return False
+        command = self._control_command(master, "check")
+        environment = self._sanitized_environment()
+        _require_safe_child_metadata(command, environment, master.credentials.password)
         try:
             result = subprocess.run(
-                self._control_command(master, "check"),
+                command,
                 capture_output=True,
                 text=True,
                 timeout=min(self.connect_timeout, 2.0),
-                env=self._sanitized_environment(),
+                env=environment,
             )
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise _launch_error(exc) from None
         return result.returncode == 0
 
     def run_channel(
@@ -244,21 +297,26 @@ class OpenSshControlMasterTransport:
             master.destination,
             remote_command,
         ]
+        environment = self._sanitized_environment()
+        _require_safe_child_metadata(command, environment, master.credentials.password)
         try:
-            return subprocess.run(
+            result = subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                env=self._sanitized_environment(),
+                env=environment,
             )
+            return _safe_child_result(result, master.credentials.password)
         except subprocess.TimeoutExpired as exc:
-            return subprocess.CompletedProcess(
+            return _safe_child_result(subprocess.CompletedProcess(
                 command,
                 124,
                 _timeout_output(exc.stdout),
                 _timeout_output(exc.stderr) + f"\nSSH command timed out after {timeout}s",
-            )
+            ), master.credentials.password)
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise _launch_error(exc) from None
 
     def download_file(
         self,
@@ -280,21 +338,26 @@ class OpenSshControlMasterTransport:
             f"{master.destination}:{remote_path}",
             local_path,
         ]
+        environment = self._sanitized_environment()
+        _require_safe_child_metadata(command, environment, master.credentials.password)
         try:
-            return subprocess.run(
+            result = subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
                 timeout=timeout,
-                env=self._sanitized_environment(),
+                env=environment,
             )
+            return _safe_child_result(result, master.credentials.password)
         except subprocess.TimeoutExpired as exc:
-            return subprocess.CompletedProcess(
+            return _safe_child_result(subprocess.CompletedProcess(
                 command,
                 124,
                 _timeout_output(exc.stdout),
                 _timeout_output(exc.stderr) + f"\nSCP timed out after {timeout}s",
-            )
+            ), master.credentials.password)
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise _launch_error(exc) from None
 
     def upload_file(
         self,
@@ -316,23 +379,28 @@ class OpenSshControlMasterTransport:
             master.destination,
             f"umask 077 && cat > {shlex.quote(remote_path)}",
         ]
+        environment = self._sanitized_environment()
+        _require_safe_child_metadata(command, environment, master.credentials.password)
         try:
             with Path(local_path).open("rb") as stream:
-                return subprocess.run(
+                result = subprocess.run(
                     command,
                     stdin=stream,
                     capture_output=True,
                     text=True,
                     timeout=timeout,
-                    env=self._sanitized_environment(),
+                    env=environment,
                 )
+                return _safe_child_result(result, master.credentials.password)
         except subprocess.TimeoutExpired as exc:
-            return subprocess.CompletedProcess(
+            return _safe_child_result(subprocess.CompletedProcess(
                 command,
                 124,
                 _timeout_output(exc.stdout),
                 _timeout_output(exc.stderr) + f"\nSSH upload timed out after {timeout}s",
-            )
+            ), master.credentials.password)
+        except (OSError, UnicodeError, ValueError) as exc:
+            raise _launch_error(exc) from None
 
     def channel_lost_master(
         self,
@@ -346,15 +414,21 @@ class OpenSshControlMasterTransport:
             return
         try:
             if Path(master.control_path).exists() and shutil.which("ssh"):
+                command = self._control_command(master, "exit")
+                environment = self._sanitized_environment()
+                _require_safe_child_metadata(command, environment, master.credentials.password)
                 subprocess.run(
-                    self._control_command(master, "exit"),
+                    command,
                     capture_output=True,
                     text=True,
                     timeout=min(self.connect_timeout, 2.0),
-                    env=self._sanitized_environment(),
+                    env=environment,
                 )
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        except (OSError, UnicodeError, ValueError, subprocess.TimeoutExpired):
             pass
         finally:
             master.closed = True
             master.tempdir.cleanup()
+
+
+from .paramiko_transport import ParamikoSshTransport  # noqa: E402

@@ -8,7 +8,9 @@ import re
 from typing import ContextManager, Protocol
 
 from .contracts import RUNTIME_API_VERSION
+from .mutation import TaskAuthorizationPolicy
 from .semantic_runtime import RunTurn, project_run_turn
+from .redaction import redact_effect_output, require_secret_free
 from .workflow import WORKFLOW_DEFINITION_SCHEMA, WorkflowDefinition
 
 
@@ -107,6 +109,19 @@ class RunEvent:
             raise RunEventSchemaError(
                 "Run event payload must not override persistence schema metadata"
             )
+        clean_payload = redact_effect_output(self.payload)
+        assert isinstance(clean_payload, dict)
+        # CaseOpened contains a validated task policy under this field. Keep
+        # its authorization facts while rejecting extra secret-bearing fields.
+        policy = self.payload.get("authorization") if self.kind == "CaseOpened" else None
+        if isinstance(policy, Mapping):
+            try:
+                clean_payload["authorization"] = (
+                    TaskAuthorizationPolicy.from_public_dict(policy).to_public_dict()
+                )
+            except (TypeError, ValueError):
+                raise RunEventSchemaError("invalid CaseOpened authorization policy") from None
+        object.__setattr__(self, "payload", clean_payload)
 
     def to_public_dict(self) -> dict[str, object]:
         return {
@@ -170,6 +185,9 @@ class RunDecision:
             raise RunStoreError(
                 f"unsupported RunDecision version: {self.version}"
             )
+        if self.effect_intent is not None:
+            require_secret_free(self.effect_intent, boundary="RunDecision Effect persistence")
+        require_secret_free(self.turn.to_public_dict(), boundary="RunDecision Turn persistence")
 
     def to_public_dict(self) -> dict[str, object]:
         return {

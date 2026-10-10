@@ -208,6 +208,7 @@ from .runtime import (
     TargetCoordinator,
     TargetIdentityObservation,
 )
+from .credential_memory import VerifiedCredentialMemory
 from .mutation import (
     MUTATION_JOURNAL_SCHEMA,
     FreshVerificationRequired,
@@ -425,7 +426,11 @@ from .telnet import (
     telnet_output_limit_details,
 )
 
+from .host_continuity import HostContinuity, read_runtime_projection
+
 __all__ = [
+    "HostContinuity",
+    "read_runtime_projection",
     "RUNTIME_API_VERSION",
     "capability_selector_complete",
     "DELIVERY_RECORD_SCHEMA",
@@ -571,6 +576,7 @@ __all__ = [
     "runtime_content_digest",
     "runtime_distribution_contract",
     "CredentialResolver",
+    "VerifiedCredentialMemory",
     "CancellationToken",
     "DuplicateRequestSuppressed",
     "EvidenceLedger",
@@ -741,8 +747,6 @@ from .systemd_contract import UNIT as SYSTEMD_UNIT, validate_systemd_names
 from .redaction import redact_text
 
 from .host_records import InstalledHostRecords
+from .test_records import TestRecordRunner
 from .measurements import JsonMeasurementReader
 from .record_export import RecordExportStore, export_task_records, verify_export
-
-from .host_continuity import HostContinuity, read_runtime_projection
-__all__ += ["InstalledHostRecords", "JsonMeasurementReader", "RecordExportStore", "export_task_records", "verify_export", "HostContinuity", "read_runtime_projection"]

@@ -43,7 +43,7 @@ class InstalledHostRecordTests(unittest.TestCase):
     def service(self):
         repository = SQLiteRuntimeRepository(self.state / "context-runtime.sqlite3")
         service = RuntimeMcpService(FakeDebugBackend(), context_repository=repository,
-            host_continuity=self.host.continuity, host_context_provider=self.host.workspace_context)
+            host_continuity=self.host.continuity, host_context_provider=self.host.workspace_context, source_checker=self.host.check_source)
         self.addCleanup(service.close)
         return service
 

@@ -2,22 +2,22 @@
   "behavior": {
     "artifacts": {
       "passed": true,
-      "seconds": 4.69,
+      "seconds": 4.756,
       "tests": 4
     },
     "build": {
       "passed": true,
-      "seconds": 1.421,
+      "seconds": 1.425,
       "tests": 6
     },
     "credentials": {
       "passed": true,
-      "seconds": 1.071,
+      "seconds": 1.214,
       "tests": 9
     },
     "doctor": {
       "passed": true,
-      "seconds": 3.924,
+      "seconds": 4.292,
       "tests": 5
     },
     "kb_loader": {
@@ -31,39 +31,39 @@
     },
     "migration": {
       "passed": true,
-      "seconds": 7.588,
+      "seconds": 7.493,
       "tests": 17
     },
     "python_entrypoints": {
       "passed": true,
-      "seconds": 33.009,
+      "seconds": 38.02,
       "tests": 11
     },
     "ssh": {
       "passed": true,
-      "seconds": 4.757,
+      "seconds": 4.833,
       "tests": 4
     },
     "upgrade": {
       "passed": true,
-      "seconds": 5.713,
+      "seconds": 5.765,
       "tests": 2
     }
   },
   "cold_dependencies": {
     "passed": true,
-    "seconds": 4.01
+    "seconds": 5.553
   },
-  "content_digest": "6603ae840b86ece792859ae81e6f4bb1272cd03cf255909da9923e13ac79ed44",
+  "content_digest": "55240c8e9def20b6ea79ee44cf49c9a748d73d12c84542d470d3d03f8ab78adf",
   "dependency_locks": {
     "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
     "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2"
   },
   "hosted_ci": {
     "conclusion": "success",
-    "head_commit": "532ca5ccafd3cf4b690f3fbfc59939c3b074626d",
-    "run_id": 38025275587,
-    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38025275587"
+    "head_commit": "05c36b580e65fc47c44e8de6bfaaca1f69815f0c",
+    "run_id": 38019143378,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38019143378"
   },
   "mcp_startup": {
     "kb": {
@@ -107,6 +107,6 @@
   "remote_business_qualification": "not_run",
   "runtime_shutdown_verified": true,
   "schema": "openubmc.public-behavior.v1",
-  "source_commit": "b5c933c3b60d8ba89dbcd67257bb95a05c5ff8d8",
-  "version": "2.1.5"
+  "source_commit": "4ec806efdd0181d56f4aedd4c01d681557891cb0",
+  "version": "2.1.4"
 }

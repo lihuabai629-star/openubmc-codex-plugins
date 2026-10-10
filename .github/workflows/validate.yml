@@ -67,6 +67,11 @@ jobs:
         env:
           PYTHONPATH: plugins/openubmc/skills/openubmc-target-runtime
         run: python -B -m unittest discover -s scripts/records -p test_windows_record_exports.py
+      - name: Check native Windows source Gate and test receipts
+        shell: pwsh
+        env:
+          PYTHONPATH: plugins/openubmc/skills/openubmc-target-runtime
+        run: python -B -m unittest discover -s scripts/records -p test_source_operation_records.py
       - name: Install plugin and initialize setup mode
         shell: pwsh
         run: |

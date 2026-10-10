@@ -1,28 +1,28 @@
 {
-  "archive_sha256": "030f822a8fa1688dcdaf758eea2efefab5f1b31a3315f883722384c6650cb423",
-  "base_distribution_commit": "45f754ba7c160f4058d41973e2b38450946e9891",
-  "content_digest": "55240c8e9def20b6ea79ee44cf49c9a748d73d12c84542d470d3d03f8ab78adf",
+  "archive_sha256": "49e2664d8c77f88db7ff8b744680936724025e770cec34f46ae21244fbfce22a",
+  "base_distribution_commit": "0c7c21a60d09cf73c028ec11b1b033c6e18bb2c4",
+  "content_digest": "6603ae840b86ece792859ae81e6f4bb1272cd03cf255909da9923e13ac79ed44",
   "hosted_ci": {
     "plugin_payload": {
       "conclusion": "success",
-      "head_commit": "05c36b580e65fc47c44e8de6bfaaca1f69815f0c",
-      "run_id": 38019143378,
-      "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38019143378"
+      "head_commit": "532ca5ccafd3cf4b690f3fbfc59939c3b074626d",
+      "run_id": 38025275587,
+      "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38025275587"
     },
     "workflow": {
       "conclusion": "success",
-      "head_commit": "b4571b518a32e638cc0654828263470182c033f7",
-      "run_id": 38019135774,
-      "url": "https://github.com/lihuabai629-star/openubmc-agent-workflow/actions/runs/38019135774"
+      "head_commit": "d0da75b775cdc2f015a8660bd5897eaa5b5c4d9f",
+      "run_id": 38025454726,
+      "url": "https://github.com/lihuabai629-star/openubmc-agent-workflow/actions/runs/38025454726"
     }
   },
   "name": "openubmc",
-  "payload_commit": "05c36b580e65fc47c44e8de6bfaaca1f69815f0c",
+  "payload_commit": "532ca5ccafd3cf4b690f3fbfc59939c3b074626d",
   "qualification": "repository-native-installed-host-and-public-behavior-passed",
   "release_scope": "codex-plugin",
-  "release_tag": "v2.1.4",
-  "source_commit": "4ec806efdd0181d56f4aedd4c01d681557891cb0",
+  "release_tag": "v2.1.5",
+  "source_commit": "b5c933c3b60d8ba89dbcd67257bb95a05c5ff8d8",
   "status": "released",
-  "upgrade_baseline": "2.1.3",
-  "version": "2.1.4"
+  "upgrade_baseline": "2.1.4",
+  "version": "2.1.5"
 }
