@@ -1,8 +1,8 @@
 {
-  "content_digest": "37db82faf05c1a309e738f5c64638b9951bfb079bc3452318ea423111cb6814b",
+  "content_digest": "55240c8e9def20b6ea79ee44cf49c9a748d73d12c84542d470d3d03f8ab78adf",
   "passed": false,
   "schema": "openubmc.public-behavior.v1",
-  "source_commit": "a943ae7ab8f18df1087aaab88dd11f1639706b61",
+  "source_commit": "4ec806efdd0181d56f4aedd4c01d681557891cb0",
   "status": "candidate",
   "version": "2.1.4"
 }
