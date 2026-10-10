@@ -43,6 +43,8 @@ from .mutation import (
     mutation_journal_operation_status,
 )
 from .orchestration import TaskIntent, TaskOrchestrationContext
+from .credential_memory import AuthenticationMemory
+from .redaction import register_secret_values, require_secret_free
 
 
 T = TypeVar("T")
@@ -373,7 +375,7 @@ class CredentialResolver:
             self._loaders["redfish"] = redfish_loader
         from .credentials import LocalCredentialSource
         self._local_source = LocalCredentialSource(config_path=config_path, environ=environ)
-        self._local_cache: dict[tuple[str, str, str, str], object] = {}
+        self._local_cache: dict[tuple[str, str, str, str, int], object] = {}
         self._task_sources: dict[str, Path | None] = {}
         self._task_snapshots: dict[str, tuple[Path | None, str | None]] = {}
         self._task_source_environments: dict[str, dict[str, str]] = {}
@@ -381,27 +383,53 @@ class CredentialResolver:
         self._lock = threading.RLock()
 
     def resolve_local(
-        self, *, task_id: str, host: str, transport: str, purpose: str = "bmc", required: bool = True,
+        self, *, task_id: str, host: str, transport: str, purpose: str = "bmc",
+        port: int | None = None, required: bool = True,
     ) -> CredentialResolution[object]:
         """Resolve one complete local record and bind its source for the task."""
         from .credentials import normalize_credential_host
         if not task_id.strip() or not host.strip() or purpose not in {"bmc", "os"} or transport not in {"ssh", "redfish"}:
             raise ValueError("Local credentials require a task, target, BMC/OS purpose and SSH/Redfish transport")
-        key = (task_id, normalize_credential_host(host), purpose, transport)
+        selected_port = {'ssh': 22, 'redfish': 443}[transport] if port is None else port
+        if type(selected_port) is not int or not 1 <= selected_port <= 65535:
+            raise ValueError("Local credential port must be between 1 and 65535")
+        key = (task_id, normalize_credential_host(host), purpose, transport, selected_port)
         with self._lock:
             if key in self._local_cache:
-                return CredentialResolution(self._local_cache[key], cache_hit=True)
+                cached = self._local_cache[key]
+                register_secret_values({"password": cached.password})
+                return CredentialResolution(cached, cache_hit=True)
             path, snapshot = self._selected_local_snapshot(task_id)
-            values = self._local_source.resolve(snapshot[0], host=host, purpose=purpose, transport=transport, required=required)
+            # Pin the source even when this lookup is incomplete. A later call
+            # in the same task must not silently select a different file.
+            self._task_sources[task_id] = path
+            self._task_snapshots[task_id] = snapshot
+            self._remember_source_environment(task_id)
+            values = self._local_source.resolve(snapshot[0], host=host, purpose=purpose,
+                                                transport=transport, port=selected_port,
+                                                required=required, legacy_path=path)
             if values is None:
                 return CredentialResolution(None, cache_hit=False)
             credential_type = ResolvedSshCredentials if transport == "ssh" else ResolvedRedfishCredentials
-            resolved = credential_type.from_mapping(values)
-            self._task_sources[task_id] = path
-            self._remember_source_environment(task_id)
-            self._task_snapshots[task_id] = snapshot
+            resolved = credential_type.from_mapping({**values, "port": selected_port})
+            register_secret_values({"password": resolved.password})
             self._local_cache[key] = resolved
             return CredentialResolution(resolved, cache_hit=False)
+
+    def forget_task(self, task_id: str) -> None:
+        """Release task-bound credential values and source snapshots on close."""
+        with self._lock:
+            self._local_cache = {
+                key: value for key, value in self._local_cache.items()
+                if key[0] != task_id
+            }
+            self._cache = {
+                key: value for key, value in self._cache.items()
+                if key[0] != task_id
+            }
+            self._task_sources.pop(task_id, None)
+            self._task_snapshots.pop(task_id, None)
+            self._task_source_environments.pop(task_id, None)
 
     def associated_os(self, *, task_id: str, bmc_host: str) -> str | None:
         """Return a configured association, never authorization to access the OS."""
@@ -412,13 +440,13 @@ class CredentialResolver:
             raise ValueError("An association lookup requires a task and BMC")
         with self._lock:
             path, snapshot = self._selected_local_snapshot(task_id)
+            self._task_sources[task_id] = path
+            self._task_snapshots[task_id] = snapshot
+            self._remember_source_environment(task_id)
             if not self._local_source.is_structured(snapshot[0]):
                 return None
             config = json.loads(read_private_credentials(snapshot[0]))
             association = device_associations(config).get(normalize_credential_host(bmc_host))
-            self._task_sources[task_id] = path
-            self._task_snapshots[task_id] = snapshot
-            self._remember_source_environment(task_id)
             return association
 
     def _selected_local_snapshot(self, task_id: str):
@@ -449,9 +477,9 @@ class CredentialResolver:
         """Read the compatibility file while binding the same task source as JSON."""
         with self._lock:
             path = self._task_sources[task_id] if task_id in self._task_sources else self._local_source.select_path()
-            values = loader(environ=self.source_environment(task_id))
             self._task_sources[task_id] = path
             self._remember_source_environment(task_id)
+            values = loader(environ=self.source_environment(task_id))
             return values
 
     def refresh_local_revision(self, task_id: str) -> bool:
@@ -487,18 +515,64 @@ class CredentialResolver:
         transports: tuple[str, ...] = ("ssh", "redfish"),
     ) -> dict[str, str]:
         """Project selected records only into local Domain Adapter input."""
+        from .credential_file import (CREDENTIALS_FILE_MAX_BYTES, CredentialFileError,
+                                      parse_credentials_text, selected_credential_value)
+        from .credentials import CredentialConfigurationError, read_private_credentials
         arguments = arguments or {}
         values = {"__runtime_selected__": "1"}
+        legacy_values = {}
+        with self._lock:
+            source, snapshot = self._selected_local_snapshot(task_id)
+            if source is not None and snapshot[0] is not None:
+                content = read_private_credentials(snapshot[0])
+                if content.lstrip().startswith("{"):
+                    import json
+                    try:
+                        config = json.loads(content)
+                    except (ValueError, RecursionError):
+                        raise CredentialConfigurationError("credentials_invalid", "Invalid local target configuration") from None
+                    if not isinstance(config, dict):
+                        raise CredentialConfigurationError("credentials_invalid", "Invalid local target configuration")
+                    if config.get("legacy_source_overlay") is True:
+                        try:
+                            legacy_values = parse_credentials_text(read_private_credentials(
+                                source, max_bytes=CREDENTIALS_FILE_MAX_BYTES))
+                        except CredentialFileError:
+                            raise CredentialConfigurationError("credentials_invalid", "Invalid legacy overlay source") from None
+        if legacy_values:
+            for names in (("OPENUBMC_SSH_USER",), ("OPENUBMC_SSH_PASSWORD",),
+                          ("OPENUBMC_REDFISH_USER", "REDFISH_USERNAME"),
+                          ("OPENUBMC_REDFISH_PASSWORD", "REDFISH_PASSWORD"),
+                          ("OPENUBMC_OS_SSH_USER",), ("OPENUBMC_OS_SSH_PASSWORD",),
+                          ("OPENUBMC_TELNET_USER",), ("OPENUBMC_TELNET_PASSWORD",),
+                          ("OPENUBMC_OS_IP",), ("OPENUBMC_OS_SSH_PORT",)):
+                selected = selected_credential_value(legacy_values, names,
+                                                     environ=self._local_source.environ)
+                if selected is not None:
+                    for name in names:
+                        values[name] = selected
         for purpose, transport in (("bmc", "ssh"), ("bmc", "redfish"), ("os", "ssh")):
             if transport not in transports:
                 continue
             prefix = ("os_" if purpose == "os" else "") + transport
             if any(arguments.get(prefix + suffix) for suffix in ("_user", "_user_env", "_password", "_password_env", "_identity_file")):
                 continue
-            selected_host = str(arguments.get("os_ip", "")) if purpose == "os" else host
+            selected_host = (str(arguments.get("os_ip") or values.get("OPENUBMC_OS_IP", ""))
+                             if purpose == "os" else host)
             if not selected_host:
                 continue
+            port_name = ("os_" if purpose == "os" else "") + transport + "_port"
+            raw_port = arguments.get(port_name)
+            if purpose == "os" and transport == "ssh" and raw_port in (None, ""):
+                raw_port = selected_credential_value(legacy_values, ("OPENUBMC_OS_SSH_PORT",),
+                                                     environ=self._local_source.environ)
+            try:
+                selected_port = (int(raw_port) if raw_port not in (None, "")
+                                 else {'ssh': 22, 'redfish': 443}[transport])
+            except (TypeError, ValueError):
+                raise CredentialConfigurationError("credentials_invalid", "Invalid local credential port") from None
             record = self.resolve_local(task_id=task_id, host=selected_host, purpose=purpose, transport=transport,
+                                        port=selected_port,
                                         required=len(transports) == 1 or purpose == "os").credentials
             env_prefix = "OPENUBMC_" + prefix.upper()
             if record is None:
@@ -563,6 +637,7 @@ class CredentialResolver:
         with self._lock:
             cached = self._cache.get(key)
             if cached is not None:
+                register_secret_values({"password": cached.password})
                 return CredentialResolution(cached, cache_hit=True)
             loader = self._loaders.get(selector.transport)
             if loader is None:
@@ -578,6 +653,7 @@ class CredentialResolver:
                 raise TypeError(
                     f"credential loader must return {expected_type.__name__ if expected_type else 'a supported credential type'}"
                 )
+            register_secret_values({"password": resolved.password})
             self._cache[key] = resolved
             return CredentialResolution(resolved, cache_hit=False)
 
@@ -607,6 +683,7 @@ class RemoteReadRequest:
         collector_name: str,
         operation: Mapping[str, object],
     ) -> "RemoteReadRequest":
+        require_secret_free(operation, boundary="RemoteReadRequest identity")
         return cls(
             request_id=request_id,
             target=target,
@@ -776,6 +853,7 @@ class SshLane(Generic[MasterT, ChannelResultT]):
         self._credentials = credentials
         self._transport = transport
         self._metric_recorder = metric_recorder
+        self._authentication_memory = AuthenticationMemory()
         self._master: MasterT | None = None
         self._master_epoch: int | None = None
         self._master_opens = 0
@@ -847,6 +925,10 @@ class SshLane(Generic[MasterT, ChannelResultT]):
         self._master_epoch = self._coordinator.lane_state("ssh").epoch
         self._master_opens += 1
         self._record("authentications", "ssh_authentications")
+        self._authentication_memory.authenticated(
+            host=self._coordinator.target.host, transport="ssh", credentials=self._credentials,
+            port=self._coordinator.target.ssh_port,
+        )
         if reconnecting:
             self._record("reconnects", "ssh_reconnects")
         return master
@@ -1109,6 +1191,7 @@ class SshLane(Generic[MasterT, ChannelResultT]):
                 "connected": self._master is not None,
                 "ssh_epoch": self._coordinator.lane_state("ssh").epoch,
                 "cached_state": list(sorted(self._cache)),
+                "credential_persistence": dict(self._authentication_memory.status),
                 "metrics": dict(self._metrics),
             }
 
@@ -1398,6 +1481,7 @@ class RedfishLane(Generic[RedfishSessionT, RedfishResultT]):
         self._credentials = credentials
         self._transport = transport
         self._metric_recorder = metric_recorder
+        self._authentication_memory = AuthenticationMemory()
         self._session: RedfishSessionT | None = None
         self._session_epoch: int | None = None
         self._session_opens = 0
@@ -1469,6 +1553,13 @@ class RedfishLane(Generic[RedfishSessionT, RedfishResultT]):
         self._session_epoch = self._coordinator.lane_state("redfish").epoch
         self._session_opens += 1
         self._record("sessions", "redfish_sessions")
+        # Some adapters only construct a local Basic-auth client here. They
+        # must not report authentication until a protected exchange occurs.
+        if getattr(self._transport, "authenticates_on_open", False) is True:
+            self._authentication_memory.authenticated(
+                host=self._coordinator.target.host, transport="redfish", credentials=self._credentials,
+                port=self._coordinator.target.redfish_port,
+            )
         if reconnecting:
             self._record("reconnects", "redfish_reconnects")
         return session
@@ -1560,6 +1651,7 @@ class RedfishLane(Generic[RedfishSessionT, RedfishResultT]):
                 "lease_name": self.lease_name,
                 "connected": self._session is not None,
                 "redfish_epoch": self._coordinator.lane_state("redfish").epoch,
+                "credential_persistence": dict(self._authentication_memory.status),
                 "metrics": dict(self._metrics),
             }
 
@@ -2830,5 +2922,9 @@ class OpenUBMCTaskRun:
                 )
             }
             self._requests.clear()
-        for lane in lanes.values():
-            lane.close()
+        try:
+            for lane in lanes.values():
+                lane.close()
+        finally:
+            if self._credential_resolver is not None:
+                self._credential_resolver.forget_task(self.task_id)

@@ -7,6 +7,7 @@ import unittest
 from openubmc_target_runtime import JsonRpcMcpEndpoint, RuntimeMcpService, SQLiteRuntimeRepository
 from openubmc_target_runtime.host_continuity import HostContinuity, read_runtime_projection
 from test_mcp_contracts import FakeDebugBackend
+from openubmc_target_runtime.source_check import SourceCheck
 
 
 class BindingObservingBackend(FakeDebugBackend):
@@ -55,7 +56,7 @@ class WorkspaceRunRecordTests(unittest.TestCase):
         host = options.pop("host_continuity", self.host)
         service = RuntimeMcpService(
             self.backend, context_repository=self.repository, host_continuity=host,
-            host_context_provider=provider, **options,
+            host_context_provider=provider, source_checker=lambda _: SourceCheck("matched", "metadata_matched"), **options,
         )
         self.addCleanup(service.close)
         return JsonRpcMcpEndpoint(service, session_task_id="task")

@@ -6,7 +6,8 @@ import ipaddress
 import json
 import os
 from pathlib import Path
-from .credential_file import CredentialFileError, read_private_text, parse_credentials_text, selected_credential_value, selected_credentials_path
+from .credential_file import (CREDENTIALS_FILE_MAX_BYTES, CredentialFileError, configuration_home, read_private_text,
+                              parse_credentials_text, selected_credential_value, selected_credentials_path)
 
 
 class CredentialConfigurationError(RuntimeError):
@@ -23,9 +24,9 @@ def normalize_credential_host(host: str) -> str:
         return text.lower()
 
 
-def read_private_credentials(path: Path) -> str:
+def read_private_credentials(path: Path, *, max_bytes: int = 1024 * 1024) -> str:
     try:
-        return read_private_text(path, max_bytes=1024 * 1024)
+        return read_private_text(path, max_bytes=max_bytes)
     except CredentialFileError as exc:
         code = 'credentials_missing' if 'does not exist' in str(exc) else 'credentials_invalid'
         raise CredentialConfigurationError(code, 'Check the selected current-user credential source and its permissions') from None
@@ -59,10 +60,9 @@ class LocalCredentialSource:
             raise CredentialConfigurationError(code, 'Check the explicit local credential source selectors') from None
         if selected is not None:
             return selected
-        config_home = self.environ.get('XDG_CONFIG_HOME') or str(Path.home() / '.config')
         from .configuration import has_activation
         for name in ('credentials.json', 'credentials.env'):
-            path = Path(config_home) / 'openubmc' / name
+            path = configuration_home(self.environ) / 'openubmc' / name
             if path.exists() or path.is_symlink() or has_activation(path):
                 return path
         return None
@@ -79,22 +79,35 @@ class LocalCredentialSource:
             content = read_private_credentials(selected) if selected is not None else ''
             structured = selected is not None and (selected.suffix.lower() == '.json' or content.lstrip().startswith('{'))
             hosts = ['default-credential-readiness.invalid']
+            legacy_content = content
             if structured:
                 config = json.loads(content, object_pairs_hook=_unique_object)
                 if not isinstance(config, dict) or not isinstance(config.get('targets', {}), dict):
                     raise CredentialConfigurationError('credentials_invalid', 'Invalid local target configuration')
+                from .configuration import _validate_targets
+                _validate_targets(config)
                 hosts.extend(config.get('targets', {}))
+                hosts.extend(config.get('target_ports', {}))
+                if config.get('legacy_source_overlay') is True:
+                    legacy_content = read_private_credentials(path, max_bytes=CREDENTIALS_FILE_MAX_BYTES)
             capabilities = {'bmc_ssh': False, 'redfish': False, 'os_ssh': False, 'os_redfish': False}
             for host in hosts:
                 for purpose, transport, name in [('bmc', 'ssh', 'bmc_ssh'), ('bmc', 'redfish', 'redfish'),
                                                  ('os', 'ssh', 'os_ssh'), ('os', 'redfish', 'os_redfish')]:
-                    record = self.resolve(selected, host=host, purpose=purpose, transport=transport, required=False)
-                    capabilities[name] = capabilities[name] or record is not None
+                    ports = [None]
+                    if structured:
+                        qualified = config.get('target_ports', {}).get(host, {}).get(purpose, {}).get(transport, {})
+                        if isinstance(qualified, dict):
+                            ports.extend(int(port) for port in qualified)
+                    for port in ports:
+                        record = self.resolve(selected, host=host, purpose=purpose, transport=transport,
+                                              port=port, required=False, legacy_path=path)
+                        capabilities[name] = capabilities[name] or record is not None
             legacy_incomplete = False
-            if not structured:
+            if not structured or config.get('legacy_source_overlay') is True:
                 # Telnet and the legacy OS-port completeness rule remain separate
                 # from the Runtime's SSH/Redfish record interface.
-                values = parse_credentials_text(content)
+                values = parse_credentials_text(legacy_content)
                 telnet = [selected_credential_value(values, (key,), environ=self.environ) or ''
                           for key in ('OPENUBMC_TELNET_USER', 'OPENUBMC_TELNET_PASSWORD')]
                 capabilities['telnet'] = all(telnet)
@@ -128,7 +141,13 @@ class LocalCredentialSource:
             record[field] = selected_credential_value(values, names, environ=self.environ) or ''
         return record
 
-    def resolve(self, path: Path | None, *, host: str, purpose: str, transport: str, required: bool = True) -> dict[str, str] | None:
+    def resolve(self, path: Path | None, *, host: str, purpose: str, transport: str,
+                port: int | None = None, required: bool = True,
+                legacy_path: Path | None = None) -> dict[str, str] | None:
+        default_port = {'ssh': 22, 'redfish': 443}[transport]
+        port = default_port if port is None else port
+        if type(port) is not int or not 1 <= port <= 65535:
+            raise CredentialConfigurationError('credentials_invalid', 'Credential port must be between 1 and 65535')
         content = read_private_credentials(path) if path is not None else ''
         if path is None or (path.suffix.lower() != '.json' and not content.lstrip().startswith('{')):
             record = self._legacy_record(content, purpose=purpose, transport=transport)
@@ -142,22 +161,61 @@ class LocalCredentialSource:
             raise CredentialConfigurationError('credentials_invalid', 'Credential source must contain valid JSON') from None
         if not isinstance(config, dict) or config.get('schema_version') != 1:
             raise CredentialConfigurationError('credentials_invalid', 'Unsupported local credential configuration schema')
-        defaults, targets, records = (config.get(key, {}) for key in ('defaults', 'targets', 'credentials'))
-        if not all(isinstance(value, dict) for value in (defaults, targets, records)):
+        defaults, targets, records, target_ports = (config.get(key, {}) for key in (
+            'defaults', 'targets', 'credentials', 'target_ports'))
+        if not all(isinstance(value, dict) for value in (defaults, targets, records, target_ports)):
             raise CredentialConfigurationError('credentials_invalid', 'Credential defaults, targets and records must be objects')
-        normalized_targets = {}
-        for address, entries in targets.items():
-            try:
-                normalized = str(ipaddress.ip_address(address.strip()))
-            except ValueError:
-                raise CredentialConfigurationError('credentials_invalid', 'Target overrides require literal IPv4 or IPv6 addresses') from None
-            if normalized in normalized_targets and normalized_targets[normalized] != entries:
-                raise CredentialConfigurationError('credentials_conflict', 'Multiple overrides select the same normalized IP')
-            normalized_targets[normalized] = entries
+        def normalize_targets(entries):
+            normalized_targets = {}
+            for address, selected in entries.items():
+                try:
+                    normalized = str(ipaddress.ip_address(address.strip()))
+                except (AttributeError, ValueError):
+                    raise CredentialConfigurationError('credentials_invalid', 'Target overrides require literal IPv4 or IPv6 addresses') from None
+                if normalized in normalized_targets and normalized_targets[normalized] != selected:
+                    raise CredentialConfigurationError('credentials_conflict', 'Multiple overrides select the same normalized IP')
+                normalized_targets[normalized] = selected
+            return normalized_targets
+        normalized_targets = normalize_targets(targets)
+        normalized_port_targets = normalize_targets(target_ports)
+        from .configuration import ConfigurationError, _validate_targets
+        try:
+            _validate_targets(config)
+        except ConfigurationError:
+            raise CredentialConfigurationError('credentials_invalid', 'Invalid local target configuration') from None
         target = normalized_targets.get(normalize_credential_host(host), {})
-        if not isinstance(target, dict) or not isinstance(defaults.get(purpose, {}), dict) or not isinstance(target.get(purpose, {}), dict):
+        port_target = normalized_port_targets.get(normalize_credential_host(host), {})
+        if (not isinstance(target, dict) or not isinstance(port_target, dict)
+                or not isinstance(defaults.get(purpose, {}), dict)
+                or not isinstance(target.get(purpose, {}), dict)
+                or not isinstance(port_target.get(purpose, {}), dict)):
             raise CredentialConfigurationError('credentials_invalid', 'Credential purposes must contain transport references')
-        reference = target.get(purpose, {}).get(transport, defaults.get(purpose, {}).get(transport))
+        if port == default_port:
+            reference = target.get(purpose, {}).get(transport, defaults.get(purpose, {}).get(transport))
+        else:
+            ports = port_target.get(purpose, {}).get(transport, {})
+            if not isinstance(ports, dict):
+                raise CredentialConfigurationError('credentials_invalid', 'Port-qualified references must be objects')
+            reference = ports.get(str(port), defaults.get(purpose, {}).get(transport))
+        if reference is None and config.get('legacy_source_overlay') is True:
+            if legacy_path is None:
+                raise CredentialConfigurationError('credentials_invalid', 'Legacy overlay requires its original private source')
+            legacy_content = read_private_credentials(legacy_path, max_bytes=CREDENTIALS_FILE_MAX_BYTES)
+            if legacy_content.lstrip().startswith('{'):
+                raise CredentialConfigurationError('credentials_invalid', 'Legacy overlay source changed format')
+            record = self._legacy_record(legacy_content, purpose=purpose, transport=transport)
+            if not required and not any(record.values()):
+                return None
+            self._validate_record(record, purpose=purpose, transport=transport)
+            return record
+        if reference is None and config.get('legacy_environment_fallback') is True:
+            # An automatically created IP-only store must not disable existing
+            # process-environment access to other IPs or protocols. A configured
+            # reference (even incomplete) still wins and is never field-merged.
+            record = self._legacy_record('', purpose=purpose, transport=transport)
+            if any(record.values()):
+                self._validate_record(record, purpose=purpose, transport=transport)
+                return record
         if reference is None and not required:
             return None
         if not isinstance(reference, str) or not reference or reference not in records:

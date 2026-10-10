@@ -615,6 +615,8 @@ def qualify_observation(
         "gaps": list(dict.fromkeys(gaps))[:16],
     }
     qualified[OBSERVATION_TIMING_FIELD] = consistency
+    if classification == "coherent" and not _text(qualified.get("observed_at")):
+        qualified["observed_at"] = supplied_complete_text
     return qualified
 
 

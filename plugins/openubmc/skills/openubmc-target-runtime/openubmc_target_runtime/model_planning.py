@@ -9,6 +9,7 @@ from enum import Enum
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -1501,13 +1502,26 @@ class SQLiteModelPlanningRepository:
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            from .windows_private import ensure_private_directory, verify_private_path
+            ensure_private_directory(self.path.parent)
+            if self.path.exists():
+                verify_private_path(self.path)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._initialize()
 
     def _connect(self) -> sqlite3.Connection:
+        created = not self.path.exists()
+        if os.name == "nt" and not created:
+            from .windows_private import verify_private_path
+            verify_private_path(self.path)
         connection = sqlite3.connect(self.path, timeout=30)
         try:
+            if os.name == "nt" and created:
+                from .windows_private import harden_new_file
+                harden_new_file(self.path)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=NORMAL")

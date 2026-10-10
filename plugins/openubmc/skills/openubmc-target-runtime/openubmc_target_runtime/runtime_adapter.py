@@ -207,6 +207,15 @@ class RuntimeSemanticAdapter:
             ]
         else:
             arguments["ip"] = command.target
+        for name, port, default in (
+            ("ssh_port", command.ssh_port, 22),
+            ("telnet_port", command.telnet_port, 23),
+            ("redfish_port", command.redfish_port, 443),
+        ):
+            if port != default:
+                arguments[name] = port
+        if not command.allow_insecure_tls:
+            arguments["allow_insecure_tls"] = False
         selected_entry = command.entry_operation
         if command.intent == "upgrade-and-verify" and len(command.targets) > 1:
             if selected_entry not in {"", "upgrade_run", "upgrade_batch"}:
@@ -216,6 +225,24 @@ class RuntimeSemanticAdapter:
         if selected_entry:
             arguments["_context_entry_operation"] = selected_entry
             arguments["entry_arguments"] = dict(command.entry_arguments or {})
+            if command.intent in {"live-patch", "rollback"}:
+                checks = arguments["entry_arguments"].get("verification_checks")
+                if checks is not None:
+                    if (
+                        not isinstance(checks, list)
+                        or len(checks) > 16
+                        or any(
+                            not isinstance(item, str)
+                            or not item.strip()
+                            or len(item.encode("utf-8")) > 512
+                            for item in checks
+                        )
+                    ):
+                        raise ValueError(
+                            "verification_checks must be at most 16 non-empty "
+                            "checks of at most 512 bytes"
+                        )
+                    arguments["verification_checks"] = list(checks)
         if command.delivery_strategy:
             arguments["delivery_strategy"] = command.delivery_strategy
         seeded_raw: Mapping[str, object] | None = None

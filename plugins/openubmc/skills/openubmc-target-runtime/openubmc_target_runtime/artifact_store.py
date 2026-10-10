@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 import hashlib
 import json
@@ -14,7 +15,8 @@ import tempfile
 import threading
 import time
 from typing import Protocol
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from .contracts import RUNTIME_API_VERSION
 from .redaction import is_secret_key, redact_text
@@ -270,7 +272,13 @@ class SQLiteArtifactRepository:
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if os.name == "nt":
+            from .windows_private import ensure_private_directory, verify_private_path
+            ensure_private_directory(self.path.parent)
+            if self.path.exists():
+                verify_private_path(self.path)
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         with self._connect() as connection:
             connection.executescript(
@@ -312,12 +320,24 @@ class SQLiteArtifactRepository:
                 "FROM artifact_records"
             )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
+        created = not self.path.exists()
+        if os.name == "nt" and not created:
+            from .windows_private import verify_private_path
+            verify_private_path(self.path)
         connection = sqlite3.connect(self.path, timeout=30)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA synchronous=NORMAL")
-        return connection
+        try:
+            if os.name == "nt" and created:
+                from .windows_private import harden_new_file
+                harden_new_file(self.path)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=NORMAL")
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     @staticmethod
     def _record(row: sqlite3.Row) -> ArtifactRecord:
@@ -489,11 +509,15 @@ class LocalArtifactStore:
     ) -> None:
         if temporary_retention_seconds <= 0:
             raise ValueError("temporary Artifact retention must be positive")
-        self.content_root = Path(
-            content_root
-            or Path(tempfile.gettempdir()) / "openubmc-target-runtime-artifacts"
-        )
-        self.content_root.mkdir(parents=True, exist_ok=True)
+        default_root = (Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
+                        / "openubmc-agent-workflow" / "artifacts" if os.name == "nt"
+                        else Path(tempfile.gettempdir()) / "openubmc-target-runtime-artifacts")
+        self.content_root = Path(content_root or default_root)
+        if os.name == "nt":
+            from .windows_private import ensure_private_directory
+            ensure_private_directory(self.content_root)
+        else:
+            self.content_root.mkdir(parents=True, exist_ok=True)
         self.repository = repository or InMemoryArtifactRepository()
         self.clock = clock
         self.temporary_retention_seconds = float(temporary_retention_seconds)
@@ -505,6 +529,8 @@ class LocalArtifactStore:
 
     @staticmethod
     def _path(handle: str) -> Path:
+        if os.name == "nt" and Path(handle).drive:
+            return Path(handle)
         parsed = urlparse(handle)
         if parsed.scheme not in {"", "file"}:
             raise ReferenceViolation(
@@ -513,7 +539,7 @@ class LocalArtifactStore:
         if parsed.scheme == "file":
             if parsed.netloc not in {"", "localhost"}:
                 raise ReferenceViolation("ArtifactRef file handle must be local")
-            return Path(unquote(parsed.path))
+            return Path(url2pathname(parsed.path))
         return Path(handle)
 
     def path_for(self, reference: ArtifactRef) -> Path:
@@ -813,6 +839,7 @@ class LocalArtifactStore:
                     else LocalArtifactStore._redact_value(member)
                 )
                 for key, member in value.items()
+                if redact_text(key) == str(key)
             }
         if isinstance(value, list):
             return [LocalArtifactStore._redact_value(member) for member in value]

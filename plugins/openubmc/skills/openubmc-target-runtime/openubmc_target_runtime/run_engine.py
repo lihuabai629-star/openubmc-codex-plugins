@@ -62,6 +62,9 @@ from .effect_runner import (
     LocalEffectRunner,
     PreparedEffect,
 )
+from .redaction import redact_effect_output
+from .source_check import SourceChecker, check_source, requires_source_check
+from .operation_records import operation_receipts
 from .capability import EffectClass
 from .comparison_receipt import COMPARISON_RECEIPT_SCHEMA
 from .diagnostic_receipt import (
@@ -91,6 +94,7 @@ from .workflow import (
     DEFAULT_WORKFLOW_DEFINITIONS,
     WorkflowDefinitions,
 )
+from .tracing import RunTracer, TraceSettings
 from .validation_readiness import (
     BUILD_STATUSES,
     DEPENDENCY_RESOLUTIONS,
@@ -616,8 +620,9 @@ class RunTransition:
 class ObservationEngine:
     """Collect, automatically assure when useful, and persist one observation."""
 
-    def __init__(self, driver: ObservationDriver) -> None:
+    def __init__(self, driver: ObservationDriver, *, tracing: RunTracer | None = None) -> None:
         self.driver = driver
+        self.tracing = tracing or RunTracer(TraceSettings())
 
     @staticmethod
     def _needs_assurance(
@@ -682,6 +687,18 @@ class ObservationEngine:
         return combined
 
     def observe(
+        self,
+        query: ObservationQuery,
+        *,
+        task_id: str,
+        operation_id: str,
+    ) -> ObservationResult:
+        with self.tracing.span("runtime.observe", task_id=task_id):
+            return self._observe_untraced(
+                query, task_id=task_id, operation_id=operation_id,
+            )
+
+    def _observe_untraced(
         self,
         query: ObservationQuery,
         *,
@@ -822,6 +839,9 @@ class RunEngine:
             [Mapping[str, object]], tuple[Mapping[str, object], ...]
         ] | None = None,
         workflow_definitions: WorkflowDefinitions = DEFAULT_WORKFLOW_DEFINITIONS,
+        tracing: RunTracer | None = None,
+        source_checker: SourceChecker | None = None,
+        evidence_kind: str = "observed",
     ) -> None:
         if run_store is None:
             raise ValueError("RunStore is required")
@@ -831,6 +851,11 @@ class RunEngine:
         self.effect_runner = effect_runner
         self.fact_projector = fact_projector
         self.workflow_definitions = workflow_definitions
+        self.tracing = tracing or RunTracer(TraceSettings())
+        self.source_checker = source_checker
+        if evidence_kind not in {"observed", "synthetic"}:
+            raise ValueError("Invalid operation evidence kind")
+        self.evidence_kind = evidence_kind
         self._active_transaction: ContextVar[RunDecisionDraft | None] = (
             ContextVar(f"openubmc_run_decision_{id(self)}", default=None)
         )
@@ -1177,6 +1202,9 @@ class RunEngine:
         operation_id: str,
     ) -> Gate | None:
         projection = _projection(snapshot)
+        source_gate = _mapping(projection.get("current_gate"))
+        if source_gate.get("name") == "source.context":
+            return Gate.from_public_dict(source_gate)
         continuation = _continuation(snapshot)
         if not _text(continuation.get("required_phase_type")):
             return None
@@ -1247,6 +1275,27 @@ class RunEngine:
         if not isinstance(current, Mapping):
             raise GateConflict("Gate persistence did not return an open Gate")
         return Gate.from_public_dict(current)
+
+    def _source_gate(self, snapshot, *, operation_id, reason):
+        projection = _projection(snapshot)
+        current = _mapping(projection.get("current_gate"))
+        if current.get("name") == "source.context":
+            return Gate.from_public_dict(current)
+        schema = {"type": "object", "additionalProperties": False,
+                  "required": ["status", "summary", "payload"], "properties": {
+                      "status": {"const": "completed"}, "summary": {"type": "string", "minLength": 1},
+                      "payload": {"type": "object", "additionalProperties": False,
+                                  "required": ["retry"], "properties": {"retry": {"const": True}}}},
+                  "description": "Restore the original repository metadata, then retry; "
+                                 "or cancel this Run. Source check: " + reason}
+        version = 1 + sum(gate.get("name") == "source.context"
+                          for gate in projection.get("run_gates", []) if isinstance(gate, Mapping))
+        gate = Gate("gate-" + fingerprint({"run": self._run_id(snapshot), "version": version,
+                    "source": projection["start_input"]["workspace_context"]["context_digest"]})[:32],
+                    version, "source.context", "runtime", schema, fingerprint(schema), kind="source")
+        self._stage((RunEvent("RunGateOpened", {"gate": {**gate.to_public_dict(),
+                     "run_id": self._run_id(snapshot)}}, operation_id),))
+        return gate
 
     @staticmethod
     def _gate_preflight_context(
@@ -2540,6 +2589,15 @@ class RunEngine:
                 continuation.get("required_workflow_step_id")
             )
             if required_operation:
+                state = _mapping(_mapping(projection.get("workflow_step_states")).get(workflow_step_id))
+                source = check_source(projection, self.source_checker)
+                if (state.get("status") not in {"accepted", "running"}
+                        and requires_source_check(projection)):
+                    if source.status != "matched" or _mapping(projection.get("current_gate")).get("name") == "source.context":
+                        gate = self._source_gate(snapshot, operation_id=f"{operation_id}-source-gate",
+                                                 reason=source.reason)
+                        return self._turn(self.driver.run_snapshot(self._run_id(snapshot)), gate=gate,
+                            state="waiting_response", next_action="restore bound source metadata and retry, or cancel")
                 try:
                     self._validate_step_artifact(
                         snapshot,
@@ -2601,7 +2659,7 @@ class RunEngine:
                             (
                                 RunEvent(
                                     "OperationAccepted",
-                                    prepared.accepted_payload,
+                                    {**prepared.accepted_payload, "source_check_status": source.status},
                                     prepared.intent.effect_id,
                                 ),
                                 RunEvent(
@@ -2680,6 +2738,18 @@ class RunEngine:
         task_id: str,
         operation_id: str,
     ) -> RunTurn:
+        with self.tracing.span("runtime.gate", task_id=task_id, run_id=command.run_id):
+            return self._submit_gate_untraced(
+                command, task_id=task_id, operation_id=operation_id,
+            )
+
+    def _submit_gate_untraced(
+        self,
+        command: SubmitGate,
+        *,
+        task_id: str,
+        operation_id: str,
+    ) -> RunTurn:
         snapshot = self.driver.run_snapshot(command.run_id)
         _command_id, submission_digest = run_command_identity(
             command,
@@ -2701,9 +2771,8 @@ class RunEngine:
             if not isinstance(persisted_gate, Mapping):
                 raise GateConflict("duplicate submission Gate is unavailable")
             gate = Gate.from_public_dict(persisted_gate)
-            response = self._normalized_response(
-                command, gate=gate, projection=_projection(snapshot)
-            )
+            if gate.name != "source.context":
+                self._normalized_response(command, gate=gate, projection=_projection(snapshot))
             if _text(prior.get("submission_digest")) != submission_digest:
                 raise CommandConflict(
                     "submission_id was already used with different Gate input"
@@ -2723,6 +2792,23 @@ class RunEngine:
         if gate is None:
             raise GateConflict("Run is not waiting at a Gate")
         self._validate_gate(command, gate)
+        if gate.name == "source.context":
+            response = dict(command.response)
+            if (set(response) != {"status", "summary", "payload"} or response["status"] != "completed"
+                    or response["payload"] != {"retry": True} or response["payload"]["retry"] is not True):
+                raise GateConflict("source.context requires a completed response with payload retry=true")
+            source = check_source(_projection(snapshot), self.source_checker)
+            if source.status != "matched":
+                raise GateConflict("Original repository metadata is not restored: " + source.reason)
+            self._stage((RunEvent("RunGateSubmitted", {
+                "gate_id": gate.gate_id, "gate_version": gate.version,
+                "schema_digest": gate.schema_digest, "submission_id": command.submission_id,
+                "submission_digest": submission_digest, "actor": "runtime:source-check",
+                "status": "completed", "summary": "Original repository metadata restored",
+                "recorded_at": time.time(),
+            }, f"{operation_id}-source-response"),))
+            return self._advance(self.driver.run_snapshot(command.run_id), task_id=task_id,
+                                 operation_id=operation_id)
         raw_response = _mapping(command.response)
         raw_payload = _mapping(raw_response.get("payload"))
         legacy_component_partial = (
@@ -3437,7 +3523,9 @@ class RunEngine:
                     getattr(error, "mutation_effects_started", False)
                 ),
             }
-        input_digest = fingerprint(outcome_identity)
+        # The digest is durable. Scrub exception metadata and direct result
+        # values before hashing so it cannot become a guessable secret digest.
+        input_digest = fingerprint(redact_effect_output(outcome_identity))
         command_id = "effect-result-" + input_digest[:32]
         def build(transaction: RunDecisionDraft) -> RunDecision:
             current = _projection(self.driver.run_snapshot(intent.run_id))
@@ -3448,7 +3536,14 @@ class RunEngine:
                 error=error,
                 settlement_mode=settlement_mode,
             )
-            self._stage(transition.events)
+            events = tuple(
+                replace(event, payload={**event.payload, "record_receipts": operation_receipts(
+                    intent, current, terminal_status=_text(event.payload.get("status")),
+                    outcome=outcome_identity, checker=self.source_checker, evidence_kind=self.evidence_kind)})
+                if event.kind == "OperationTerminal" else event
+                for event in transition.events
+            )
+            self._stage(events)
             settled = any(
                 event.kind in {"OperationTerminal", "OperationReconciled"}
                 and _text(event.payload.get("status")) not in EFFECT_SETTLEMENT_STATUSES
@@ -3583,6 +3678,21 @@ class RunEngine:
         )
 
     def execute(
+        self,
+        command: RunCommand,
+        *,
+        task_id: str,
+        operation_id: str,
+    ) -> RunTurn:
+        run_id = command.run_id if not isinstance(command, StartRun) else ""
+        with self.tracing.span("runtime.execute", task_id=task_id, run_id=run_id) as span:
+            turn = self._execute_untraced(
+                command, task_id=task_id, operation_id=operation_id,
+            )
+            span.bind_run(turn.run_id)
+            return turn
+
+    def _execute_untraced(
         self,
         command: RunCommand,
         *,

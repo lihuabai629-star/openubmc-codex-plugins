@@ -823,6 +823,7 @@ def _selected_facts(
                     "epoch_after",
                     "artifact_reference",
                     "expected_checksum",
+                    "expected_missing",
                     "observed_checksum",
                     "root_mount_restored",
                     "restart_state",
@@ -853,10 +854,24 @@ def _selected_facts(
                 facts["product_version"] = identity.product_versions[0]
         if stage == "live_patch":
             mutation = _mapping(value.get("mutation"))
+            verified_absence = (
+                journal.get("action") == "rollback"
+                and journal.get("stage") in {"verified", "rollback_verified"}
+                and journal.get("expected_missing") is True
+                and mutation.get("remote_removed") is True
+                and verification.get("remote_removed") is True
+                and mutation.get("root_mount_restored") is True
+                and not journal.get("expected_checksum")
+                and not journal.get("observed_checksum")
+                and not mutation.get("remote_after_sha256")
+                and not verification.get("remote_sha256")
+            )
+            if journal.get("expected_missing") is True:
+                facts["rollback_absence_verified"] = verified_absence
             expected_sha = str(
                 mutation.get(
                     "local_sha256",
-                    _mapping(value.get("journal")).get("expected_checksum", ""),
+                    journal.get("expected_checksum", ""),
                 )
             ).lower()
             observed_sha = str(
@@ -864,21 +879,36 @@ def _selected_facts(
                     "remote_sha256",
                     mutation.get(
                         "remote_after_sha256",
-                        _mapping(value.get("journal")).get("observed_checksum", ""),
+                        journal.get("observed_checksum", ""),
                     ),
                 )
             ).lower()
             root_mount_restored = mutation.get(
                 "root_mount_restored",
-                _mapping(value.get("journal")).get("root_mount_restored"),
+                journal.get("root_mount_restored"),
             )
-            facts["deployment_integrity"] = (
-                "passed"
-                if expected_sha
-                and expected_sha == observed_sha
-                and root_mount_restored is not False
-                else "failed" if expected_sha or observed_sha else "not_run"
-            )
+            if journal.get("expected_missing") is True:
+                removal_contradicted = (
+                    bool(expected_sha or observed_sha)
+                    or mutation.get("remote_removed") is False
+                    or verification.get("remote_removed") is False
+                )
+                if verified_absence:
+                    facts["deployment_integrity"] = "passed"
+                elif removal_contradicted:
+                    facts["deployment_integrity"] = "failed"
+                else:
+                    facts["deployment_integrity"] = "not_run"
+            else:
+                facts["deployment_integrity"] = (
+                    "passed"
+                    if (
+                        expected_sha
+                        and expected_sha == observed_sha
+                        and root_mount_restored is not False
+                    )
+                    else "failed" if expected_sha or observed_sha else "not_run"
+                )
             expected_metadata = _mapping(mutation.get("remote_after_metadata"))
             observed_metadata = _mapping(verification.get("remote_metadata"))
             facts["metadata_status"] = (
@@ -1144,7 +1174,7 @@ def _business_acceptance(
         )
     if (
         plan.delivery_strategy == "build-upgrade"
-        or plan.intent == "upgrade-and-verify"
+        or plan.intent in {"upgrade-and-verify", "live-patch", "rollback"}
     ) and verification_receipts and all(
         receipt.status == "completed"
         and receipt.facts.get("ok") is True
@@ -1519,26 +1549,27 @@ def _identity_status(
         checksum_pairs = [
             (
                 str(
-                    _mapping(item.facts.get("journal")).get(
-                        "expected_checksum", ""
-                    )
+                    _mapping(item.facts.get("journal")).get("expected_checksum", "")
                 ).lower(),
                 str(
-                    _mapping(item.facts.get("journal")).get(
-                        "observed_checksum", ""
-                    )
+                    _mapping(item.facts.get("journal")).get("observed_checksum", "")
                 ).lower(),
+                _mapping(item.facts.get("journal")).get("expected_missing") is True,
+                item.facts.get("rollback_absence_verified") is True,
             )
             for item in patches
         ]
         if checksum_pairs and all(
-            expected and observed and expected == observed
-            for expected, observed in checksum_pairs
+            verified_absence if expected_missing else (
+                expected and observed and expected == observed
+            )
+            for expected, observed, expected_missing, verified_absence in checksum_pairs
         ):
             return "matched", []
         if any(
-            expected and observed and expected != observed
-            for expected, observed in checksum_pairs
+            (expected_missing and bool(expected or observed))
+            or (expected and observed and expected != observed)
+            for expected, observed, expected_missing, _verified_absence in checksum_pairs
         ):
             return "mismatched", ["Live Patch 预期与远端校验和不一致。"]
         if patch.status == "completed" and patch.facts.get("remote_path"):

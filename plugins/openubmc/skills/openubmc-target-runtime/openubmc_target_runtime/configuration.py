@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar
-import fcntl
 import ipaddress
 import json
 import math
@@ -14,6 +13,10 @@ import re
 import stat
 import tempfile
 import uuid
+import sys
+
+if sys.platform != 'win32':
+    import fcntl
 
 from .credential_file import CredentialFileError, read_private_text
 
@@ -95,18 +98,42 @@ def _atomic_write(path: Path, content: bytes) -> None:
         raise ConfigurationError('Configuration markers must not be symbolic links')
     descriptor, temporary = tempfile.mkstemp(prefix='.' + path.name + '-', dir=path.parent)
     try:
+        if sys.platform == 'win32':
+            from .windows_private import harden_new_file
+            harden_new_file(Path(temporary))
         with os.fdopen(descriptor, 'wb') as output:
             output.write(content)
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
+        if sys.platform != 'win32':
+            directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
     finally:
         Path(temporary).unlink(missing_ok=True)
+
+
+def _marker_backup(path: Path) -> Path | None:
+    """Stage a private rollback copy before a multi-marker activation."""
+    if not path.exists() and not path.is_symlink():
+        return None
+    original = read_private_text(path, max_bytes=4096).encode()
+    descriptor, temporary = tempfile.mkstemp(prefix='.' + path.name + '-rollback-', dir=path.parent)
+    try:
+        if sys.platform == 'win32':
+            from .windows_private import harden_new_file
+            harden_new_file(Path(temporary))
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(original)
+            output.flush()
+            os.fsync(output.fileno())
+    except BaseException:
+        Path(temporary).unlink(missing_ok=True)
+        raise
+    return Path(temporary)
 
 
 def device_associations(config: dict) -> dict[str, str]:
@@ -134,24 +161,30 @@ def device_associations(config: dict) -> dict[str, str]:
 def _validate_targets(config: object) -> None:
     if not isinstance(config, dict) or type(config.get('schema_version')) is not int or config['schema_version'] != 1:
         raise ConfigurationError('Unsupported target configuration schema')
-    for name in ('credentials', 'defaults', 'targets'):
+    for name in ('credentials', 'defaults', 'targets', 'target_ports'):
         if not isinstance(config.get(name, {}), dict):
             raise ConfigurationError('Credential records and target defaults must be objects')
-    if set(config) - {'schema_version', 'credentials', 'defaults', 'targets', 'devices'}:
+    if set(config) - {'schema_version', 'credentials', 'defaults', 'targets', 'target_ports',
+                      'devices', 'legacy_environment_fallback', 'legacy_source_overlay'}:
         raise ConfigurationError('Unknown target configuration field')
+    for name in ('legacy_environment_fallback', 'legacy_source_overlay'):
+        if name in config and type(config[name]) is not bool:
+            raise ConfigurationError('Legacy fallback flags must be booleans')
     device_associations(config)
     for record in config.get('credentials', {}).values():
         if not isinstance(record, dict) or set(record) - {'user', 'password', 'identity_file'} or any(not isinstance(value, str) or '\0' in value for value in record.values()):
             raise ConfigurationError('Credential fields must be strings')
     normalized_addresses = set()
-    for address in config.get('targets', {}):
-        try:
-            normalized = str(ipaddress.ip_address(address.strip()))
-            if normalized in normalized_addresses:
-                raise ConfigurationError('Duplicate normalized target address')
-            normalized_addresses.add(normalized)
-        except ValueError:
-            raise ConfigurationError('Target overrides require a literal IP address') from None
+    for group in ('targets', 'target_ports'):
+        normalized_addresses.clear()
+        for address in config.get(group, {}):
+            try:
+                normalized = str(ipaddress.ip_address(address.strip()))
+                if normalized in normalized_addresses:
+                    raise ConfigurationError('Duplicate normalized target address')
+                normalized_addresses.add(normalized)
+            except (AttributeError, ValueError):
+                raise ConfigurationError('Target overrides require a literal IP address') from None
     for purposes in [config.get('defaults', {}), *config.get('targets', {}).values()]:
         if not isinstance(purposes, dict):
             raise ConfigurationError('Target purposes must be objects')
@@ -160,6 +193,20 @@ def _validate_targets(config: object) -> None:
                 raise ConfigurationError('Invalid purpose or transport reference')
             if any(reference not in config.get('credentials', {}) for reference in references.values()):
                 raise ConfigurationError('Credential reference has no corresponding record')
+    for purposes in config.get('target_ports', {}).values():
+        if not isinstance(purposes, dict):
+            raise ConfigurationError('Port-qualified target purposes must be objects')
+        for purpose, transports in purposes.items():
+            if purpose not in {'bmc', 'os'} or not isinstance(transports, dict):
+                raise ConfigurationError('Invalid port-qualified target purpose')
+            for transport, ports in transports.items():
+                if transport not in {'ssh', 'redfish'} or not isinstance(ports, dict):
+                    raise ConfigurationError('Invalid port-qualified target transport')
+                for port, reference in ports.items():
+                    if (not isinstance(port, str) or re.fullmatch(r'[1-9][0-9]{0,4}', port) is None
+                            or int(port) > 65535 or int(port) == {'ssh': 22, 'redfish': 443}[transport]
+                            or not isinstance(reference, str) or reference not in config.get('credentials', {})):
+                        raise ConfigurationError('Invalid port-qualified credential reference')
 
 
 def _validate_kb(config: object) -> None:
@@ -218,16 +265,32 @@ class LocalConfigurationStore:
         {'targets': _validate_targets, 'kb': _validate_kb, 'conan': _validate_conan}[self.kind](config)
 
     @contextmanager
-    def _locked(self):
-        self.source.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    def _locked(self, *, blocking: bool = True):
+        if sys.platform == 'win32':
+            from .windows_private import WindowsPrivateError, ensure_private_directory
+            try:
+                ensure_private_directory(self.source.parent)
+            except WindowsPrivateError as exc:
+                raise ConfigurationError(str(exc)) from None
+        else:
+            self.source.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         lock = self.source.with_name('.' + self.source.name + '.lock')
-        descriptor = os.open(lock, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        descriptor = os.open(lock, os.O_CREAT | os.O_RDWR | getattr(os, 'O_NOFOLLOW', 0), 0o600)
         try:
-            info = os.fstat(descriptor)
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
-                raise ConfigurationError('Configuration lock must be a private current-user file')
-            fcntl.flock(descriptor, fcntl.LOCK_EX)
-            yield
+            if sys.platform == 'win32':
+                from .windows_private import WindowsPrivateError, locked_file, verify_private_path
+                try:
+                    verify_private_path(lock)
+                    with locked_file(descriptor, blocking=blocking):
+                        yield
+                except WindowsPrivateError as exc:
+                    raise ConfigurationError(str(exc)) from None
+            else:
+                info = os.fstat(descriptor)
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
+                    raise ConfigurationError('Configuration lock must be a private current-user file')
+                fcntl.flock(descriptor, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+                yield
         finally:
             os.close(descriptor)
 
@@ -263,10 +326,7 @@ class LocalConfigurationStore:
             snapshot = _snapshot(self.source, revision)
             if snapshot.parent.is_symlink():
                 raise ConfigurationError('Configuration snapshots must remain local')
-            snapshot.parent.mkdir(mode=0o700, exist_ok=True)
-            info = snapshot.parent.stat()
-            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
-                raise ConfigurationError('Configuration snapshot directory must be private and current-user owned')
+            self._ensure_snapshot_directory(snapshot.parent)
             _atomic_write(snapshot, content)
             _atomic_write(_sidecar(self.source, 'saved'), json.dumps({'schema': 'openubmc.configuration.v1', 'revision': revision}).encode())
             return self.status()
@@ -283,7 +343,8 @@ class LocalConfigurationStore:
 
     def save_and_activate(self, config: dict, *, expected_revision: str | None,
                           expected_active_revision: str | None,
-                          expected_source_text: str | None) -> dict[str, object]:
+                          expected_source_text: str | None,
+                          blocking: bool = True) -> dict[str, object]:
         """Commit a verified local edit without an intervening writer or pending draft."""
         self._validate(config)
         try:
@@ -292,12 +353,12 @@ class LocalConfigurationStore:
             raise ConfigurationError('Configuration must be JSON data') from None
         if len(content) > 1024 * 1024:
             raise ConfigurationError('Configuration exceeds the supported byte limit')
-        with self._locked():
+        with self._locked(blocking=blocking):
             saved = _revision(self.source, 'saved')
             active = _revision(self.source, 'active')
             if saved != expected_revision or active != expected_active_revision or saved != active:
                 raise ConfigurationConflict('Configuration changed; refresh before remembering the account')
-            if active is None:
+            if active is None or expected_source_text is not None:
                 current_source = (read_private_text(self.source, max_bytes=1024 * 1024)
                                   if self.source.exists() or self.source.is_symlink() else None)
                 if current_source != expected_source_text:
@@ -306,12 +367,49 @@ class LocalConfigurationStore:
             snapshot = _snapshot(self.source, revision)
             if snapshot.parent.is_symlink():
                 raise ConfigurationError('Configuration snapshots must remain local')
-            snapshot.parent.mkdir(mode=0o700, exist_ok=True)
-            info = snapshot.parent.stat()
+            self._ensure_snapshot_directory(snapshot.parent)
+            markers = (_sidecar(self.source, 'saved'), _sidecar(self.source, 'active'))
+            backups: list[Path | None] = []
+            try:
+                for path in markers:
+                    backups.append(_marker_backup(path))
+                _atomic_write(snapshot, content)
+                marker = json.dumps({'schema': 'openubmc.configuration.v1', 'revision': revision}).encode()
+                for path in markers:
+                    _atomic_write(path, marker)
+                return self.status()
+            except BaseException:
+                # A failed write must not leave either a new active pointer or
+                # an inactive saved credential draft behind. Prepared backups
+                # can be renamed even when another write has exhausted space.
+                for path, backup in zip(markers, backups):
+                    if backup is None:
+                        path.unlink(missing_ok=True)
+                    else:
+                        os.replace(backup, path)
+                snapshot.unlink(missing_ok=True)
+                if sys.platform != 'win32':
+                    directory = os.open(self.source.parent, os.O_RDONLY | os.O_DIRECTORY)
+                    try:
+                        os.fsync(directory)
+                    finally:
+                        os.close(directory)
+                raise
+            finally:
+                for backup in backups:
+                    if backup is not None:
+                        backup.unlink(missing_ok=True)
+
+    @staticmethod
+    def _ensure_snapshot_directory(path: Path) -> None:
+        if sys.platform == 'win32':
+            from .windows_private import WindowsPrivateError, ensure_private_directory
+            try:
+                ensure_private_directory(path)
+            except WindowsPrivateError as exc:
+                raise ConfigurationError(str(exc)) from None
+        else:
+            path.mkdir(mode=0o700, exist_ok=True)
+            info = path.stat()
             if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) & 0o077:
                 raise ConfigurationError('Configuration snapshot directory must be private and current-user owned')
-            _atomic_write(snapshot, content)
-            marker = json.dumps({'schema': 'openubmc.configuration.v1', 'revision': revision}).encode()
-            _atomic_write(_sidecar(self.source, 'saved'), marker)
-            _atomic_write(_sidecar(self.source, 'active'), marker)
-            return self.status()

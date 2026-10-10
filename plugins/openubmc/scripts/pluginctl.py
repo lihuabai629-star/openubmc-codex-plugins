@@ -500,7 +500,7 @@ def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | 
         os.execvpe(argv[0], argv, node_environment())
         return 0
     started = time.monotonic()
-    dependencies = dependency_root(content, "runtime" if command in {"configure", "host-hook", "records", "export-records", "verify-records", "prune-records"} else command)
+    dependencies = dependency_root(content, "runtime" if command in {"configure", "host-hook", "records", "export-records", "verify-records", "prune-records", "test-record"} else command)
     write_timing(timings, 'dependency_identity', started)
     if not (dependencies/'receipt.json').is_file():
         raise ValueError('Dependencies are not prepared; run pluginctl.py prepare')
@@ -514,8 +514,8 @@ def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | 
     env = node_environment()
     env['OPENUBMC_MCP_SOURCE_COMMIT'] = lock['source_commit']
     env['OPENUBMC_PLUGIN_CONTENT_DIGEST'] = lock['content_digest']
-    if command in {'host-hook', 'records', 'export-records', 'verify-records', 'prune-records'}:
-        host_command = {'host-hook': 'hook', 'records': 'handoff', 'export-records': 'export', 'verify-records': 'verify', 'prune-records': 'prune'}[command]
+    if command in {'host-hook', 'records', 'export-records', 'verify-records', 'prune-records', 'test-record'}:
+        host_command = {'host-hook': 'hook', 'records': 'handoff', 'export-records': 'export', 'verify-records': 'verify', 'prune-records': 'prune', 'test-record': 'test-record'}[command]
         argv = [sys.executable, '-I', '-B', '-c',
                 'import sys,runpy;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name="__main__")',
                 str(snapshot/'python-packages'), str(snapshot/'scripts/launch_host_hook.py'), host_command, *(page_args or [])]
@@ -543,8 +543,13 @@ def positive_timeout(value: str) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'host-hook', 'records', 'export-records', 'verify-records', 'prune-records', 'configure', 'migrate', 'repair-overrides', 'restore-legacy', 'cleanup-retired'])
+    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'host-hook', 'records', 'export-records', 'verify-records', 'prune-records', 'test-record', 'configure', 'migrate', 'repair-overrides', 'restore-legacy', 'cleanup-retired'])
     parser.add_argument('--task-id')
+    parser.add_argument('--run-id')
+    parser.add_argument('--repo-ref')
+    parser.add_argument('--command-ref')
+    parser.add_argument('--timeout', type=positive_timeout, default=600)
+    parser.add_argument('--test-command', nargs=argparse.REMAINDER)
     parser.add_argument('--output-directory', type=Path)
     parser.add_argument('--record-file', type=Path)
     parser.add_argument('--evidence', type=Path)
@@ -624,14 +629,16 @@ def main() -> int:
             page_args.append('--no-browser' if args.no_browser else '--open-browser')
             for target in args.target: page_args.extend(['--target',target])
             return launch('configure',content,lock,page_args=page_args)
-        elif args.command in {'records', 'export-records', 'verify-records', 'prune-records'}:
+        elif args.command in {'records', 'export-records', 'verify-records', 'prune-records', 'test-record'}:
             host_args = []
-            for flag in ('task_id', 'output_directory', 'record_file', 'evidence', 'before_timestamp'):
+            for flag in ('task_id', 'run_id', 'repo_ref', 'command_ref', 'timeout', 'output_directory', 'record_file', 'evidence', 'before_timestamp'):
                 value = getattr(args, flag)
                 if value is not None:
                     host_args.extend(['--' + flag.replace('_', '-'), str(value)])
             if args.apply:
                 host_args.append('--apply')
+            if args.test_command:
+                host_args.extend(['--test-command', *args.test_command])
             return launch(args.command, content, lock, page_args=host_args)
         elif args.command == 'host-hook':
             return launch('host-hook', content, lock, args.timings)
