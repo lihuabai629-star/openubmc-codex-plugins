@@ -25,6 +25,10 @@ class WindowsRecordExportTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(dir=Path.home())
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        # The runner may create fixture objects with Administrators as owner.
+        # Only this newly created disposable root is normalized; existing user
+        # directories continue to be rejected by the production authority.
+        windows_private._harden(self.root, directory=True)
         handoff = HostContinuity(self.root / "host", record_schema_version=2).handoff("task", read_run=lambda run: None)
         self.document = export_task_records(handoff, producer_commit="b" * 40)
 

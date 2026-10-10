@@ -424,6 +424,14 @@ def _harden(path: Path, *, directory: bool) -> None:
     advapi, kernel, wintypes = _apis()
     sid, _buffer = _current_user_sid(advapi, kernel, wintypes)
     suffix = ":(OI)(CI)F" if directory else ":F"
+    # Elevated Windows accounts can create new objects owned by the
+    # Administrators group. Establish the caller's owner identity on this newly
+    # created object before validating its current-user access boundary.
+    owner = subprocess.run(["icacls.exe", str(path), "/setowner", f"*{sid}"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           creationflags=1 << 27, timeout=10)
+    if owner.returncode:
+        raise WindowsPrivateError("Cannot establish current-user Windows ownership")
     result = subprocess.run(
         ["icacls.exe", str(path), "/inheritance:r", "/grant:r",
          f"*{sid}{suffix}", f"*S-1-5-18{suffix}", f"*S-1-5-32-544{suffix}"],

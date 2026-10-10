@@ -7,7 +7,7 @@
   "status": "candidate",
   "version": "2.1.4",
   "workflow": {
-    "installed_host_records_commit": "b1facdf51c4742e00075a49697100820f9c8f1ef",
+    "installed_host_records_commit": "5a01cf9ddcf133dd7932de26d86f7831fa7cd5ae",
     "repository": "lihuabai629-star/openubmc-agent-workflow"
   }
 }
