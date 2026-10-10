@@ -193,12 +193,28 @@ def qualify(codex, output):
             producer.write_text(json.dumps(producer_report))
             if measured_records()['task_aggregate']['usage_totals']['input_tokens'] != 10:
                 raise ValueError('installed measurement source did not recover on a fresh read')
+            test_result = json.loads(command([*cli, 'test-record', '--task-id', tasks[0]['task_id'],
+                '--run-id', tasks[0]['run_id'], '--repo-ref',
+                tasks[0]['binding']['snapshot']['repositories'][0]['repo_ref'],
+                '--command-ref', 'test:installed-argv', '--timeout', '30', '--test-command',
+                sys.executable, '-c', 'import sys; assert sys.argv[1:] == ["with space", "--literal-option"]',
+                'with space', '--literal-option'], environment, cwd=root))
+            if test_result['status'] != 'passed' or test_result['exit_code'] != 0:
+                raise ValueError('installed test-record did not execute the original argv')
             exported = json.loads(command([*cli, 'export-records', '--task-id', tasks[0]['task_id'],
                                           '--output-directory', str(root / 'exports')], environment, cwd=root))
             checked = json.loads(command([*cli, 'verify-records', '--record-file', exported['path']], environment, cwd=root))
             if checked['content_digest'] != exported['content_digest']:
                 raise ValueError('installed export verification disagrees')
             encoded = Path(exported['path']).read_text()
+            test_entries = [entry for entry in json.loads(encoded)['operation_evidence']['snapshot']['entries']
+                            if entry['kind'] == 'test']
+            if (len(test_entries) != 1 or test_entries[0]['event_ref'] != test_result['event_ref']
+                    or test_entries[0]['status'] != 'passed'
+                    or test_entries[0]['run_ref'] != tasks[0]['run_id']
+                    or test_entries[0]['source_commit'] !=
+                       tasks[0]['binding']['snapshot']['repositories'][0]['commit']):
+                raise ValueError('installed export lost the actual test receipt or its source binding')
             if str(root) in encoded or 'synthetic-loopback-only' in encoded:
                 raise ValueError('export contains private fixture data')
             command([codex, 'plugin', 'remove', 'openubmc@record-qualification', '--json'], environment, cwd=root)
@@ -208,6 +224,7 @@ def qualify(codex, output):
                 'native_resume_preserved_run': True, 'fresh_v2_records': True, 'unknown_usage_retained': True,
                 'same_task_project_switch': True, 'registered_task_only_measurements': True,
                 'measurement_source_failure_and_recovery': True,
+                'installed_test_record_verified': True,
                 'installed_export_verified': True, 'live_model_tested': False, 'live_device_tested': False,
                 'network_scope': 'loopback only', 'desktop_ui_tested': False}
             output.write_text(json.dumps(report, indent=2, sort_keys=True)+'\n')
