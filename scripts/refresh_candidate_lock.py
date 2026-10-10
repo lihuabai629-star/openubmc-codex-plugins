@@ -36,7 +36,7 @@ def refresh(source_commit):
     if payload_files != committed_files:
         raise ValueError('plugin payload inventory differs from committed source')
     subprocess.run(['git', 'diff', '--exit-code', source_commit, '--', 'plugins/openubmc',
-                    ':!plugins/openubmc/scripts/launch_runtime.py', ':!plugins/openubmc/plugin-lock.json'],
+                    ':!plugins/openubmc/scripts/launch_runtime.py', ':!plugins/openubmc/scripts/launch_host_hook.py', ':!plugins/openubmc/plugin-lock.json'],
                    cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
     for name in ('release.json', 'qualification.json', 'native-plugin-qualification.json'):
         data = json.loads((ROOT / name).read_text())
@@ -71,9 +71,21 @@ def refresh(source_commit):
                 raise ValueError('composition contains a symlink')
             if path.is_file():
                 files[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
-    source = re.sub(r'^COMPOSITION_FILES = .*$', lambda _: 'COMPOSITION_FILES = ' + repr(files), source, flags=re.M)
-    source = re.sub(r'^SOURCE_COMMIT = .*$', lambda _: 'SOURCE_COMMIT = ' + repr(source_commit), source, flags=re.M)
-    launcher.write_text(source)
+    for launcher_name, entrypoint in (('launch_runtime.py', 'target_runtime_mcp.py'),
+                                     ('launch_host_hook.py', 'host_continuity.py')):
+        launcher = PLUGIN / 'scripts' / launcher_name
+        source = subprocess.check_output(['git', 'show', source_commit + ':plugins/openubmc/scripts/' + launcher_name],
+                                         cwd=ROOT, text=True)
+        source = re.sub(r'^EXPECTED_DIGEST = .*$', lambda _: 'EXPECTED_DIGEST = ' + repr('sha256:' + digest.hexdigest()), source, flags=re.M)
+        content = (PLUGIN / 'skills/openubmc-debug/scripts' / entrypoint).read_bytes()
+        identity = hashlib.sha256(b'openubmc-mcp-entrypoint-v1\0')
+        name = entrypoint.encode()
+        identity.update(len(name).to_bytes(8, 'big')); identity.update(name)
+        identity.update(len(content).to_bytes(8, 'big')); identity.update(content)
+        source = re.sub(r'^EXPECTED_ENTRYPOINT_DIGEST = .*$', lambda _: 'EXPECTED_ENTRYPOINT_DIGEST = ' + repr('sha256:' + identity.hexdigest()), source, flags=re.M)
+        source = re.sub(r'^COMPOSITION_FILES = .*$', lambda _: 'COMPOSITION_FILES = ' + repr(files), source, flags=re.M)
+        source = re.sub(r'^SOURCE_COMMIT = .*$', lambda _: 'SOURCE_COMMIT = ' + repr(source_commit), source, flags=re.M)
+        launcher.write_text(source)
     lockpath = PLUGIN / 'plugin-lock.json'
     lock = json.loads(subprocess.check_output(
         ['git', 'show', source_commit + ':plugins/openubmc/plugin-lock.json'], cwd=ROOT, text=True))

@@ -1,0 +1,37 @@
+{
+  "hosted_ci": {
+    "plugin_payload": {
+      "conclusion": "success",
+      "head_commit": "05c36b580e65fc47c44e8de6bfaaca1f69815f0c",
+      "run_id": 38019143378,
+      "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38019143378"
+    },
+    "workflow": {
+      "conclusion": "success",
+      "head_commit": "b4571b518a32e638cc0654828263470182c033f7",
+      "run_id": 38019135774,
+      "url": "https://github.com/lihuabai629-star/openubmc-agent-workflow/actions/runs/38019135774"
+    }
+  },
+  "integration": "Host composition only; existing Domain Adapters preserved.",
+  "plugin_base": {
+    "commit": "45f754ba7c160f4058d41973e2b38450946e9891",
+    "repository": "lihuabai629-star/openubmc-codex-plugins"
+  },
+  "plugin_payload": {
+    "archive_sha256": "030f822a8fa1688dcdaf758eea2efefab5f1b31a3315f883722384c6650cb423",
+    "content_digest": "55240c8e9def20b6ea79ee44cf49c9a748d73d12c84542d470d3d03f8ab78adf",
+    "payload_commit": "05c36b580e65fc47c44e8de6bfaaca1f69815f0c",
+    "source_commit": "4ec806efdd0181d56f4aedd4c01d681557891cb0"
+  },
+  "released": true,
+  "status": "released",
+  "version": "2.1.4",
+  "workflow": {
+    "installed_host_records_commit": "b4571b518a32e638cc0654828263470182c033f7",
+    "integration_branch": "codex/workflow-records-base-20261010",
+    "merge_commit": "bc820c22391a8a282872e70be783f791bb80f992",
+    "pull_request": "https://github.com/lihuabai629-star/openubmc-agent-workflow/pull/302",
+    "repository": "lihuabai629-star/openubmc-agent-workflow"
+  }
+}

@@ -5,9 +5,20 @@ from pathlib import Path
 import sys
 
 sys.dont_write_bytecode = True
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from openubmc_target_runtime.measurements import JsonMeasurementReader
-from openubmc_target_runtime.record_export import RecordExportStore, export_task_records, verify_export
+# Load only the pure record modules. Importing the Runtime facade would pull
+# in execution backends and POSIX configuration locks on native Windows.
+import importlib
+import types
+RECORD_PACKAGE_NAME = "_openubmc_offline_records"
+package = types.ModuleType(RECORD_PACKAGE_NAME)
+package.__path__ = [str(Path(__file__).resolve().parents[1] / "openubmc_target_runtime")]
+sys.modules[RECORD_PACKAGE_NAME] = package
+measurements = importlib.import_module(RECORD_PACKAGE_NAME + ".measurements")
+records = importlib.import_module(RECORD_PACKAGE_NAME + ".record_export")
+JsonMeasurementReader = measurements.JsonMeasurementReader
+RecordExportStore = records.RecordExportStore
+export_task_records = records.export_task_records
+verify_export = records.verify_export
 import json
 
 

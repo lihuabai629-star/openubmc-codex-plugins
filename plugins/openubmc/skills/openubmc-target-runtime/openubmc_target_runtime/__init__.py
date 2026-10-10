@@ -739,3 +739,10 @@ __all__ = [
 
 from .systemd_contract import UNIT as SYSTEMD_UNIT, validate_systemd_names
 from .redaction import redact_text
+
+from .host_records import InstalledHostRecords
+from .measurements import JsonMeasurementReader
+from .record_export import RecordExportStore, export_task_records, verify_export
+
+from .host_continuity import HostContinuity, read_runtime_projection
+__all__ += ["InstalledHostRecords", "JsonMeasurementReader", "RecordExportStore", "export_task_records", "verify_export", "HostContinuity", "read_runtime_projection"]

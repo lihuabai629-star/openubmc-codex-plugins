@@ -152,10 +152,19 @@ function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environmen
       "OPENUBMC_MCP_CLIENT", "OPENUBMC_MCP_TASK_ID", "OPENUBMC_MCP_SESSION_ID",
       "OPENUBMC_MCP_FORMAL_RUN", "OPENUBMC_MCP_MODEL_IDENTITY", "OPENUBMC_MCP_CODEX_IDENTITY",
       "OPENUBMC_EVALUATION_TASK_ID",
+      "OPENUBMC_HOST_PROVIDER_REF", "OPENUBMC_HOST_EVIDENCE_KIND",
     ]) {
       const value = environment[key];
       if (typeof value === "string" && value.length <= 4096 && !/[\0\r\n]/.test(value)) {
         identityEnvironment.push(`${key}=${value}`);
+      }
+    }
+    for (const key of ["OPENUBMC_TARGET_RUNTIME_STATE_DIR", "OPENUBMC_HOST_MEASUREMENTS_FILE", "OPENUBMC_HOST_PROVIDER_REPORT"]) {
+      const value = environment[key];
+      if (typeof value === "string" && value.length <= 4096 && !/[\0\r\n]/.test(value)) {
+        const converted = value.startsWith("/") ? value : convertHostPath(value);
+        if (!converted.startsWith("/")) return { ok: false, reason: "host_record_path_unavailable" };
+        identityEnvironment.push(`${key}=${converted}`);
       }
     }
     return {
