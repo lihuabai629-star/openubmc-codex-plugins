@@ -12,6 +12,8 @@
     "openubmc-upgrade"
   ],
   "files": [
+    "references/bingo-command-cheatsheet.md",
+    "references/bingo-source-map.md",
     "SKILL.md",
     "agents/openai.yaml",
     "skill.json"

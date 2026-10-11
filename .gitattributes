@@ -1,0 +1,6 @@
+# Package hashes bind exact bytes on Linux and Windows checkouts.
+* text=auto eol=lf
+*.whl -text
+*.png -text
+*.jpg -text
+*.gz -text

@@ -5,6 +5,9 @@ description: "Configure or repair an installed openUBMC plugin on Windows, Linux
 
 # openUBMC plugin environment
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Resolve `<plugin-root>` as the parent of the `skills` directory containing this Skill. Codex manages the plugin's Skills and MCP registration. Keep credentials, dependencies and Runtime history outside the plugin directory.
 
 ## Inspect and repair

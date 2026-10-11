@@ -17,6 +17,8 @@ import time
 
 ROOT = Path(__file__).resolve().parent
 GROUPS = {
+    'startup': ['test_plugin_startup.PluginStartupTests'],
+    'skill_entry': ['test_plugin_skill_entry.PluginSkillEntryTests', 'test_plugin_skill_entry.NativePluginSkillEntryTests'],
     'build': ['test_failure_gates.FailureGateTests'],
     'ssh': ['test_openssh_timeouts.OpenSshTimeoutTests'],
     'credentials': ['test_credential_commands.CredentialCommandTests'],

@@ -5,6 +5,9 @@ description: Use when an already-built openUBMC HPM must be uploaded, activated,
 
 # openUBMC Upgrade
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Upgrade owns remote BMC firmware mutation. It accepts either a verified HPM
 summary returned by Build or an already-built HPM whose path, SHA-256, and
 product version are supplied by the current task. It starts when Target Runtime

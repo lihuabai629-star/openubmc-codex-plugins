@@ -5,6 +5,11 @@ description: "Build and test openUBMC components or firmware: 编译组件、生
 
 # openUBMC Build
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
+Before dependency-resolving builds or UT/IT, read [dependency and profile compatibility](references/dependency-profile-compatibility.md).
+
 ## Boundary
 
 Own the local build lifecycle: select one build mode, bind the chosen checkout and exact command, execute checked attempts, and return locally finalized build evidence.

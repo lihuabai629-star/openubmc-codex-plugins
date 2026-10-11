@@ -5,6 +5,9 @@ description: Temporarily plan, apply, verify, or roll back a file replacement on
 
 # openUBMC Live Patch
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Use this Skill for temporary runtime validation. It does not replace a source change, build, package, or review workflow.
 
 ## Execution contract

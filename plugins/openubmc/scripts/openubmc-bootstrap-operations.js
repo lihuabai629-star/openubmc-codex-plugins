@@ -73,18 +73,21 @@ function createSetupOperations(adapter, capability) {
   }
 
   function preflightBackend(backend) {
-    const cleanup = adapter.run(backend.command, [...backend.prefix, "cleanup-retired"], { timeout: 15_000 });
-    const cleanupReport = parseJsonOutput(adapter, cleanup.stdout);
     const checked = adapter.run(backend.command,
-      [...backend.prefix, "doctor", "--capability", "all", ...backend.configurationArgs], { timeout: 45_000 });
+      [...backend.prefix, "doctor", "--cleanup-retired", "--capability", capability,
+        ...backend.configurationArgs], { timeout: 45_000 });
     const report = parseJsonOutput(adapter, checked.stdout);
+    const cleanupReport = report?.cleanup;
     const selected = report?.capabilities?.[capability];
-    if (selected?.startup_ready && report?.codex_configuration?.ready) {
+    if (!checked.error && checked.status === 0 && selected?.startup_ready
+        && report?.mcp_health?.[capability]?.ok === true && report?.codex_configuration?.ready) {
       return { ok: true, cleanup: cleanupReport, report };
     }
     const rawError = String(selected?.error || "").toLowerCase();
     let reason = "dependency_preflight_failed";
-    if (rawError.includes("not prepared")) reason = "dependencies_not_prepared";
+    if (checked.error?.code === "ETIMEDOUT") reason = "dependency_preflight_timeout";
+    else if (report?.mcp_health?.[capability]?.timed_out) reason = "mcp_protocol_timeout";
+    else if (rawError.includes("not prepared")) reason = "dependencies_not_prepared";
     else if (rawError.includes("cache drift")) reason = "dependency_cache_drift";
     else if (rawError.includes("node 20")) reason = "wsl_node_unavailable";
     else if (adapter.decodeOutput(checked.stderr).includes("plugin file inventory mismatch")) reason = "package_integrity_failed";

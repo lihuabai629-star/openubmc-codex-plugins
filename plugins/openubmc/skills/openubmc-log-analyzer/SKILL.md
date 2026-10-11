@@ -5,6 +5,9 @@ description: Diagnose openUBMC/BMC issues from a one-click log bundle (.tar/.tar
 
 # OpenUBMC 日志分析
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 ## 概述
 这个 skill 采用“先拉包、后分析”的方式。如果用户给的是 BMC/服务器入口，而不是本地日志包，先用 `scripts/pull_bundle.py` 拉取一键日志包，再在本地对解压后的内容做分析。
 

@@ -255,8 +255,13 @@ def actionable_loose_skill_overlaps(home: Path, skill_paths: list[str], codex_ho
         row.get('path') for row in document.get('skills', {}).get('config', [])
         if row.get('enabled') is False
     }
+    disabled_names = {
+        row.get('name') for row in document.get('skills', {}).get('config', [])
+        if row.get('enabled') is False and isinstance(row.get('name'), str)
+    }
     return [path for path in loose_skill_overlaps(
-        home, skill_paths, codex_root, skill_names=skill_names) if path not in disabled]
+        home, skill_paths, codex_root, skill_names=skill_names)
+        if path not in disabled and declared_skill_name(Path(path)) not in disabled_names]
 
 
 class PlanSnapshot(NamedTuple):

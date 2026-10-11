@@ -5,6 +5,9 @@ description: "Diagnose openUBMC/BMC runtime problems: 设备不识别、传感�
 
 # openUBMC Runtime Debug
 
+When the task enters another workflow stage, read [the phase handoff](<references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 ## Scope and ownership
 
 Own read-only diagnosis and post-change verification. The request is:

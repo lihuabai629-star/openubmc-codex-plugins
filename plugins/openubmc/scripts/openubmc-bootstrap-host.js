@@ -5,6 +5,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { performance } = require("perf_hooks");
 
 function windowsChildEnvironment(environment) {
   const allowed = new Set([
@@ -25,7 +26,7 @@ function decodeOutput(buffer) {
   return bytes.toString(hasNuls ? "utf16le" : "utf8").replace(/^\uFEFF/, "").replace(/\0/g, "");
 }
 
-function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environment = process.env }) {
+function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environment = process.env, deadlineMs = Infinity }) {
   const childEnvironment = hostPlatform === "win32"
     ? windowsChildEnvironment(environment)
     : { ...environment };
@@ -34,11 +35,15 @@ function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environmen
   delete childEnvironment.PYTHONHOME;
 
   function run(command, args, options = {}) {
+    const timeout = Math.min(options.timeout || 30_000, Math.ceil(deadlineMs - performance.now()));
+    if (timeout <= 0) throw new Error("host_deadline_exceeded");
     return childProcess.spawnSync(command, args, {
       env: childEnvironment,
-      encoding: null,
-      maxBuffer: 16 * 1024 * 1024,
-      timeout: options.timeout || 30_000,
+      input: options.input,
+      encoding: options.encoding || null,
+      maxBuffer: options.maxBuffer || 16 * 1024 * 1024,
+      timeout,
+      killSignal: Number.isFinite(deadlineMs) ? "SIGKILL" : undefined,
       windowsHide: true,
     });
   }

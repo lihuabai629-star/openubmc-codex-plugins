@@ -5,6 +5,9 @@ description: 为 openUBMC 组件设计、编写和执行 UT/IT 测试，包括 L
 
 # OpenUBMC DT 测试
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 openUBMC DT 测试框架基于 LuaUnit，通过 `bmcgo test` 命令驱动。UT 验证组件内函数可靠性，IT 验证组件间 D-Bus 接口可靠性。本 Skill 覆盖从用例编写到执行验证的完整流程。
 
 ## Step 1: 收集需求

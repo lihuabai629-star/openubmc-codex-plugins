@@ -69,6 +69,18 @@ def canonical(value: object) -> bytes:
     return (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False) + '\n').encode()
 
 
+def plugin_files(root: Path):
+    """Walk once without repeated cross-filesystem stat calls; reject every link."""
+    with os.scandir(root) as entries:
+        for entry in entries:
+            if entry.is_symlink():
+                raise ValueError('plugin contains symbolic link: ' + entry.name)
+            if entry.is_dir(follow_symlinks=False):
+                yield from plugin_files(Path(entry.path))
+            elif entry.is_file(follow_symlinks=False):
+                yield Path(entry.path)
+
+
 def verify(root: Path = ROOT) -> tuple[dict, dict[str, bytes]]:
     lock_path = root/'plugin-lock.json'
     if root.is_symlink() or lock_path.is_symlink():
@@ -81,10 +93,8 @@ def verify(root: Path = ROOT) -> tuple[dict, dict[str, bytes]]:
     if lock.get('schema') != 'openubmc.codex-plugin.v1':
         raise ValueError('unsupported plugin lock schema')
     content = {}
-    for path in sorted(root.rglob('*')):
-        if path.is_symlink():
-            raise ValueError('plugin contains symbolic link: ' + str(path.relative_to(root)))
-        if path.is_file() and path != lock_path:
+    for path in plugin_files(root):
+        if path != lock_path:
             relative = path.relative_to(root)
             # Python may create runtime bytecode beside packaged scripts. These
             # caches are derived files and must never change package identity.
@@ -287,6 +297,14 @@ def prepare_dependencies(content: dict[str, bytes], repair: bool, *, capability:
                     except (ValueError, DependencyPreparationError):
                         if attempt == retries:
                             raise
+            if capability == 'kb':
+                # npm can report "Exit handler never called" yet exit zero after
+                # registry failures. Never seal an empty/partial installation.
+                package = json.loads(content['openubmc-kb-mcp/package.json'])
+                for name in package.get('dependencies', {}):
+                    installed = knowledge/'node_modules'/name/'package.json'
+                    if not installed.is_file():
+                        raise ValueError('Dependency installation is incomplete; retry preparation')
             # Dependency identity covers the complete installed content, including
             # Node production dependencies; no package writes occur during startup.
             record = {'schema': 'openubmc.plugin-dependencies.v2', 'capability': capability, 'files': dependency_inventory(staging)}
@@ -449,21 +467,23 @@ def cleanup_retired_processes(content: dict[str, bytes], lock: dict) -> dict[str
 
 
 def probe_server(command: str, content: dict[str, bytes], lock: dict, knowledge_mcp_version: str | None = None) -> dict[str, object]:
-    """Perform a bounded MCP initialize/tools/list probe through the public launcher."""
+    """Probe the same verified execution plan used by the public launcher."""
     request = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
                           'params': {'protocolVersion': '2024-11-05', 'capabilities': {},
                                      'clientInfo': {'name': 'openubmc-plugin-doctor', 'version': lock['version']}}}) + '\n'
     request += json.dumps({'jsonrpc':'2.0','method':'notifications/initialized'})+'\n'
     request += json.dumps({'jsonrpc':'2.0','id':2,'method':'tools/list','params':{}})+'\n'
-    probe_env = node_environment()
+    argv, probe_env = launch_plan(command, content, lock)
     probe_env['OPENUBMC_MCP_FORMAL_RUN'] = '0'
     probe_env['OPENUBMC_MCP_PARENT_PID'] = str(os.getpid())
-    process = subprocess.Popen([sys.executable, "-B", '-I', str(ROOT/'scripts/pluginctl.py'), command],
+    process = subprocess.Popen(argv,
                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True, env=probe_env)
+    timed_out = False
     try:
         stdout, stderr = process.communicate(request, timeout=12)
     except subprocess.TimeoutExpired:
+        timed_out = True
         process.kill(); stdout, stderr = process.communicate()
     messages = []
     for line in stdout.splitlines():
@@ -483,6 +503,7 @@ def probe_server(command: str, content: dict[str, bytes], lock: dict, knowledge_
     server_info_valid = isinstance(server_value, dict)
     ok = initialized and server_info_valid and names == expected and process.returncode == 0 and version_matches
     return {'ok': ok, 'server': server, 'version_matches_package': version_matches,
+            'timed_out': timed_out,
             'tools': sorted(names), 'stderr': stderr[-1000:] if not ok else ''}
 
 
@@ -493,12 +514,18 @@ def write_timing(path: Path | None, stage: str, started: float) -> None:
 
 
 def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | None = None, page_args: list[str] | None = None) -> int:
+    argv, env = launch_plan(command, content, lock, timings, page_args)
+    os.execvpe(argv[0], argv, env)
+    return 0
+
+
+def launch_plan(command: str, content: dict[str, bytes], lock: dict, timings: Path | None = None,
+                page_args: list[str] | None = None) -> tuple[list[str], dict[str, str]]:
     if command == 'configure':
         # Recovery must remain accessible when either dependency cache is broken.
         # The guarded page and configuration store use only the standard library.
         argv = [sys.executable, '-I', '-B', str(ROOT/'skills/openubmc-environment-setup/scripts/config_page.py'), *(page_args or [])]
-        os.execvpe(argv[0], argv, node_environment())
-        return 0
+        return argv, node_environment()
     started = time.monotonic()
     dependencies = dependency_root(content, "runtime" if command in {"configure", "host-hook", "records", "export-records", "verify-records", "prune-records", "test-record"} else command)
     write_timing(timings, 'dependency_identity', started)
@@ -527,8 +554,7 @@ def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | 
         argv = ['node', str(snapshot/'openubmc-kb-mcp/src/server.js')]
     # Preserve the direct Codex parent across launch. Execution caches contain
     # only verified release/dependency bytes and persist independently of state.
-    os.execvpe(argv[0], argv, env)
-    return 0
+    return argv, env
 
 
 def positive_timeout(value: str) -> float:
@@ -573,6 +599,7 @@ def main() -> int:
     parser.add_argument('--transport', choices=['ssh','redfish'], default='ssh')
     parser.add_argument('--capability', choices=['runtime', 'kb', 'all'], default='all', help='Capability to prepare or diagnose')
     parser.add_argument('--repair', action='store_true', help='Recreate a damaged dependency cache')
+    parser.add_argument('--cleanup-retired', action='store_true', help='Retire verified orphan MCPs during doctor preflight')
     parser.add_argument('--prepare-on-start', action='store_true', help='Prepare locked dependencies before the first MCP startup')
     parser.add_argument('--offline', action='store_true', help='Disable package index access')
     parser.add_argument('--retries', type=int, choices=range(4), default=0, help='Additional bounded attempts per stage')
@@ -648,6 +675,8 @@ def main() -> int:
             return launch(args.command, content, lock, args.timings)
         elif args.command == 'doctor':
             report['package_integrity'] = True
+            if args.cleanup_retired:
+                report['cleanup'] = cleanup_retired_processes(content, lock)
             capabilities = ('runtime', 'kb') if args.capability == 'all' else (args.capability,)
             report['capabilities'] = {}
             report['mcp_health'] = {}

@@ -5,6 +5,9 @@ description: "Run openUBMC Bingo component or product builds, tests, code genera
 
 # openUBMC Bingo Build
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Use the repository's installed `bingo` command and its current help output. This
 Skill owns running Bingo in component and Manifest workspaces. It does not modify
 the Bingo CLI source, upload an already-built Conan component package, or deploy
@@ -69,3 +72,9 @@ repository's lock convention before changing a lock file.
 
 Do not substitute another build tool without the source, profile, options,
 dependency graph, expected artifact, and release-gate equivalence receipt.
+
+## Command and source references
+
+For command selection, read the [command cheatsheet](references/bingo-command-cheatsheet.md).
+For workspace ownership or unexpected dispatch, read the [source map](references/bingo-source-map.md).
+For dependency resolution and UT profiles, read [dependency and profile compatibility](../openubmc-build/references/dependency-profile-compatibility.md).

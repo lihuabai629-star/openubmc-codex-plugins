@@ -5,6 +5,9 @@ description: Upload already-built openUBMC Conan component packages to an existi
 
 # openUBMC Publish
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Publish owns only the external upload of an already-built Conan component
 package. It never runs bmcgo build, edits a version or manifest, creates a
 remote, logs in, uploads an HPM, or upgrades a BMC.

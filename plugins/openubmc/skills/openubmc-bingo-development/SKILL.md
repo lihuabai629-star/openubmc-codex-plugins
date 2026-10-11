@@ -5,6 +5,9 @@ description: "Develop or debug the openUBMC Bingo CLI itself: command registrati
 
 # openUBMC Bingo Development
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Use this Skill only when the requested change is in the Bingo CLI source. A
 request to run `bingo build`, `bingo test`, `bingo gen`, or another installed
 Bingo command belongs to `openubmc-bingo-build`.
@@ -31,3 +34,12 @@ change, also verify the locally built `openubmc-bingo` package and `bingo --help
 Keep product builds, Conan remotes, credentials, and live BMC operations outside
 source-development tests. If validation needs a remote or a large product tree,
 report that dependency and retain the available deterministic checks.
+
+## Source references
+
+- Ownership and dispatch: [architecture map](references/bingo-architecture-map.md).
+- New commands or options: [command extension](references/bingo-command-extension-guide.md).
+- Component generation and tests: [component task map](references/bingo-component-codegen-test-map.md).
+- Product builds: [product task map](references/bingo-product-build-task-map.md).
+- Local reproduction: [debug and test guide](references/bingo-local-debug-test-guide.md).
+- Packaging and signing: [special flows](references/bingo-package-signing-special-flows.md).

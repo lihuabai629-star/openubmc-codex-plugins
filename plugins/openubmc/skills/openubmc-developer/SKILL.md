@@ -5,6 +5,9 @@ description: "Use only for unresolved openUBMC decisions about source ownership,
 
 # OpenUBMC Developer
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Fit requested behavior into the repository's current structure. Own source
 analysis, design, implementation in existing components, and component-local
 verification. Scale the work to the uncertainty and risk instead of imposing a

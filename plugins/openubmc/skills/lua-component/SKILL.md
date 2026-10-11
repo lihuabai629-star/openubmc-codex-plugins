@@ -5,6 +5,9 @@ description: Compatibility entry for users who explicitly request the former ope
 
 # openUBMC Lua Component Compatibility Entry
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 Use this entry only when the user explicitly names `$openubmc-lua-component`.
 
 Continue with `openubmc-developer` as the single source-change workflow and select its `references/lua-component.md` domain reference. Keep adjacent Lua unit tests in that same workflow.

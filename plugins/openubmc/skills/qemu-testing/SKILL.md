@@ -10,6 +10,9 @@ description: >-
 
 # OpenUBMC QEMU Testing
 
+When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+and load its owner before acting; carry the existing Run and authorization.
+
 ## Role
 
 本 Skill 是通用 QEMU verification owner。它拥有 launcher discovery、PID identity、serial evidence、port mapping、image identity、guest readiness 和 smoke classification；不拥有平台环境搭建、镜像构建、资源树专项根因或组件代码修复。
