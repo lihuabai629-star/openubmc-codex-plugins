@@ -1,8 +1,29 @@
 {
-  "content_digest": "6603ae840b86ece792859ae81e6f4bb1272cd03cf255909da9923e13ac79ed44",
-  "passed": false,
-  "source_commit": "b5c933c3b60d8ba89dbcd67257bb95a05c5ff8d8",
-  "status": "candidate",
+  "archive_sha256": "085c19205392d7a9f71762754e7499fb4df2cb0c272efb5fe94e9010ff130979",
+  "base_distribution_commit": "4c59effc90cf6c70f82c253d738e9083a4924527",
+  "content_digest": "09a16fff711b7b7690ab5fc67fdfd931cd5405ed898a96ed19bb67a07ab4cb34",
+  "hosted_ci": {
+    "conclusion": "success",
+    "head_commit": "691a3881f90dede7b5f50f54bd72658367608297",
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "Windows native plugin bootstrap"
+      },
+      {
+        "conclusion": "success",
+        "name": "verify"
+      }
+    ],
+    "run_id": 38111311651,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38111311651"
+  },
+  "name": "openubmc",
+  "payload_commit": "691a3881f90dede7b5f50f54bd72658367608297",
+  "release_scope": "codex-plugin",
+  "release_tag": "v2.1.6",
+  "source_commit": "cc03bc407e41320e7b40a33023ad7b6a96cb095d",
+  "status": "released",
   "upgrade_baseline": "2.1.5",
   "version": "2.1.6"
 }
