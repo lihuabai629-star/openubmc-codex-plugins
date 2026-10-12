@@ -595,7 +595,8 @@ def iter_text_lines(path: pathlib.Path, budget: AnalysisBudget | None = None):
         while True:
             remaining = budget.max_bytes - budget.scanned_bytes
             if remaining <= 0:
-                budget.reasons.add("scan_bytes_exceeded")
+                if handle.read(1):
+                    budget.reasons.add("scan_bytes_exceeded")
                 return
             line = handle.readline(min(remaining, budget.max_line_bytes + 1))
             budget.scanned_bytes += len(line)
@@ -605,7 +606,10 @@ def iter_text_lines(path: pathlib.Path, budget: AnalysisBudget | None = None):
                 budget.reasons.add("line_bytes_exceeded")
                 return
             if len(line) == remaining and not line.endswith(b"\n"):
-                budget.reasons.add("scan_bytes_exceeded")
+                if handle.read(1):
+                    budget.reasons.add("scan_bytes_exceeded")
+                    return
+                yield line.decode("utf-8", errors="ignore").rstrip("\r\n")
                 return
             yield line.decode("utf-8", errors="ignore").rstrip("\r\n")
 

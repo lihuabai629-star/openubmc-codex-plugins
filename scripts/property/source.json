@@ -1,0 +1,19 @@
+{
+  "workflow_source_commit": "61337999b6fc9884b2aeccaa4198251ff617572a",
+  "files": [
+    {
+      "source_path": "openubmc-target-runtime/tests/test_mdb_property_mutation.py",
+      "source_sha256": "3cdaa435c0827dc711f1591b205daaba0f9607ca030b7b5740f5384e8df9babd",
+      "packaged_test": "scripts/property/test_mdb_property_mutation.py",
+      "packaged_sha256": "082853e0b5124098fec8c6729aba73eead8a339518c15911bd328a1209ee2bf1",
+      "adaptation": "only repository-to-plugin import paths"
+    },
+    {
+      "source_path": "openubmc-debug/tests/test_mdb_property_backend.py",
+      "source_sha256": "e6f1ff4642cf99cf9ab657f763c1fa1121e875cdc3573a4f156093706144a0cf",
+      "packaged_test": "scripts/property/test_mdb_property_backend.py",
+      "packaged_sha256": "5500fa487b2eebff14bc05a589527a61a28de68994382b2c82936f1fdef0efbf",
+      "adaptation": "only repository-to-plugin import paths"
+    }
+  ]
+}
