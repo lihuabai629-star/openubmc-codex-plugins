@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import copy
+import os
 import subprocess
 from pathlib import Path
 import sys
@@ -29,8 +30,11 @@ def contract():
 
 class PropertyMutationTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        self.temporary = tempfile.TemporaryDirectory(dir=Path.home())
         self.addCleanup(self.temporary.cleanup)
+        if os.name == "nt":
+            from openubmc_target_runtime.windows_private import _harden
+            _harden(Path(self.temporary.name), directory=True)
         self.store = MutationJournalStore(Path(self.temporary.name) / "journals")
         self.contract = contract()
         self.selector = CredentialSelector.for_ssh(user="operator", user_env="", password_env="", identity_file="", environ={})
@@ -298,10 +302,13 @@ PropertyMutation(task_run=run, target=target, selector=selector, observe=observe
     authorization=TaskAuthorizationPolicy.from_task_intent("property-update-and-verify"))
 '''
         for point in ("before", "after"):
-            with self.subTest(point=point), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(point=point), tempfile.TemporaryDirectory(dir=Path.home()) as directory:
                 root = Path(directory)
+                if os.name == "nt":
+                    from openubmc_target_runtime.windows_private import _harden
+                    _harden(root, directory=True)
                 (root / "value").write_text("30")
-                completed = subprocess.run([sys.executable, "-c", script, str(source), str(root), point],
+                completed = subprocess.run([sys.executable, "-B", "-c", script, str(source), str(root), point],
                     capture_output=True, text=True, timeout=30)
                 self.assertEqual(completed.returncode, 31, completed.stderr)
                 store = MutationJournalStore(root / "journals")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import json
+import os
 from pathlib import Path
 import shlex
 import sys
@@ -78,8 +79,11 @@ class Transport:
 
 class MdbPropertyBackendTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        self.temporary = tempfile.TemporaryDirectory(dir=Path.home())
         self.addCleanup(self.temporary.cleanup)
+        if os.name == "nt":
+            from importlib import import_module
+            import_module(runtime.__name__ + ".windows_private")._harden(Path(self.temporary.name), directory=True)
         self.store = runtime.MutationJournalStore(Path(self.temporary.name) / "journals")
         self.transport = Transport()
         self.transport.store = self.store
@@ -181,7 +185,11 @@ class MdbPropertyBackendTests(unittest.TestCase):
         p = Path(self.temporary.name) / "contracts.json"
         value = {"schema": backend.CONTRACTS_SCHEMA, "contracts": [self.contract.to_public_dict()]}
         p.write_text(json.dumps(value))
-        p.chmod(0o600)
+        if os.name == "nt":
+            from importlib import import_module
+            import_module(runtime.__name__ + ".windows_private").harden_new_file(p)
+        else:
+            p.chmod(0o600)
         self.assertEqual(backend.load_contracts(str(p))["interval"], self.contract)
         value["contracts"] *= 2
         p.write_text(json.dumps(value))
