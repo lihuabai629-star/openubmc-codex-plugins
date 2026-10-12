@@ -12,8 +12,8 @@
       "source_path": "openubmc-debug/tests/test_mdb_property_backend.py",
       "source_sha256": "e6f1ff4642cf99cf9ab657f763c1fa1121e875cdc3573a4f156093706144a0cf",
       "packaged_test": "scripts/property/test_mdb_property_backend.py",
-      "packaged_sha256": "6e3dfb4d8e0d8bcb32c858304bb18984e4354c4fc81ffb5a522ca375b57cc053",
-      "adaptation": "plugin import paths; private disposable Windows roots/files and existing configuration lock; no bytecode in crash subprocess"
+      "packaged_sha256": "9d32c3dff73aa5d2646e5aa77aef7022768e3226e7d027e548e7333554457d5f",
+      "adaptation": "plugin import paths; private disposable Windows roots/files and existing configuration lock; no bytecode in crash subprocess; isolated LocalArtifactStore under private disposable root"
     }
   ]
 }
