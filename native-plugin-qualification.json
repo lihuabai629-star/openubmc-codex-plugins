@@ -1,7 +1,9 @@
 {
-  "version": "2.1.7",
-  "status": "candidate",
-  "passed": false,
+  "content_digest": "c523b3849adc61c417b629121982aecfd97570a1c714fe6bb5f6c3d0a6a6208b",
   "desktop_gui": false,
-  "live_bmc": false
+  "live_bmc": false,
+  "passed": false,
+  "source_commit": "5dd9a98ced4442c2ab2f39273b83a3a916b97a47",
+  "status": "candidate",
+  "version": "2.1.7"
 }

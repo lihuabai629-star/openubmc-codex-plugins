@@ -1,10 +1,12 @@
 {
+  "base_distribution_commit": "95ce3ca22ccb4d6c7a0213d7daf5c08176a7f01d",
+  "content_digest": "c523b3849adc61c417b629121982aecfd97570a1c714fe6bb5f6c3d0a6a6208b",
   "name": "openubmc",
-  "version": "2.1.7",
-  "status": "candidate",
   "release_scope": "codex-plugin",
   "release_tag": "v2.1.7",
+  "source_commit": "5dd9a98ced4442c2ab2f39273b83a3a916b97a47",
+  "status": "candidate",
   "upgrade_baseline": "2.1.6",
-  "workflow_source_commit": "61337999b6fc9884b2aeccaa4198251ff617572a",
-  "base_distribution_commit": "95ce3ca22ccb4d6c7a0213d7daf5c08176a7f01d"
+  "version": "2.1.7",
+  "workflow_source_commit": "61337999b6fc9884b2aeccaa4198251ff617572a"
 }
