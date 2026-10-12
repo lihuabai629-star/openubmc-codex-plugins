@@ -31,7 +31,6 @@
     "openubmc-environment-setup"
   ],
   "files": [
-    "references/skill-routing.md",
     "SKILL.md",
     "skill.json",
     "agents/openai.yaml",
@@ -42,6 +41,8 @@
     "references/diagnostic-contract.md",
     "references/diagnostic-advice.md",
     "references/evidence-workflow.md",
+    "references/host-continuity.md",
+    "references/skill-routing.md",
     "references/file-access.md",
     "references/knowledge-routing.md",
     "references/logs.md",
@@ -56,6 +57,7 @@
     "scripts/_cli_common.py",
     "scripts/_comparison.py",
     "scripts/_debug_dump.py",
+    "scripts/_evidence_batch.py",
     "scripts/_json_common.py",
     "scripts/_minimal_telnet.py",
     "scripts/_plugin_entrypoint.py",
@@ -64,6 +66,7 @@
     "scripts/_remote_common.py",
     "scripts/_runtime_distribution.py",
     "scripts/_source_root.py",
+    "scripts/_source_catalog.py",
     "scripts/_target_runtime_adapter.py",
     "scripts/_telnet_common.py",
     "scripts/_workflow_correlation.py",
@@ -77,6 +80,7 @@
     "scripts/compare_remote.py",
     "scripts/doctor.py",
     "scripts/execution_router.py",
+    "scripts/host_continuity.py",
     "scripts/diagnostic_advice.py",
     "scripts/mdbctl_remote.py",
     "scripts/package_skill.py",
@@ -88,7 +92,9 @@
     "scripts/target_runtime_cli.py",
     "scripts/target_runtime_mcp.py",
     "scripts/workflow_remote.py",
-    "scripts/systemd_observation.py"
+    "scripts/systemd_observation.py",
+    "scripts/mdb_property_backend.py",
+    "references/property-modification.md"
   ],
   "keywords": [
     "openubmc",

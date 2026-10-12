@@ -10,6 +10,7 @@ if __name__ == '__main__':
     _openubmc_guard = _openubmc_Path(__file__).parent / '_plugin_entrypoint.py'
     _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
 
+
 import argparse
 import json
 import os

@@ -64,7 +64,10 @@ function credentialValue(parsed, field, environmentName) {
 
 function defaultConfigPath() {
   const configHome = process.env.XDG_CONFIG_HOME?.trim();
-  return join(configHome ? resolve(configHome) : join(homedir(), ".config"), "openubmc", "kb-mcp.json");
+  const fallback = process.platform === "win32"
+    ? process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local")
+    : join(homedir(), ".config");
+  return join(configHome ? resolve(configHome) : fallback, "openubmc", "kb-mcp.json");
 }
 
 export async function loadConfig(
@@ -74,7 +77,7 @@ export async function loadConfig(
   const absolutePath = resolve(path);
   const active = await activeConfiguration(absolutePath);
   let parsed = await readConfigurationJson(active.path, {
-    privateFile: active.revision !== null,
+    privateFile: process.platform === 'win32' || active.revision !== null,
     missing: allowMissingCredentials && active.revision === null
   }) || {};
 

@@ -249,6 +249,7 @@ _SSH_SECRET_ARGUMENTS = frozenset({"ssh_password"})
 _TELNET_SECRET_ARGUMENTS = frozenset({"telnet_password"})
 _REDFISH_SECRET_ARGUMENTS = frozenset({"redfish_password"})
 _DOMAIN_CONNECTION_ARGUMENTS = {
+    "mdb_property": _TARGET_ADDRESS_ARGUMENTS | _SSH_ARGUMENTS | _SSH_SECRET_ARGUMENTS,
     "debug": (
         _TARGET_ADDRESS_ARGUMENTS
         | _SSH_ARGUMENTS
@@ -1113,6 +1114,7 @@ class _OrchestratedMcpTask:
                 "log_analyzer": _SSH_SECRET_ARGUMENTS | _REDFISH_SECRET_ARGUMENTS,
                 "live_patch": _SSH_SECRET_ARGUMENTS | _TELNET_SECRET_ARGUMENTS,
                 "upgrade": _REDFISH_SECRET_ARGUMENTS,
+                "mdb_property": _SSH_SECRET_ARGUMENTS,
             }[domain]
         projected = dict(arguments)
         disallowed = (
@@ -1184,6 +1186,8 @@ class _OrchestratedMcpTask:
                 "log_bundle_collect",
                 "live_patch_run",
                 "upgrade_run",
+                "mdb_property_modify",
+                "mdb_property_verify",
             }:
                 merged["ssh_port"] = target.target.ssh_port
             if tool_name in {"debug_run", "debug_collect", "live_patch_run"}:
@@ -1204,7 +1208,7 @@ class _OrchestratedMcpTask:
                 }
             else:
                 merged["_credential_values"] = self.credential_values(merged, tool_name=tool_name)
-        if tool_name in {"live_patch_run", "upgrade_run"}:
+        if tool_name in {"live_patch_run", "upgrade_run", "mdb_property_modify"}:
             merged["_task_intent"] = (
                 self.orchestration.intent.original_intent.value
             )
@@ -2821,6 +2825,27 @@ class RuntimeMcpService:
                     "additionalProperties": True,
                 },
             })
+        for property_operation in ("mdb_property_modify", "mdb_property_verify"):
+            if not callable(getattr(self.backend, property_operation, None)):
+                continue
+            typed_value = {"type": "object", "required": ["base_type", "value"],
+                "properties": {"base_type": {"type": "string", "enum": ["Boolean", "U8", "I16", "U16", "I32", "U32"]},
+                               "value": {"oneOf": [{"type": "integer"}, {"type": "boolean"}]}},
+                "additionalProperties": False}
+            properties = {**orchestration_properties, "ip": common_target, "deadline": deadline}
+            if property_operation == "mdb_property_modify":
+                properties.update({"contract_id": {"type": "string", "minLength": 1, "maxLength": 128},
+                    "expected_value": typed_value, "value": typed_value,
+                    **{key: {"type": "string", "minLength": 1} for key in ("object", "interface", "property")}})
+                required = ["contract_id", "expected_value", "value"]
+            else:
+                properties["_runtime_property_mutation_id"] = {"type": "string", "minLength": 1}
+                required = ["_runtime_property_mutation_id"]
+            definitions.append({"name": property_operation,
+                "description": "Modify one allowlisted typed property." if property_operation.endswith("modify")
+                               else "Read fresh property evidence for the Runtime-bound journal.",
+                "inputSchema": {"type": "object", "required": required, "properties": properties,
+                                "additionalProperties": True}})
         definitions.extend(
             [
                 {

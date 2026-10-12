@@ -51,7 +51,7 @@ class PythonEntrypointTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.home = Path(temporary.name)
         self.plugin = self.home/'plugin'
-        shutil.copytree(self.original, self.plugin)
+        shutil.copytree(self.original, self.plugin, ignore=shutil.ignore_patterns("__pycache__"))
         self.before = inventory(self.plugin)
         self.environment = {key: value for key, value in os.environ.items()
                             if not key.startswith(('PYTHON', 'OPENUBMC_', 'OPENAI_', 'CODEX_', 'XDG_'))}

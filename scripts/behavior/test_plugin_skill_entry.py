@@ -97,7 +97,7 @@ class PluginSkillEntryTests(unittest.TestCase):
                 "XDG_CONFIG_HOME": str(isolated / "config"),
                 "XDG_DATA_HOME": str(isolated / "data"),
                 "OPENUBMC_PLUGIN_PYTHON": str(unavailable),
-                "OPENUBMC_PLUGIN_WSL_EXE": str(unavailable),
+                "OPENUBMC_PLUGIN_WINDOWS_PYTHON": str(unavailable),
                 "OPENUBMC_PLUGIN_HOST_PLATFORM": "win32" if windows else "linux",
             }
             result = subprocess.run(

@@ -29,7 +29,7 @@ final purpose, and authorization from that Case. A continuation is submitted thr
 Agent-facing `execute` operation with the persisted Run identity; the Runtime decides whether
 the next step is a Gate, Incident, reattach point, or terminal Outcome. Do not re-upload an HPM
 or reconstruct the operation from conversation history.
-On Windows/WSL, verify the Runtime MCP protocol and prefer this typed path
+On native Windows, Linux or WSL, verify the Runtime MCP protocol and prefer this typed path
 while it is healthy. If it is unavailable, record the fallback reason, actual
 host, target scope, evidence boundary, and bounded call budget using the
 Debug package's `scripts/execution_router.py`; shell output alone cannot

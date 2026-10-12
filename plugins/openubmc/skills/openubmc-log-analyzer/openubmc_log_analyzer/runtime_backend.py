@@ -499,6 +499,8 @@ class LogBundleStages:
 class PullBundleRedfishTransport:
     """Adapt the existing Redfish protocol behavior to a domain Runtime lane."""
 
+    authenticates_on_open = True
+
     def __init__(self, args) -> None:
         self.args = args
 

@@ -17,9 +17,17 @@ from typing import Callable, ClassVar, Generic, Iterator, TypeVar
 
 from .contracts import CredentialSelector, TargetIdentity, TargetSpec, _fingerprint
 from .redaction import require_secret_free
+from .property_state import PropertyMutationState, PropertyObservation
 
 
 MUTATION_JOURNAL_SCHEMA = "openubmc.target-runtime.v1/mutation-journal"
+
+
+@dataclass(frozen=True)
+class PropertyMutationNoOp:
+    """A property plan proved unchanged without sending a setter request."""
+
+    value: Mapping[str, object]
 
 
 class MutationRecoveryDisposition(str, Enum):
@@ -88,6 +96,7 @@ _INTENT_ACTIONS = {
     "live-patch": frozenset({"live_patch"}),
     "rollback": frozenset({"rollback"}),
     "upgrade-and-verify": frozenset({"upgrade"}),
+    "property-update-and-verify": frozenset({"mdb_property_modify"}),
     "bundle-and-diagnose": frozenset(),
 }
 _INTENT_DELIVERY_STRATEGIES = {
@@ -95,6 +104,7 @@ _INTENT_DELIVERY_STRATEGIES = {
     "live-patch": "live-patch",
     "rollback": "live-patch",
     "upgrade-and-verify": "build-upgrade",
+    "property-update-and-verify": "",
     "bundle-and-diagnose": "",
 }
 _DIAGNOSE_AND_FIX_ACTIONS = {
@@ -394,7 +404,7 @@ class MutationRequest:
                 "operation_id must be 1-128 safe identifier characters"
             )
         normalized = self.action.strip().lower().replace("-", "_")
-        if normalized not in {"live_patch", "rollback", "upgrade"}:
+        if normalized not in {"live_patch", "rollback", "upgrade", "mdb_property_modify"}:
             raise ValueError(f"unsupported mutation action: {self.action}")
         object.__setattr__(self, "action", normalized)
         self.target.validate_credential_selector(self.credential_selector)
@@ -528,6 +538,7 @@ class MutationJournal:
     expected_missing: bool | None = None
     expected_metadata: dict[str, int | str] = field(default_factory=dict)
     observed_checksum: str = ""
+    property_state: PropertyMutationState | None = None
     root_mount_mode: str = "unknown"
     root_mount_restored: bool | None = None
     restart_state: str = "unknown"
@@ -588,6 +599,22 @@ class MutationJournal:
             raise ValueError(
                 f"unsupported mutation journal stage: {self.stage}"
             )
+        if self.property_state is not None and self.action != "mdb_property_modify":
+            raise ValueError("property state cannot belong to a file mutation")
+        if self.action == "mdb_property_modify":
+            if (self.backup_reference or self.artifact_reference or self.before_checksum or self.expected_checksum
+                    or self.observed_checksum or self.expected_missing is not None or self.expected_metadata
+                    or self.authorized_recovery_actions or self.root_mount_mode != "unknown"
+                    or self.root_mount_restored is not None or self.restart_state != "unknown"
+                    or self.rollback_epoch is not None or self.stage.startswith("rollback")):
+                raise ValueError("property journal cannot claim file or rollback state")
+            if (self.effects_started or self.stage in {"applied", "verifying", "verified"}) and self.property_state is None:
+                raise ValueError("property journal is missing its frozen plan")
+            if self.property_state is not None:
+                if self.target_identity != self.property_state.before.target_identity:
+                    raise ValueError("property journal identity differs from frozen observation")
+                if self.stage == "verified" and not self.effects_started and self.property_state.expected != self.property_state.desired:
+                    raise ValueError("zero-write property journal must be a no-op")
 
     @property
     def terminal(self) -> bool:
@@ -690,6 +717,7 @@ class MutationJournal:
             self.expected_missing = None
             self.expected_metadata = {}
             self.observed_checksum = ""
+            self.property_state = None
             self.root_mount_mode = "unknown"
             self.root_mount_restored = None
             self.restart_state = "unknown"
@@ -762,6 +790,16 @@ class MutationJournal:
             self.expected_checksum = state.checksum
             self.expected_missing = state.missing
             self.expected_metadata = dict(state.metadata)
+            self.updated_at = _utc_now()
+        self._persist()
+
+    def record_property_state(self, state: PropertyMutationState) -> None:
+        if self.action != "mdb_property_modify" or not isinstance(state, PropertyMutationState):
+            raise TypeError("property state belongs only to a property mutation")
+        with self._lock:
+            if self.effects_started or self.property_state is not None:
+                raise MutationOperationConflict("property plan is already frozen")
+            self.property_state = state
             self.updated_at = _utc_now()
         self._persist()
 
@@ -875,6 +913,8 @@ class MutationJournal:
                 ),
                 "created_at": self.created_at,
                 "updated_at": self.updated_at,
+                **({"property_state": self.property_state.to_public_dict()}
+                   if self.property_state is not None else {}),
             }
 
     @classmethod
@@ -927,6 +967,12 @@ class MutationJournal:
                 ),
             )
         try:
+            if value.get("action") == "mdb_property_modify":
+                if type(value.get("effects_started", False)) is not bool:
+                    raise TypeError("property effects_started must be boolean")
+                for name in ("epoch_before", "epoch_after"):
+                    if value.get(name) is not None and (type(value[name]) is not int or value[name] < 0):
+                        raise TypeError("property epochs must be non-negative integers")
             raw_expected_missing = value.get("expected_missing")
             if raw_expected_missing is not None and not isinstance(
                 raw_expected_missing,
@@ -977,6 +1023,8 @@ class MutationJournal:
                     field_name="expected_metadata",
                 ),
                 observed_checksum=str(value.get("observed_checksum", "")),
+                property_state=(PropertyMutationState.from_value(value["property_state"])
+                                if "property_state" in value else None),
                 root_mount_mode=str(value.get("root_mount_mode", "unknown")),
                 root_mount_restored=(
                     bool(value["root_mount_restored"])
@@ -1053,6 +1101,7 @@ class MutationRecoveryEvidence:
     root_mount_mode: str = "unknown"
     root_mount_restored: bool | None = None
     restart_observed: bool | None = None
+    property_observation: PropertyObservation | None = None
 
     @classmethod
     def from_value(
@@ -1114,6 +1163,8 @@ class MutationRecoveryEvidence:
                 if value.get("restart_observed") is not None
                 else None
             ),
+            property_observation=(PropertyObservation.from_value(value["property_observation"])
+                                  if value.get("property_observation") is not None else None),
         )
 
     def to_public_dict(self) -> dict[str, object]:
@@ -1133,6 +1184,8 @@ class MutationRecoveryEvidence:
             "root_mount_mode": self.root_mount_mode,
             "root_mount_restored": self.root_mount_restored,
             "restart_observed": self.restart_observed,
+            **({"property_observation": self.property_observation.to_public_dict()}
+               if self.property_observation is not None else {}),
         }
 
 
@@ -1144,6 +1197,13 @@ def decide_mutation_recovery(
 
     if not evidence.target_reachable or not evidence.recovery_safe:
         return "manual"
+    if journal.action == "mdb_property_modify":
+        if not journal.effects_started:
+            return "replan"
+        state, observation = journal.property_state, evidence.property_observation
+        # A before-value read is not proof that the setter never executed.
+        # Recovery never authorizes a replacement write or compensation.
+        return "verify" if state is not None and observation is not None and state.matches(observation) else "manual"
     identity_change = None
     if journal.target_identity is not None and evidence.target_identity is not None:
         change = journal.target_identity.change_kind(evidence.target_identity)

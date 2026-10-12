@@ -23,7 +23,8 @@ import sys
 
 
 _PRODUCT_VERSION_RE = re.compile(r"(?<![\d.])(\d+(?:\.\d+){3})(?!\d|\.\d)")
-_STABLE_FIELDS = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+_STABLE_FIELDS = ("st_dev", "st_ino", "st_size", "st_mtime_ns",
+                  "st_birthtime_ns" if sys.platform == "win32" else "st_ctime_ns")
 _MAX_METADATA_BYTES = 1024 * 1024
 
 

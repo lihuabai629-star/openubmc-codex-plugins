@@ -174,6 +174,29 @@ Preflight failures return `error.field`, the accepted `error.limit` or `error.su
 canonical `error.example`, and one `next_action`. Correct that field before retrying; validation
 does not open a Run, dispatch target work, or create an Effect.
 
+The MCP Adapter accepts a finite legacy spelling set: `target_ip`/`bmc_ip` for
+`target`, singular `selector` for one `selectors` object, `action_type`/
+`actionKind` for `kind`, and camel-case `runId`, `gateId`, `gateVersion`,
+`schemaDigest`, `submissionId`, `deliveryStrategy`, `entryOperation`, and
+`entryArguments` for their snake-case Action fields. Arrays and objects can be
+exact JSON text; decimal `deadline`, `gate_version`, and
+`freshness.max_age_seconds` can be text. Conflicting aliases fail closed, and
+undocumented fields remain errors. Prefer the canonical typed forms above.
+
+After an `execute` Turn, the same MCP task may omit `run_id`; an explicit
+`respond` to its current phase Gate may also omit the entire Gate binding. A
+partial binding is an error. The Adapter copies only known identities from the
+latest active Turn. It does not
+replace a malformed or stale identity, choose a target, decide a response, or
+authorize rollback. A process restart or task completion may leave no current
+Turn binding; use the returned binding explicitly then.
+
+A host may retry once from a preflight `next_action` only after checking that
+the candidate preserves target, intent, action scope, ArtifactRef, Run/Gate
+identity, and authorization meaning. A stale Gate correction or a Runtime or
+transport failure is not an automatic retry. The MCP server never reissues a
+target Effect on its own.
+
 ## Idempotency and recovery
 
 The Runtime supplies or derives submission identity from the persisted Gate binding. Retrying an

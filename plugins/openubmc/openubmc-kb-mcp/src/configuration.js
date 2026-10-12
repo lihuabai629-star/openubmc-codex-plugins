@@ -1,6 +1,7 @@
 import { constants } from 'node:fs';
 import { open, lstat } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
+import { verifyPrivatePath } from './windows-private.js';
 
 function invalid() {
   return Object.assign(new Error('Invalid local KB configuration; check the private configuration and activate a valid revision.'), { code: 'KB_CONFIGURATION_INVALID' });
@@ -11,6 +12,12 @@ export async function readConfigurationJson(path, { privateFile = false, missing
   try {
     file = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW || 0) | (constants.O_NONBLOCK || 0));
     const info = await file.stat();
+    if (privateFile && process.platform === 'win32') {
+      verifyPrivatePath(dirname(path));
+      verifyPrivatePath(path);
+      const current = await lstat(path);
+      if (current.isSymbolicLink() || current.dev !== info.dev || current.ino !== info.ino) throw invalid();
+    }
     if (!info.isFile() || info.size > 1024 * 1024 || (privateFile && process.platform !== 'win32'
       && (info.uid !== process.getuid() || (info.mode & 0o077)))) throw invalid();
     const bytes = Buffer.alloc(1024 * 1024 + 1);
@@ -42,6 +49,7 @@ export async function activeConfiguration(source) {
     const info = await lstat(directory);
     if (!info.isDirectory() || info.isSymbolicLink() || (process.platform !== 'win32'
       && (info.uid !== process.getuid() || (info.mode & 0o077)))) throw invalid();
+    if (process.platform === 'win32') verifyPrivatePath(directory);
   } catch { throw invalid(); }
   return { path: join(directory, `${marker.revision}.json`), revision: marker.revision };
 }

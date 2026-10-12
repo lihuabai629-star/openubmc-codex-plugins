@@ -1,11 +1,11 @@
 ---
 name: openubmc-environment-setup
-description: "Configure or repair an installed openUBMC plugin on Windows, Linux or WSL: 账号缺失或认证失败、配置网页、默认 BMC 账号、关联 OS、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, WSL selection, required tools, migration, and installation health; device diagnosis belongs to openubmc-debug."
+description: "Configure or repair an installed openUBMC plugin on Windows, Linux or WSL: 账号缺失或认证失败、配置网页、默认 BMC 账号、关联 OS、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, native backend readiness, migration, and installation health; device diagnosis belongs to openubmc-debug."
 ---
 
 # openUBMC plugin environment
 
-When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
+When the task enters another workflow stage, read [the phase handoff](../openubmc-debug/references/skill-routing.md)
 and load its owner before acting; carry the existing Run and authorization.
 
 Resolve `<plugin-root>` as the parent of the `skills` directory containing this Skill. Codex manages the plugin's Skills and MCP registration. Keep credentials, dependencies and Runtime history outside the plugin directory.
@@ -19,9 +19,9 @@ python3 -I <plugin-root>/scripts/pluginctl.py prepare --repair
 
 The MCP launchers check locked Python and npm dependencies on startup. When they are absent or damaged, both servers still initialize in setup mode. Use the setup tool offered in the task to prepare or repair them, then start a new task. A modified package fails closed to setup mode; reinstall the selected marketplace version. Do not modify the installed package, bypass hashes or create duplicate loose Skill/MCP registrations.
 
-Node.js 20+, Git and Codex are required on the Codex host. Linux also needs Python 3.12 with pip. Native Windows selects one WSL distribution and runs the packaged Linux backend there; Python, npm, credentials, Runtime history, builds and Conan stay in that WSL. One eligible distribution is selected automatically, while multiple distributions require an explicit local selection. SDKs, compilers, Docker installation and Conan remotes belong to their respective workflows.
+Node.js 20+, Git and Codex are required on the Codex host. Linux and native Windows each need Python 3.12 with pip. On Windows, Runtime, KB, credentials, dependency caches and Run history stay in the Windows user profile. WSL is optional for an explicitly selected build environment; device work does not need it. SDKs, compilers, Docker installation and Conan remotes belong to their respective workflows.
 
-If `openubmc_setup_status` is available, the plugin is in recoverable setup mode. Use `openubmc_setup_select_wsl` when requested, `openubmc_setup_prepare` for the reported capability, and `openubmc_setup_open_configuration` to open the private browser page. Present the returned loopback URL to the user. Do not ask a Windows user to locate or run `pluginctl.py`.
+If `openubmc_setup_status` is available, the plugin is in recoverable setup mode. Use `openubmc_setup_prepare` for the reported capability and `openubmc_setup_open_configuration` to open the private browser page. Present the returned loopback URL to the user. Do not ask a Windows user to locate or run `pluginctl.py`.
 
 ## Private credentials
 
@@ -129,7 +129,7 @@ the relationship is ambiguous; an unambiguous statement already confirms it. Nev
 from a login, shared account, or nearby address. Run this local command yourself:
 
 ```bash
-python3 -B <plugin-root>/skills/openubmc-environment-setup/scripts/associate_device.py --bmc-ip <BMC-IP> --os-ip <OS-IP> --confirm-same-device
+<python-3.12> -B <plugin-root>/skills/openubmc-environment-setup/scripts/associate_device.py --bmc-ip <BMC-IP> --os-ip <OS-IP> --confirm-same-device
 ```
 
 The command uses Runtime credential-source selection rules in the CLI environment. If the MCP
@@ -154,7 +154,7 @@ within that scope with certificate verification disabled: it does not qualify ce
 or replace the strict check. Reuse that authorization without asking again; it does not change the
 check policy.
 
-For a machine without an accessible browser, the existing `install_environment.py credentials` hidden-input helper remains available. A headless page can be started with `configure --no-browser`; open its session URL in the same machine's browser. Use the WSL environment containing the installed plugin and credentials.
+For a machine without an accessible browser, the existing `install_environment.py credentials` hidden-input helper remains available. A headless page can be started with `configure --no-browser`; open its session URL in the same machine's browser. Run the helper on the host containing the installed plugin and credentials.
 
 ## Lifecycle
 

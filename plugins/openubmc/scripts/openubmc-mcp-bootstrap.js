@@ -8,6 +8,7 @@ const path = require("path");
 const readline = require("readline");
 const { createHostAdapter } = require("./openubmc-bootstrap-host.js");
 const { createSetupOperations } = require("./openubmc-bootstrap-operations.js");
+const { MAX_MCP_LINE_BYTES, routeRuntimeCall } = require("./openubmc-execution-routing.js");
 
 const capability = process.argv[2];
 if (!new Set(["runtime", "kb"]).has(capability)) {
@@ -19,7 +20,6 @@ const hostPlatform = process.env.OPENUBMC_PLUGIN_HOST_PLATFORM || process.platfo
 const adapter = createHostAdapter({
   pluginRoot: path.resolve(__dirname, ".."),
   hostPlatform,
-  wslExecutable: process.env.OPENUBMC_PLUGIN_WSL_EXE || "wsl.exe",
 });
 const operations = createSetupOperations(adapter, capability);
 
@@ -27,13 +27,69 @@ function safeWriteError(value) {
   if (value) process.stderr.write(String(value).slice(-8192));
 }
 
-function proxyBackend(backend) {
+function proxyBackend(backend, preflight) {
   const child = childProcess.spawn(backend.command, [...backend.prefix, capability], {
     env: adapter.childEnvironment,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
-  process.stdin.pipe(child.stdin);
+  let structuredCalls = 0;
+  const lineReader = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+  lineReader.on("line", (line) => {
+    if (capability === "runtime" && Buffer.byteLength(line, "utf8") > MAX_MCP_LINE_BYTES) {
+      process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: null,
+        error: { code: -32600, message: "routing_request_too_large" } })}\n`);
+      return;
+    }
+    let request;
+    try { request = JSON.parse(line); } catch (_error) {
+      if (capability === "runtime") {
+        process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: null,
+          error: { code: -32700, message: "routing_request_invalid" } })}\n`);
+        return;
+      }
+      request = null;
+    }
+    if (capability === "runtime") {
+      if (request === null || typeof request !== "object" || Array.isArray(request)) {
+        process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: null,
+          error: { code: -32600, message: "routing_request_invalid" } })}\n`);
+        return;
+      }
+      if (request.method === "tools/call"
+          && (!request.params || typeof request.params !== "object"
+              || Array.isArray(request.params) || typeof request.params.name !== "string")) {
+        process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id ?? null,
+          error: { code: -32602, message: "routing_request_invalid" } })}\n`);
+        return;
+      }
+      const route = routeRuntimeCall(request, {
+        report: preflight.report,
+        hostPlatform,
+        selectedWsl: backend.selected_wsl || null,
+        sequence: structuredCalls + 1,
+      });
+      if (route && !route.allowed) {
+        // No shell is started here. A host shell fallback requires its own
+        // bounded receipt before the caller leaves this MCP transport.
+        if (request.id !== undefined && request.id !== null) {
+          process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: request.id,
+            error: { code: -32001, message: route.reason_code } })}\n`);
+        }
+        return;
+      }
+      if (route) {
+        structuredCalls += 1;
+        // Only a process-keyed MAC of bounded arguments is emitted. Do this before forwarding
+        // the call so installed-path traces show the routing decision first.
+        process.stderr.write(`openubmc-routing ${JSON.stringify(route.receipt)}\n`);
+      }
+    }
+    if (!child.stdin.write(`${line}\n`)) {
+      lineReader.pause();
+      child.stdin.once("drain", () => lineReader.resume());
+    }
+  });
   child.stdout.pipe(process.stdout);
   child.stderr.pipe(process.stderr);
   const stop = () => {
@@ -41,13 +97,19 @@ function proxyBackend(backend) {
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
-  process.stdin.once("end", () => child.stdin.end());
+  lineReader.once("close", () => child.stdin.end());
   child.once("error", (error) => {
     safeWriteError(`openUBMC backend failed to start: ${error.code || "spawn_failed"}\n`);
+    lineReader.close();
+    process.exitCode = 1;
+  });
+  child.stdin.on("error", (error) => {
+    safeWriteError(`openUBMC backend input closed: ${error.code || "write_failed"}\n`);
     process.exitCode = 1;
   });
   child.once("exit", (code) => {
-    process.exitCode = code === null ? 1 : code;
+    lineReader.close();
+    process.exitCode = process.exitCode || (code === null ? 1 : code);
   });
 }
 
@@ -96,9 +158,6 @@ function serveSetup(initialFailure) {
         { name: "openubmc_setup_status",
           description: "Return separate package, host, dependency, configuration and protocol-health facts without exposing credentials.",
           inputSchema: { type: "object", properties: {}, additionalProperties: false } },
-        { name: "openubmc_setup_select_wsl",
-          description: "Select an installed WSL distribution for the openUBMC Linux backend.",
-          inputSchema: { type: "object", properties: { distro: { type: "string", description: "An exact name from available_wsl_distros." } }, required: ["distro"], additionalProperties: false } },
         { name: "openubmc_setup_prepare",
           description: "Prepare the locked dependencies for this openUBMC capability outside MCP initialization.",
           inputSchema: { type: "object", properties: {}, additionalProperties: false } },
@@ -115,18 +174,6 @@ function serveSetup(initialFailure) {
       const name = request.params?.name;
       if (name === "openubmc_setup_status") {
         toolReply(request.id, refreshedStatus());
-        return;
-      }
-      if (name === "openubmc_setup_select_wsl") {
-        try {
-          adapter.saveSelectedDistro(request.params?.arguments?.distro,
-            refreshedStatus().available_wsl_distros || initialStatus.available_wsl_distros || []);
-          toolReply(request.id, { schema: initialStatus.schema, status: "configuration_saved",
-            selected_wsl: request.params.arguments.distro,
-            next_action: "Start a new Codex task to initialize the openUBMC backend." });
-        } catch (selectionError) {
-          toolReply(request.id, { ...refreshedStatus(), error: selectionError.message }, true);
-        }
         return;
       }
       if (name === "openubmc_setup_prepare") {
@@ -196,5 +243,5 @@ if (!backend.ok) {
 } else {
   const preflight = operations.preflightBackend(backend);
   if (!preflight.ok) serveSetup({ ...backend, ...preflight, ok: false });
-  else proxyBackend(backend);
+  else proxyBackend(backend, preflight);
 }

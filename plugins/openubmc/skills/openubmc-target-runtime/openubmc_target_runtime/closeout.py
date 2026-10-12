@@ -196,6 +196,7 @@ _STAGE_TITLES = {
     "build": "构建产物及其身份已确认",
     "live_patch": "Live Patch 已应用并完成内部验证",
     "upgrade": "固件已升级并完成版本验证",
+    "property_update": "属性赋值已完成并保留恢复记录",
     "verification": "变更后的运行态回归验证已通过",
 }
 
@@ -216,6 +217,8 @@ def _required_stages(
         return ("live_patch", "verification")
     if intent == "upgrade-and-verify":
         return ("upgrade", "verification")
+    if intent == "property-update-and-verify":
+        return ("property_update", "verification")
     if intent == "diagnose-and-fix":
         stages = ["diagnosis", "development"]
         if delivery_strategy == "build-upgrade":
@@ -572,6 +575,7 @@ _STAGE_ORDER = {
     "build": 40,
     "live_patch": 50,
     "upgrade": 50,
+    "property_update": 50,
     "verification": 60,
 }
 
@@ -731,7 +735,7 @@ def _operation_status(
             return _DIAGNOSTIC_OPERATION_STATUS[
                 projected.status_for_agent_acceptance()
             ]
-    if stage in {"live_patch", "upgrade"}:
+    if stage in {"live_patch", "upgrade", "property_update"}:
         journal = _mapping(evidence.get("journal"))
         classified = mutation_journal_operation_status(
             journal,
@@ -778,7 +782,7 @@ def _selected_facts(
             summary = _text_from(value, "summary")
             if summary:
                 facts["root_cause"] = summary
-    elif stage in {"live_patch", "upgrade"}:
+    elif stage in {"live_patch", "upgrade", "property_update"}:
         for name in (
             "artifact_path",
             "artifact_sha256",
@@ -830,6 +834,7 @@ def _selected_facts(
                     "verification_state",
                     "operation_id",
                     "request_fingerprint",
+                    "property_state",
                 )
                 if name in journal
             }

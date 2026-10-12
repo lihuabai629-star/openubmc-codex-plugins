@@ -1120,6 +1120,16 @@ def _json_schema_descriptive_strings(
 
 def _unsafe_header_values(text: str, source_suffix: str = "") -> list[str]:
     offenders: list[str] = []
+    # A typed Runtime authorization passed by Python identifier is not a
+    # serialized HTTP credential. Literal header values remain scanned.
+    typed_keywords = set()
+    if source_suffix.casefold() == ".py":
+        try:
+            typed_keywords = {(node.lineno, node.col_offset) for node in ast.walk(ast.parse(text))
+                              if isinstance(node, ast.keyword) and node.arg == "authorization"
+                              and isinstance(node.value, ast.Name)}
+        except SyntaxError:
+            pass
     for pattern in (CREDENTIAL_HEADER_RE, MULTILINE_CREDENTIAL_HEADER_RE):
         for match in pattern.finditer(text):
             raw = match.group("value").strip().rstrip(",}").strip().strip("'\"")
@@ -1127,6 +1137,8 @@ def _unsafe_header_values(text: str, source_suffix: str = "") -> list[str]:
                 continue
             if source_suffix.casefold() == ".py":
                 line_start = text.rfind("\n", 0, match.start()) + 1
+                if (text.count("\n", 0, match.start()) + 1, match.start() - line_start) in typed_keywords:
+                    continue
                 line_end = text.find("\n", match.end())
                 if line_end < 0:
                     line_end = len(text)

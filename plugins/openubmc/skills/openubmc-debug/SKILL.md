@@ -1,23 +1,20 @@
 ---
 name: openubmc-debug
-description: "Diagnose openUBMC/BMC runtime problems: 设备不识别、传感器异常、告警、服务启动失败、接口报错、两台 BMC 对比。Use for live target symptoms, a supplied BMC IP, diagnostic handoff, or post-upgrade verification; correlate source, MDB/D-Bus, Redfish, logs, and optional OS evidence. Remote diagnosis is read-only; route implementation, builds, upgrades, and file replacement to their owning skills."
+description: "Diagnose openUBMC/BMC runtime problems: 设备不识别、传感器异常、告警、服务启动失败、接口报错、两台 BMC 对比。Use for live symptoms, diagnostic handoff, delivery verification, or authorized MDB property adjustment. Diagnosis is read-only; assignments use Runtime execute. Route source, builds, upgrades, and patches to their owners."
 ---
 
 # openUBMC Runtime Debug
 
-When the task enters another workflow stage, read [the phase handoff](<references/skill-routing.md>)
-and load its owner before acting; carry the existing Run and authorization.
+At a stage change, read [the phase handoff](<references/skill-routing.md>) and its owner; carry the Run and authorization.
 
 ## Scope and ownership
 
-Own read-only diagnosis and post-change verification. The request is:
+Own read-only diagnosis and post-change verification:
 
 - diagnosis: explain and localize a current or reproduced symptom;
 - delivery verification: verify requested behavior on the deployed target.
 
-Accept prose or handoffs without a transport envelope. Keep diagnosis separate
-from implementation:
-
+Route implementation to its owner:
 - source or design change -> `openubmc-developer` or the matching specialist;
 - component or product build -> `openubmc-build`;
 - firmware upgrade or rollback -> `openubmc-upgrade`;
@@ -31,14 +28,14 @@ Use the default `openubmc-target-runtime` MCP through its semantic Agent Interfa
 
 - For current systemd service failures, use a `systemd` selector with literal `.service` names
   or `["failed"]` discovery; see the Agent semantic interface reference below.
-- Call `observe` for an exact read-only question. Declare only the selectors needed for the
-  answer. A narrow MDB or capability query should complete in one call and return an inline
+- Call `observe` for an exact read-only question using only required selectors.
+  A narrow MDB or capability query should complete in one call and return an inline
   `ObservationReceipt`.
 - Treat one answer as one observation: combine related capability, MDB and systemd selectors needed for
   the answer in the same `observe` call. Do not run a separate capability preflight; the internal
   Observation Adapter performs it.
-- Call `execute` when work can cross diagnosis, source change, build, live patch, upgrade,
-  recovery, verification, or acceptance phases, including a read-only diagnosis Run.
+- Call `execute` for diagnosis Runs, source changes, builds, patches, upgrades, verification
+  or an authorized MDB assignment. Read its property reference before any assignment.
 - A build-upgrade Run that requires exact Drive convergence may carry a bounded
   `hardware_acceptance.devices` declaration in its Debug entry arguments. It is validated
   before mutation but applied only to post-upgrade `debug_collect`: missing, unhealthy,
@@ -61,9 +58,8 @@ Use the default `openubmc-target-runtime` MCP through its semantic Agent Interfa
   binding instead of issuing another resume.
 - Treat one `ObservationReceipt` or `Turn` as the semantic result. Capability is tri-state:
   `available`, `unavailable`, or `not_checked`; never infer an unobserved capability.
-- In an `execute` MCP result, inspect `structured_content.diagnostic_receipt`; the short `content`
-  text is only a state summary. If the receipt exists, do not report that `execute` returned only
-  generic completion. Treat every result with `status=available` and a substantive `value` or
+- In an `execute` MCP result, inspect `structured_content.diagnostic_receipt`; `content` is a state
+  summary, not the full result. Treat every result with `status=available` and a substantive `value` or
   bounded `summary` as citable visible evidence. Raw Evidence bytes do not need a separate read.
   `projection_truncated` and `content_compacted` describe the display; determine source
   completeness from the receipt's `truncated`, `content_complete`, freshness, coverage, and gaps.
@@ -138,7 +134,7 @@ identity separate from local source or package evidence.
 
 ## Result contract
 
-Return a concise report unless machine-readable output was requested:
+Report concisely unless machine-readable output was requested:
 
 1. status and shortest evidence-backed conclusion;
 2. target/source scope and freshness boundary;
@@ -153,8 +149,8 @@ business acceptance.
 
 ## Read-only invariants
 
-- Keep all remote actions read-only: no restart, mutation, upload, upgrade, replacement, or
-  arbitrary method. BMC SSH and `doctor.py --os-check` use `insecure`.
+- Keep all remote actions read-only in diagnostic helpers and `observe`. Diagnostic SSH uses
+  `insecure`; the typed property workflow requires strict host verification.
 - Bound object trees, logs, files, source searches, deadlines, and output. Preserve timestamps and
   relevant excerpts.
 - Treat current alarm reads as current state and historical event APIs as history.
@@ -162,9 +158,9 @@ business acceptance.
 
 ## Reference routing
 
-Read only the directly relevant one-hop references:
+Read the relevant one-hop references:
 
-- Agent semantic interface and Runtime continuation: `references/agent-gateway.md`
+- Run, Gate and recovery: `references/agent-gateway.md`, `references/host-continuity.md`
 - Remote credentials, preflight, helpers, concurrency, and target automation: `references/remote-automation.md`
 - Evidence selection and correlation: `references/evidence-workflow.md`
 - Hypothesis-directed Drive diagnosis and fault-chain comparison: `references/diagnostic-advice.md`
@@ -175,6 +171,7 @@ Read only the directly relevant one-hop references:
 - Optional user-configured integrations: `references/optional-integrations.md`
 - Component ownership hints: `references/components.md`
 - MDB access: `references/mdbctl-access.md`
+- Authorized MDB assignment and recovery: `references/property-modification.md`
 - D-Bus access: `references/busctl-access.md`
 - Generic object access: `references/object-access.md`
 - Active alarm access: `references/alarm-access.md`

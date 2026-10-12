@@ -17,6 +17,7 @@ check path; it does not require Developer planning.
 | Current deliverable | Owner to read |
 | --- | --- |
 | Live symptom, current BMC state, or post-change verification | `openubmc-debug` |
+| Authorized allowlisted MDB property assignment through Runtime | `openubmc-debug` |
 | Diagnostic log bundle or offline log directory | `openubmc-log-analyzer` |
 | Unresolved source ownership, generated chain, lifecycle, persistence, or cross-layer behavior | `openubmc-developer` |
 | Component/product compilation, generation, package, or HPM build | `openubmc-build` |

@@ -25,13 +25,15 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_owned(argv, *, payload=None, env=None, timeout=25):
+    options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+               if sys.platform == "win32" else {"start_new_session": True})
     process = subprocess.Popen(
         argv,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,
-        start_new_session=True,
+        **options,
     )
     try:
         stdout, stderr = process.communicate(
@@ -40,17 +42,27 @@ def run_owned(argv, *, payload=None, env=None, timeout=25):
         )
         return process.returncode, stdout, stderr
     except BaseException:
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
+        if sys.platform == "win32":
+            subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
         try:
             process.communicate(timeout=2)
         except subprocess.TimeoutExpired:
-            try:
-                os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+            if sys.platform == "win32":
+                subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
+            else:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             process.communicate()
         raise
 

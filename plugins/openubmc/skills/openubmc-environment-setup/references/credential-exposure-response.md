@@ -18,6 +18,23 @@ the same BMC account, while an associated OS record remains a separate identity.
 KB OAuth accounts, OAuth client secrets, cached tokens, Conan remotes, and SSH
 private keys follow their own authority and rotation procedure.
 
+Build an incident worksheet from non-secret records before changing an account:
+
+| Field | Safe source | If missing |
+| --- | --- | --- |
+| Task and time window | Task/Run IDs and timestamps in rollout or Runtime metadata | Include the whole uncertain window |
+| Target and transport | Target address, purpose, and SSH/Redfish/OS/KB/Conan lane metadata | Include every target the task could have selected |
+| Local selection | Credential record label, exact-address override or default, and active revision | Include all records eligible for that target and time |
+| Exposure surface | Transcript, process record, Runtime event, receipt, retry, log, or export location | Treat the surface as exposed until containment is proved |
+
+Use metadata and account labels to make the list. Do not search for the old
+password or its hash, copy raw transcripts into a ticket, or infer safety from
+the absence of a matching plaintext string. A Runtime fix protects future
+records; it cannot remove copies already present in retained transcripts,
+exports, backups, or third-party log stores. The operator who controls each
+account decides when to rotate it and records an owner and deadline for any
+account that cannot be rotated immediately.
+
 ## Rotate without losing recovery access
 
 1. Keep an independent recovery path to the device or service. Do not revoke the

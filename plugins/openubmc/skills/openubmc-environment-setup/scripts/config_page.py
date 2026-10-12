@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Current-user local configuration page for Linux and WSL."""
+"""Current-user local configuration page for Windows and Linux."""
 
 from __future__ import annotations
 
@@ -38,10 +38,28 @@ from openubmc_target_runtime.configuration import (
     ConfigurationConflict,
 )
 from openubmc_target_runtime.credential_file import (
+    configuration_home,
     read_private_text,
-    parse_credentials_text,
-    selected_credential_value,
 )
+from openubmc_target_runtime.credential_memory import import_legacy_targets
+
+
+def _platform_label():
+    if sys.platform == "win32":
+        return "Windows"
+    return "WSL" if "microsoft" in os.uname().release.lower() else "Linux"
+
+
+def _stop_owned_process(process):
+    if sys.platform == "win32":
+        subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
 
 
 def _masked(config):
@@ -96,30 +114,6 @@ def _secret_edits(config, previous):
     return value
 
 
-def import_legacy_targets(text):
-    values = parse_credentials_text(text)
-    config = {"schema_version": 1, "credentials": {}, "defaults": {}}
-    for purpose, transport in (("bmc", "ssh"), ("bmc", "redfish"), ("os", "ssh")):
-        prefix = "OPENUBMC_" + ("OS_" if purpose == "os" else "") + transport.upper()
-        record = {}
-        for field in ("user", "password", "identity_file"):
-            names = [prefix + "_" + field.upper()]
-            if (
-                purpose == "bmc"
-                and transport == "redfish"
-                and field in {"user", "password"}
-            ):
-                names.append(
-                    "REDFISH_" + ("USERNAME" if field == "user" else "PASSWORD")
-                )
-            record[field] = selected_credential_value(values, names, environ={}) or ""
-        if any(record.values()):
-            name = next((name for name, existing in config["credentials"].items() if existing == record), purpose + "-" + transport)
-            config["credentials"][name] = record
-            config["defaults"].setdefault(purpose, {})[transport] = name
-    return config
-
-
 class PluginMaintenance:
     """Bounded local operations through the immutable plugin CLI."""
 
@@ -127,34 +121,31 @@ class PluginMaintenance:
         self.root = Path(plugin_root)
         self.timeout = timeout
         self.environment = dict(os.environ if environment is None else environment)
-        self.home = Path(self.environment.get("HOME", str(Path.home())))
+        self.home = Path(self.environment.get("USERPROFILE") or self.environment.get("HOME") or Path.home())
         self.codex = Path(self.environment.get("CODEX_HOME", str(self.home/".codex")))
         self.preview_id = None
         self.preview_config = None
         self.preview_operation = None
         self.transaction = None
+        self.storage_transactions = []
 
     def command(self, *arguments):
+        options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+                   if sys.platform == "win32" else {"start_new_session": True})
         process = subprocess.Popen(
             [sys.executable, "-I", "-B", str(self.root/"scripts/pluginctl.py"),
              *arguments, "--home", str(self.home), "--codex-home", str(self.codex)],
             env=self.environment, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, start_new_session=True,
+            text=True, **options,
         )
         try:
             stdout, stderr = process.communicate(timeout=self.timeout)
         except BaseException:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+            _stop_owned_process(process)
             try:
                 process.communicate(timeout=5)
             except subprocess.TimeoutExpired:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                _stop_owned_process(process)
                 process.wait(timeout=5)
             finally:
                 process.stdout.close()
@@ -176,10 +167,30 @@ class PluginMaintenance:
 
     def dispatch(self, data):
         action = data.get("action")
+        if action == "repair-storage":
+            root_id, token = data.get("root_id"), data.get("snapshot_token")
+            if root_id not in {"data", "cache", "config", "state"} or not isinstance(token, str):
+                raise ConfigurationError("Select a current private-root snapshot")
+            report = self.command("repair-storage", "--root-id", root_id,
+                                  "--expected-token", token)
+            if not report.get("ok"):
+                raise ConfigurationConflict("Private-root snapshot changed")
+            self.storage_transactions.append((root_id, report["transaction"]))
+            return {"status": report["status"], "root_id": root_id}
+        if action == "undo-storage":
+            if not self.storage_transactions:
+                raise ConfigurationConflict("No directory repair to undo")
+            root_id, transaction = self.storage_transactions[-1]
+            report = self.command("restore-storage", "--root-id", root_id,
+                                  "--transaction", transaction)
+            if not report.get("ok"):
+                raise ConfigurationConflict("Directory changed after repair")
+            self.storage_transactions.pop()
+            return {"status": "restored", "root_id": root_id}
         if action == "status":
             report = self.command("doctor")
             config = report.get("codex_configuration", {})
-            config_home = Path(self.environment.get("XDG_CONFIG_HOME", str(self.home/".config")))
+            config_home = configuration_home(self.environment)
             sources = {
                 "targets": Path(self.environment.get("OPENUBMC_CREDENTIALS_FILE") or config_home/"openubmc/credentials.json"),
                 "conan": config_home/"openubmc/conan.json",
@@ -196,8 +207,8 @@ class PluginMaintenance:
                 except ConfigurationError:
                     local_configuration[kind] = {"configured": False, "active_revision": None, "error": "configuration_invalid"}
             execution_host = self.environment.get("OPENUBMC_EXECUTION_HOST") or (
-                "wsl" if "microsoft" in os.uname().release.lower() else "linux"
-            )
+                "windows-native" if sys.platform == "win32" else
+                "wsl" if _platform_label() == "WSL" else "linux")
             return {
                 "version": report.get("version"),
                 "source_commit": report.get("source_commit"),
@@ -288,8 +299,8 @@ class LocalConfigurationServer:
                 self.config_home / "openubmc" / "kb-mcp.json", kind="kb"
             ),
         }
-        for kind, path in (sources or {}).items():
-            self.stores[kind] = LocalConfigurationStore(path, kind=kind)
+        for source_kind, path in (sources or {}).items():
+            self.stores[source_kind] = LocalConfigurationStore(path, kind=source_kind)
         self.maintenance = maintenance
         if kind not in self.stores:
             raise ConfigurationError("Unknown configuration kind")
@@ -510,16 +521,30 @@ class LocalConfigurationServer:
 
     def state(self):
         with self._lock:
+            storage = (self.maintenance.command("storage-status")
+                       if self.maintenance is not None and sys.platform == "win32"
+                       else {"ok": True, "roots": []})
+            if not storage.get("ok"):
+                return {
+                    "storage": storage,
+                    "storage_repair": bool(self.maintenance and self.maintenance.storage_transactions),
+                    "environment": {
+                        "platform": _platform_label(),
+                        "hostname": socket.gethostname(),
+                        "config_home": str(self.config_home),
+                    },
+                    "page_session": self.page_session,
+                }
             selected = self.view(self.page_session["kind"])
             configured = bool(selected["active_revision"]) and bool(selected["readiness"]) and all(
                 item["configured"] for item in selected["readiness"]
             )
             return {
+                "storage": storage,
+                "storage_repair": bool(self.maintenance and self.maintenance.storage_transactions),
                 **{kind: self.view(kind) for kind in self.stores},
                 "environment": {
-                    "platform": "WSL"
-                    if "microsoft" in os.uname().release.lower()
-                    else "Linux",
+                    "platform": _platform_label(),
                     "hostname": socket.gethostname(),
                     "config_home": str(self.config_home),
                 },
@@ -528,9 +553,7 @@ class LocalConfigurationServer:
                 "configuration_entry": {
                     "url": self.url,
                     "reason": "configuration_ready" if configured else "configuration_required",
-                    "environment": "WSL"
-                    if "microsoft" in os.uname().release.lower()
-                    else "Linux",
+                    "environment": _platform_label(),
                 },
             }
 
@@ -786,8 +809,14 @@ def main():
     from config_checks import BoundedConfigurationChecker
     from openubmc_target_runtime.credentials import LocalCredentialSource
 
+    plugin_root = Path(__file__).resolve().parents[3]
+    maintenance = (PluginMaintenance(plugin_root)
+                   if (plugin_root/"plugin-lock.json").is_file() else None)
+    storage_ready = (maintenance is None or sys.platform != "win32"
+                     or maintenance.command("storage-status").get("ok") is True)
+
     selected = (
-        LocalCredentialSource().select_path() if args.config_home is None else None
+        LocalCredentialSource().select_path() if args.config_home is None and storage_ready else None
     )
     sources = {}
     if selected is not None:
@@ -797,9 +826,7 @@ def main():
     )
     if kb_source and args.config_home is None:
         sources["kb"] = Path(kb_source)
-    config_home = args.config_home or Path(
-        os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config"
-    )
+    config_home = args.config_home or configuration_home()
     targets = [
         {
             "ip": str(ipaddress.ip_address(host)),
@@ -818,12 +845,11 @@ def main():
             (targets[0]["ip"] if targets and args.purpose == "bmc" else None),
         wait_for_save=args.wait_for_save,
         purpose=args.purpose, transport=args.transport,
-        maintenance=PluginMaintenance(Path(__file__).resolve().parents[3])
-        if (Path(__file__).resolve().parents[3]/"plugin-lock.json").is_file() else None,
+        maintenance=maintenance,
     ) as server:
         print(server.url, flush=True)
         if args.open_browser and not args.no_browser:
-            if "microsoft" in os.uname().release.lower() and shutil.which("wslview"):
+            if _platform_label() == "WSL" and shutil.which("wslview"):
                 subprocess.Popen(
                     ["wslview", server.url],
                     stdout=subprocess.DEVNULL,

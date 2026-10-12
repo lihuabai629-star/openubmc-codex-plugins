@@ -31,6 +31,13 @@
           <span id="saved-state" class="badge">未保存</span>
         </div>
         <p id="notice" role="status" aria-live="polite"></p>
+        <section id="storage-recovery" class="storage-recovery" hidden>
+          <h3>本机目录需要修复</h3>
+          <p id="storage-message"></p>
+          <p id="storage-path" class="storage-path"></p>
+          <button type="button" id="storage-repair" class="primary" hidden>修复本机目录</button>
+          <button type="button" id="storage-recovery-undo" hidden>撤销本次目录修复</button>
+        </section>
         <form id="remember" class="remember" hidden>
           <h3>连接并记住这台设备</h3>
           <p>在此输入账号。只有连接验证成功，才会为这个 IP 保存凭据。</p>
@@ -56,7 +63,7 @@
           <button type="button" id="check">检查连接</button>
           <div id="check-results" aria-live="polite"></div>
         </details>
-        <details>
+        <details id="config-location">
           <summary>配置位置</summary>
           <p id="source-path"></p>
           <button type="button" id="import" class="quiet">重新导入原始配置</button>
@@ -75,6 +82,7 @@
             <button type="button" id="plugin-undo" hidden>撤销本次配置修复</button>
             <button type="button" id="plugin-runtime">修复 Runtime 依赖</button>
             <button type="button" id="plugin-kb">修复知识库依赖</button>
+            <button type="button" id="plugin-storage-undo" hidden>撤销本次目录修复</button>
           </div>
           <p id="plugin-result" role="status" aria-live="polite"></p>
         </details>

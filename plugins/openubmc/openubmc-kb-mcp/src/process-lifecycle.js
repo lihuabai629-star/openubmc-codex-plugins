@@ -3,10 +3,13 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  unlinkSync,
   writeFileSync
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
 import { performance } from "node:perf_hooks";
+import { ensurePrivateDirectory, hardenNewFile, windowsProcessState } from "./windows-private.js";
 
 
 export const MCP_PROCESS_LIFECYCLE_SCHEMA = "openubmc.mcp-process-lifecycle.v1";
@@ -57,6 +60,7 @@ function normalizedJsonObject(value, name) {
 
 function defaultProcessAlive(processId) {
   if (!Number.isInteger(processId) || processId <= 1) return false;
+  if (process.platform === "win32") return windowsProcessState(processId).alive === true;
   try {
     process.kill(processId, 0);
   } catch (error) {
@@ -76,6 +80,7 @@ function defaultProcessAlive(processId) {
 
 
 function defaultProcessIdentity(processId) {
+  if (process.platform === "win32") return windowsProcessState(processId).identity || "unknown";
   try {
     const stat = readFileSync(`/proc/${processId}/stat`, "utf8");
     const commandEnd = stat.lastIndexOf(")");
@@ -155,7 +160,8 @@ export class McpProcessLifecycle {
     this.exitReason = null;
     this.requestedExitReason = null;
     this.lastPersistedState = "";
-    mkdirSync(this.lifecycleRoot, { recursive: true, mode: 0o700 });
+    if (process.platform === "win32") ensurePrivateDirectory(this.lifecycleRoot);
+    else mkdirSync(this.lifecycleRoot, { recursive: true, mode: 0o700 });
     const safeComponent = this.component.replace(/[^A-Za-z0-9.-]/g, "-");
     const identityKey = this.processIdentity === "unknown"
       ? this.startedAt
@@ -262,11 +268,18 @@ export class McpProcessLifecycle {
   }
 
   persist() {
-    const temporary = `${this.recordPath}.tmp`;
+    const temporary = `${this.recordPath}.${randomUUID()}.tmp`;
     const status = this.status();
-    writeFileSync(temporary, `${JSON.stringify(status, null, 2)}\n`, "utf8");
-    chmodSync(temporary, 0o600);
-    renameSync(temporary, this.recordPath);
+    try {
+      writeFileSync(temporary, "", { flag: "wx", mode: 0o600 });
+      if (process.platform === "win32") hardenNewFile(temporary);
+      writeFileSync(temporary, `${JSON.stringify(status, null, 2)}\n`, "utf8");
+      if (process.platform !== "win32") chmodSync(temporary, 0o600);
+      renameSync(temporary, this.recordPath);
+    } catch (error) {
+      try { unlinkSync(temporary); } catch { /* No staging file remains. */ }
+      throw error;
+    }
     this.lastPersistedState = status.lifecycle_state;
   }
 

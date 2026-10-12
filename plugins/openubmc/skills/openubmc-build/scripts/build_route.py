@@ -21,6 +21,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import shutil
+import sys
 from typing import Mapping
 
 
@@ -319,10 +321,30 @@ def route_receipt(
     )
     if tool_precondition is not None:
         preconditions.append(tool_precondition)
+    build_blocker: dict[str, object] | None = None
+    if sys.platform == "win32" and owner in {
+        "openubmc-build", "openubmc-bingo-build", "openubmc-publish",
+    }:
+        required_tool = (
+            argv[0] if argv else
+            "bingo" if owner == "openubmc-bingo-build" else
+            "conan" if owner == "openubmc-publish" else "bmcgo"
+        )
+        if shutil.which(required_tool) is None:
+            build_blocker = {
+                "code": "build_environment_unavailable",
+                "execution_host": "windows-native",
+                "missing_tools": [_executable_name(required_tool)],
+            }
+            preconditions.append({
+                "name": "build_environment", "status": "failed", **build_blocker,
+            })
     ready = all(item.get("status") in {"passed", "not_required"} for item in preconditions)
     selected_tool = (
         "bmcgo" if owner == "openubmc-build" and not argv else
-        _executable_name(argv[0]) if argv and owner in {"openubmc-build", "openubmc-bingo-build"} else
+        _executable_name(argv[0]) if argv and owner in {
+            "openubmc-build", "openubmc-bingo-build", "openubmc-publish",
+        } else
         ""
     )
     receipt: dict[str, object] = {
@@ -340,6 +362,8 @@ def route_receipt(
         receipt["artifact"] = artifact
     if normalized_equivalence is not None:
         receipt["equivalence"] = normalized_equivalence
+    if build_blocker is not None:
+        receipt["blocker"] = build_blocker
     receipt["digest"] = _digest(receipt)
     return receipt
 
