@@ -1,6 +1,6 @@
 {
   "codex": "codex-cli 0.153.4",
-  "content_digest": "4ad9ddd5a2333df37c57b5b748fc40736b3486017a4cbfcd7a57785d37dd101f",
+  "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
   "desktop_ui_tested": false,
   "fresh_v2_records": true,
   "installed_export_verified": true,
@@ -15,7 +15,7 @@
   "registered_task_only_measurements": true,
   "same_task_project_switch": true,
   "schema": "openubmc.installed-host-records.qualification/v1",
-  "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
+  "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
   "two_project_bindings": true,
   "unknown_usage_retained": true,
   "version": "2.1.7"

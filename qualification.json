@@ -1,15 +1,10 @@
 {
-  "archive_sha256": "c292637f6f03d1526ee23ceab4da1d78341aeb7f3a4cd000bb98463833c25615",
-  "content_digest": "4ad9ddd5a2333df37c57b5b748fc40736b3486017a4cbfcd7a57785d37dd101f",
+  "archive_sha256": "0288586e708fa2320449f0eeaa334fe1b156ae185fc6f62ec2f3d48251034a5d",
+  "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
   "desktop_gui": "not_run",
-  "evidence_artifact_ci": {
-    "head_commit": "2af31d29435ddc57c965ef09a9df375f327c21d6",
-    "run_id": 38284275744,
-    "scope": "same immutable plugin payload; later source.json-only correction has independent green CI"
-  },
   "hosted_ci": {
     "conclusion": "success",
-    "head_commit": "be87b98271dacee495de8d74fd838695b3cb504c",
+    "head_commit": "4b5b76706bc582ef3aa490f6a298ddcfdfed1a28",
     "jobs": [
       {
         "conclusion": "success",
@@ -20,12 +15,12 @@
         "name": "Windows native plugin bootstrap"
       }
     ],
-    "run_id": 38284761334,
-    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38284761334"
+    "run_id": 38287770144,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38287770144"
   },
   "installed_host_records": {
     "codex": "codex-cli 0.153.4",
-    "content_digest": "4ad9ddd5a2333df37c57b5b748fc40736b3486017a4cbfcd7a57785d37dd101f",
+    "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
     "desktop_ui_tested": false,
     "fresh_v2_records": true,
     "installed_export_verified": true,
@@ -40,7 +35,7 @@
     "registered_task_only_measurements": true,
     "same_task_project_switch": true,
     "schema": "openubmc.installed-host-records.qualification/v1",
-    "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
+    "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
     "two_project_bindings": true,
     "unknown_usage_retained": true,
     "version": "2.1.7"
@@ -56,22 +51,22 @@
     "behavior": {
       "artifacts": {
         "passed": true,
-        "seconds": 4.815,
+        "seconds": 4.673,
         "tests": 4
       },
       "build": {
         "passed": true,
-        "seconds": 1.408,
+        "seconds": 1.359,
         "tests": 6
       },
       "credentials": {
         "passed": true,
-        "seconds": 1.241,
+        "seconds": 1.004,
         "tests": 9
       },
       "doctor": {
         "passed": true,
-        "seconds": 4.564,
+        "seconds": 4.561,
         "tests": 5
       },
       "kb_loader": {
@@ -80,45 +75,45 @@
       },
       "logs": {
         "passed": true,
-        "seconds": 0.161,
+        "seconds": 0.126,
         "tests": 3
       },
       "migration": {
         "passed": true,
-        "seconds": 7.792,
+        "seconds": 6.024,
         "tests": 17
       },
       "python_entrypoints": {
         "passed": true,
-        "seconds": 41.3,
+        "seconds": 32.858,
         "tests": 11
       },
       "skill_entry": {
         "passed": true,
-        "seconds": 32.229,
+        "seconds": 32.094,
         "tests": 10
       },
       "ssh": {
         "passed": true,
-        "seconds": 4.903,
+        "seconds": 4.722,
         "tests": 4
       },
       "startup": {
         "passed": true,
-        "seconds": 1.729,
+        "seconds": 1.287,
         "tests": 5
       },
       "upgrade": {
         "passed": true,
-        "seconds": 5.812,
+        "seconds": 5.649,
         "tests": 2
       }
     },
     "cold_dependencies": {
       "passed": true,
-      "seconds": 8.302
+      "seconds": 5.961
     },
-    "content_digest": "4ad9ddd5a2333df37c57b5b748fc40736b3486017a4cbfcd7a57785d37dd101f",
+    "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
     "dependency_locks": {
       "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
       "requirements.lock": "27e99ceb902b98111f4becff47a1f6754d951b9f57a8af3adda0b50650232f36"
@@ -169,10 +164,10 @@
     "remote_business_qualification": "not_run",
     "runtime_shutdown_verified": true,
     "schema": "openubmc.public-behavior.v1",
-    "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
+    "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
     "version": "2.1.7"
   },
-  "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
+  "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
   "status": "qualified",
   "version": "2.1.7"
 }
