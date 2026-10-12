@@ -101,6 +101,12 @@ class MdbPropertyBackendTests(unittest.TestCase):
         from importlib import import_module
         configuration = import_module(runtime.__name__ + ".configuration")
         source = Path(self.temporary.name) / "credentials.json"
+        if os.name == "nt":
+            # Simulate a previously configured private credential source on an
+            # elevated runner; normalize only this newly created fixture lock.
+            lock = source.with_name("." + source.name + ".lock")
+            lock.touch()
+            import_module(runtime.__name__ + ".windows_private").harden_new_file(lock)
         store = configuration.LocalConfigurationStore(source, kind="targets")
         saved = store.save({"schema_version": 1,
             "credentials": {"fixture": {"user": "operator", "password": "fixture-password"}},

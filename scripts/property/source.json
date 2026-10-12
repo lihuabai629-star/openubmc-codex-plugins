@@ -6,14 +6,14 @@
       "source_sha256": "3cdaa435c0827dc711f1591b205daaba0f9607ca030b7b5740f5384e8df9babd",
       "packaged_test": "scripts/property/test_mdb_property_mutation.py",
       "packaged_sha256": "24e775dc6b4c55cd789da8a60824d9d4ac8ff247e97d31cdc31fc6dd8c2a2692",
-      "adaptation": "plugin import paths; private disposable Windows roots/files; no bytecode in crash subprocess"
+      "adaptation": "plugin import paths; private disposable Windows roots/files and existing configuration lock; no bytecode in crash subprocess"
     },
     {
       "source_path": "openubmc-debug/tests/test_mdb_property_backend.py",
       "source_sha256": "e6f1ff4642cf99cf9ab657f763c1fa1121e875cdc3573a4f156093706144a0cf",
       "packaged_test": "scripts/property/test_mdb_property_backend.py",
-      "packaged_sha256": "57673b5826f06ec2a8da9597f39231eb27ebaeda70e4fe297902c2d814bc34b3",
-      "adaptation": "plugin import paths; private disposable Windows roots/files; no bytecode in crash subprocess"
+      "packaged_sha256": "6e3dfb4d8e0d8bcb32c858304bb18984e4354c4fc81ffb5a522ca375b57cc053",
+      "adaptation": "plugin import paths; private disposable Windows roots/files and existing configuration lock; no bytecode in crash subprocess"
     }
   ]
 }
