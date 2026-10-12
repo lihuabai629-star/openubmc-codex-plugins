@@ -1,9 +1,9 @@
 {
-  "content_digest": "c523b3849adc61c417b629121982aecfd97570a1c714fe6bb5f6c3d0a6a6208b",
+  "content_digest": "41212f7b44ff28b182596d7d9a62c2ce25e1b30b29a77299cb419769aab1a546",
   "desktop_gui": false,
   "live_bmc": false,
   "passed": false,
-  "source_commit": "5dd9a98ced4442c2ab2f39273b83a3a916b97a47",
+  "source_commit": "e6b80cdfa9c0ea073f6620a6a603f3c8b99056a9",
   "status": "candidate",
   "version": "2.1.7"
 }
