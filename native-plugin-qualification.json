@@ -1,5 +1,5 @@
 {
-  "content_digest": "4ad9ddd5a2333df37c57b5b748fc40736b3486017a4cbfcd7a57785d37dd101f",
+  "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
   "desktop_gui": false,
   "hosted_ci": {
     "conclusion": "success",
@@ -42,7 +42,7 @@
   "live_bmc": false,
   "passed": false,
   "scope": "Linux installed Codex loopback Host records; hosted native Windows package installation and setup protocol",
-  "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
+  "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
   "status": "candidate",
   "version": "2.1.7",
   "windows_business_protocol": "pending_real_host_installation"

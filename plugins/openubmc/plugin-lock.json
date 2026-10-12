@@ -1,8 +1,8 @@
 {
-  "content_digest": "4ad9ddd5a2333df37c57b5b748fc40736b3486017a4cbfcd7a57785d37dd101f",
+  "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
   "files": {
     ".codex-plugin/plugin.json": "8a755e7425acbe6e7ec58edb9ed29b9dabf49849f7b5d31013a622838ea8c556",
-    ".mcp.json": "f22f424878d7fdea85e789f79e77766c3759c59dba4e3588734d58395c761cc2",
+    ".mcp.json": "b0f66bb9120828b4f5428ed794bbac2e113e0e83a1c7db2fdd3f2a0c7983adb2",
     "LICENSE": "305aabc561c05723f615729cec53d3101a52c8bec99e434ebb77835826fa2701",
     "PYTHON.md": "b7f8df4bce5b7064052fb5f13e73a41e9c0845053ed9cafc90f87dde76d0480a",
     "hooks/hooks.json": "25fdd60aa92a0a109fa4ffd7c770a624485f00794d977a72318a33975831a67b",
@@ -25,9 +25,9 @@
     "openubmc-kb-mcp/src/windows-private.js": "9f70c684f3898d21767e933102f4b3f6e539a47b8ed1843282a16ddaa843e106",
     "requirements.lock": "27e99ceb902b98111f4becff47a1f6754d951b9f57a8af3adda0b50650232f36",
     "scripts/install_plugin.py": "85e9a0e739fa0acaecf3cb6637ec13ce678c6094c041388477eff7b2ed8d5967",
-    "scripts/launch_host_hook.py": "66e2ef85767c3123a264408a9c7f372afd364edd493d75fecf58958f162cbb56",
-    "scripts/launch_runtime.py": "f42069c1ae760ee79ec3f984e4182dddac2cd617131f4b5d8f2fc7f97d3e87d7",
-    "scripts/openubmc-bootstrap-host.js": "58dc8b9a99d49a495fbe1c61c7da59309c0f0c68458d7e5246b26331f8ad3dbc",
+    "scripts/launch_host_hook.py": "fb953fc76335d5f53696ab7ee2fc0ef5215eeaba03fa5b639de69f83e8aa8633",
+    "scripts/launch_runtime.py": "d9445d76ecadc1c7e57231928cc79100f4000faa6f394ebd3fc31db985e914c5",
+    "scripts/openubmc-bootstrap-host.js": "9a5b0fb32e8bf7edd34f3fcb0e83e7167c99b53b9344f436fde971e2df241924",
     "scripts/openubmc-bootstrap-operations.js": "aa3f5a125c9c1835f7fa8a1f076cbc14d5601546c6577594bccb33c1cb68dcd7",
     "scripts/openubmc-continuity-hook.js": "2d5fa7e6133d9923cd5f77f057fcb6b67d2889ad5767c8ed6a3c26da4208012a",
     "scripts/openubmc-execution-routing.js": "41c45bd86e748d889be4438ab34ad796f9377db9ecb1395dabd803450c3eb436",
@@ -368,6 +368,6 @@
     "openubmc-qemu-testing",
     "openubmc-upgrade"
   ],
-  "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
+  "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
   "version": "2.1.7"
 }
