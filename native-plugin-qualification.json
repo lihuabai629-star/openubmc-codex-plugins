@@ -3,7 +3,7 @@
   "desktop_gui": false,
   "hosted_ci": {
     "conclusion": "success",
-    "head_commit": "be87b98271dacee495de8d74fd838695b3cb504c",
+    "head_commit": "4b5b76706bc582ef3aa490f6a298ddcfdfed1a28",
     "jobs": [
       {
         "conclusion": "success",
@@ -14,12 +14,12 @@
         "name": "Windows native plugin bootstrap"
       }
     ],
-    "run_id": 38284761334,
-    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38284761334"
+    "run_id": 38287770144,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38287770144"
   },
   "installed_host_records": {
     "codex": "codex-cli 0.153.4",
-    "content_digest": "4ad9ddd5a2333df37c57b5b748fc40736b3486017a4cbfcd7a57785d37dd101f",
+    "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
     "desktop_ui_tested": false,
     "fresh_v2_records": true,
     "installed_export_verified": true,
@@ -34,16 +34,16 @@
     "registered_task_only_measurements": true,
     "same_task_project_switch": true,
     "schema": "openubmc.installed-host-records.qualification/v1",
-    "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
+    "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
     "two_project_bindings": true,
     "unknown_usage_retained": true,
     "version": "2.1.7"
   },
   "live_bmc": false,
-  "passed": false,
+  "passed": true,
   "scope": "Linux installed Codex loopback Host records; hosted native Windows package installation and setup protocol",
   "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
-  "status": "candidate",
+  "status": "qualified",
   "version": "2.1.7",
   "windows_business_protocol": "pending_real_host_installation"
 }
