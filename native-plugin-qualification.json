@@ -40,10 +40,10 @@
     "version": "2.1.7"
   },
   "live_bmc": false,
-  "passed": true,
+  "passed": false,
   "scope": "Linux installed Codex loopback Host records; hosted native Windows package installation and setup protocol",
   "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
-  "status": "qualified",
+  "status": "candidate",
   "version": "2.1.7",
   "windows_business_protocol": "pending_real_host_installation"
 }

@@ -23,8 +23,9 @@
   "release_scope": "codex-plugin",
   "release_tag": "v2.1.7",
   "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
-  "status": "qualified",
+  "status": "candidate",
   "upgrade_baseline": "2.1.6",
   "version": "2.1.7",
+  "workflow_contract_selector_commit": "839e2ea39afb64352c29c2b3a61bb37f11bf23a1",
   "workflow_source_commit": "61337999b6fc9884b2aeccaa4198251ff617572a"
 }

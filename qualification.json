@@ -51,7 +51,7 @@
     "passed": false,
     "status": "pending_installation"
   },
-  "passed": true,
+  "passed": false,
   "public_behavior": {
     "behavior": {
       "artifacts": {
@@ -172,7 +172,8 @@
     "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
     "version": "2.1.7"
   },
+  "selector_incremental_validation": "pending",
   "source_commit": "ce7c646d50e1aa9378009a2dd212a5678ae3144f",
-  "status": "qualified",
+  "status": "candidate",
   "version": "2.1.7"
 }
