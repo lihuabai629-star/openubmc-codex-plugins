@@ -11,11 +11,22 @@ function windowsChildEnvironment(environment) {
   const allowed = new Set([
     "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "PATH", "TEMP", "TMP",
     "LOCALAPPDATA", "USERPROFILE", "CODEX_HOME",
+    "OPENUBMC_MCP_CLIENT", "OPENUBMC_MCP_TASK_ID", "OPENUBMC_MCP_SESSION_ID",
+    "OPENUBMC_MCP_FORMAL_RUN", "OPENUBMC_MCP_MODEL_IDENTITY", "OPENUBMC_MCP_CODEX_IDENTITY",
+    "OPENUBMC_EVALUATION_TASK_ID",
+    "OPENUBMC_TARGET_RUNTIME_STATE_DIR", "OPENUBMC_HOST_MEASUREMENTS_FILE",
+    "OPENUBMC_HOST_PROVIDER_REPORT", "OPENUBMC_HOST_PROVIDER_REF", "OPENUBMC_HOST_EVIDENCE_KIND",
   ]);
   const result = {};
   for (const [key, value] of Object.entries(environment)) {
     if (allowed.has(key.toUpperCase())) result[key] = value;
   }
+  const localData = environment.LOCALAPPDATA || path.win32.join(environment.USERPROFILE || os.homedir(), "AppData", "Local");
+  result.XDG_CONFIG_HOME = environment.XDG_CONFIG_HOME || localData;
+  result.XDG_DATA_HOME = environment.XDG_DATA_HOME || localData;
+  result.XDG_CACHE_HOME = environment.XDG_CACHE_HOME || localData;
+  result.XDG_STATE_HOME = environment.XDG_STATE_HOME || localData;
+  result.OPENUBMC_EXECUTION_HOST = "windows-native";
   return result;
 }
 
@@ -26,7 +37,7 @@ function decodeOutput(buffer) {
   return bytes.toString(hasNuls ? "utf16le" : "utf8").replace(/^\uFEFF/, "").replace(/\0/g, "");
 }
 
-function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environment = process.env, deadlineMs = Infinity }) {
+function createHostAdapter({ pluginRoot, hostPlatform, environment = process.env, deadlineMs = Infinity }) {
   const childEnvironment = hostPlatform === "win32"
     ? windowsChildEnvironment(environment)
     : { ...environment };
@@ -43,6 +54,7 @@ function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environmen
       encoding: options.encoding || null,
       maxBuffer: options.maxBuffer || 16 * 1024 * 1024,
       timeout,
+      // A deadline-bound hook must also stop a child that ignores SIGTERM.
       killSignal: Number.isFinite(deadlineMs) ? "SIGKILL" : undefined,
       windowsHide: true,
     });
@@ -93,97 +105,6 @@ function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environmen
     }
   }
 
-  function hostConfigPath() {
-    const base = environment.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
-    return path.join(base, "openubmc", "plugin-host.json");
-  }
-
-  function readSelectedDistro() {
-    if (environment.OPENUBMC_WSL_DISTRO) return environment.OPENUBMC_WSL_DISTRO.trim();
-    try {
-      const record = JSON.parse(fs.readFileSync(hostConfigPath(), "utf8"));
-      return record && record.schema === "openubmc.plugin-host.v1" && typeof record.wsl_distro === "string"
-        ? record.wsl_distro.trim()
-        : "";
-    } catch (_error) {
-      return "";
-    }
-  }
-
-  function listDistros() {
-    const listed = run(wslExecutable, ["--list", "--quiet"]);
-    if (listed.error || listed.status !== 0) return { ok: false, distros: [] };
-    const distros = decodeOutput(listed.stdout).split(/\r?\n/)
-      .map((value) => value.trim())
-      .filter((value, index, values) => value && values.indexOf(value) === index);
-    return { ok: true, distros };
-  }
-
-  function resolveWindowsBackend() {
-    const discovered = listDistros();
-    if (!discovered.ok || discovered.distros.length === 0) {
-      return { ok: false, reason: "wsl_unavailable", distros: [] };
-    }
-    const selected = readSelectedDistro();
-    if (selected && !discovered.distros.includes(selected)) {
-      return { ok: false, reason: "selected_wsl_unavailable", distros: discovered.distros, selected_wsl: selected };
-    }
-    if (!selected && discovered.distros.length > 1) {
-      return { ok: false, reason: "wsl_selection_required", distros: discovered.distros };
-    }
-    const distro = selected || discovered.distros[0];
-    const converted = run(wslExecutable, ["-d", distro, "--exec", "wslpath", "-a", "-u", pluginRoot]);
-    const linuxRoot = decodeOutput(converted.stdout).trim();
-    if (converted.error || converted.status !== 0 || !linuxRoot.startsWith("/")) {
-      return { ok: false, reason: "plugin_path_unavailable_in_wsl", distros: discovered.distros, selected_wsl: distro };
-    }
-    const python = run(wslExecutable, ["-d", distro, "--exec", "python3", "-c", "import sys; assert sys.version_info >= (3, 11)"], { timeout: 15_000 });
-    if (python.error || python.status !== 0) {
-      return { ok: false, reason: "wsl_python_unavailable", distros: discovered.distros, selected_wsl: distro };
-    }
-    const windowsHome = environment.USERPROFILE || os.homedir();
-    const windowsCodex = environment.CODEX_HOME || path.win32.join(windowsHome, ".codex");
-    const convertHostPath = (value) => {
-      const result = run(wslExecutable, ["-d", distro, "--exec", "wslpath", "-a", "-u", value]);
-      return result.error || result.status !== 0 ? "" : decodeOutput(result.stdout).trim();
-    };
-    const linuxHostHome = convertHostPath(windowsHome);
-    const linuxCodexHome = convertHostPath(windowsCodex);
-    if (!linuxHostHome.startsWith("/") || !linuxCodexHome.startsWith("/")) {
-      return { ok: false, reason: "windows_configuration_path_unavailable_in_wsl", distros: discovered.distros, selected_wsl: distro };
-    }
-    const identityEnvironment = [];
-    for (const key of [
-      "OPENUBMC_MCP_CLIENT", "OPENUBMC_MCP_TASK_ID", "OPENUBMC_MCP_SESSION_ID",
-      "OPENUBMC_MCP_FORMAL_RUN", "OPENUBMC_MCP_MODEL_IDENTITY", "OPENUBMC_MCP_CODEX_IDENTITY",
-      "OPENUBMC_EVALUATION_TASK_ID",
-      "OPENUBMC_HOST_PROVIDER_REF", "OPENUBMC_HOST_EVIDENCE_KIND",
-    ]) {
-      const value = environment[key];
-      if (typeof value === "string" && value.length <= 4096 && !/[\0\r\n]/.test(value)) {
-        identityEnvironment.push(`${key}=${value}`);
-      }
-    }
-    for (const key of ["OPENUBMC_TARGET_RUNTIME_STATE_DIR", "OPENUBMC_HOST_MEASUREMENTS_FILE", "OPENUBMC_HOST_PROVIDER_REPORT"]) {
-      const value = environment[key];
-      if (typeof value === "string" && value.length <= 4096 && !/[\0\r\n]/.test(value)) {
-        const converted = value.startsWith("/") ? value : convertHostPath(value);
-        if (!converted.startsWith("/")) return { ok: false, reason: "host_record_path_unavailable" };
-        identityEnvironment.push(`${key}=${converted}`);
-      }
-    }
-    return {
-      ok: true,
-      command: wslExecutable,
-      prefix: ["-d", distro, "--exec", "env", "OPENUBMC_EXECUTION_HOST=windows-wsl",
-        `OPENUBMC_SELECTED_WSL_DISTRO=${distro}`, ...identityEnvironment,
-        "python3", "-I", "-B", `${linuxRoot}/scripts/pluginctl.py`],
-      distros: discovered.distros,
-      selected_wsl: distro,
-      configurationArgs: ["--home", linuxHostHome, "--codex-home", linuxCodexHome],
-    };
-  }
-
   function resolvePosixBackend() {
     const python = environment.OPENUBMC_PLUGIN_PYTHON || "python3";
     const checked = run(python, ["-c", "import sys; assert sys.version_info >= (3, 11)"], { timeout: 15_000 });
@@ -193,23 +114,32 @@ function createHostAdapter({ pluginRoot, hostPlatform, wslExecutable, environmen
   }
 
   function resolveBackend() {
-    return hostPlatform === "win32" ? resolveWindowsBackend() : resolvePosixBackend();
+    return hostPlatform === "win32" ? resolveNativeWindowsBackend() : resolvePosixBackend();
   }
 
-  function saveSelectedDistro(distro, available) {
-    if (typeof distro !== "string" || !available.includes(distro)) {
-      throw new Error("Select one of the available WSL distributions exactly as listed.");
+  function resolveNativeWindowsBackend() {
+    const requested = environment.OPENUBMC_PLUGIN_WINDOWS_PYTHON;
+    const candidates = requested ? [[requested, []]] : [["python", []], ["py", ["-3.12"]]];
+    if (!requested) {
+      const discovered = run("py", ["-0p"], { timeout: 10_000 });
+      for (const line of decodeOutput(discovered.stdout).split(/\r?\n/)) {
+        const match = line.match(/([A-Za-z]:\\[^\r\n]*?python\.exe)\s*$/i);
+        if (match) candidates.push([match[1], []]);
+      }
     }
-    const target = hostConfigPath();
-    fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
-    const temporary = `${target}.${process.pid}.tmp`;
-    fs.writeFileSync(temporary,
-      `${JSON.stringify({ schema: "openubmc.plugin-host.v1", wsl_distro: distro }, null, 2)}\n`,
-      { mode: 0o600 });
-    fs.renameSync(temporary, target);
+    const probe = "import sys; assert sys.platform == 'win32' and sys.version_info[:2] == (3, 12)";
+    for (const [python, selector] of candidates) {
+      const checked = run(python, [...selector, "-I", "-B", "-c", probe], { timeout: 15_000 });
+      if (!checked.error && checked.status === 0) {
+        return { ok: true, command: python,
+          prefix: [...selector, "-I", "-B", path.join(pluginRoot, "scripts", "pluginctl.py")],
+          configurationArgs: [], execution_host: "windows-native" };
+      }
+    }
+    return { ok: false, reason: "windows_python_unavailable", execution_host: "windows-native" };
   }
 
-  return { childEnvironment, decodeOutput, hostPlatform, packageIdentity, resolveBackend, run, saveSelectedDistro };
+  return { childEnvironment, decodeOutput, hostPlatform, packageIdentity, resolveBackend, run };
 }
 
 module.exports = { createHostAdapter, windowsChildEnvironment };

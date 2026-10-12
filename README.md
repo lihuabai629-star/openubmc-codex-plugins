@@ -1,12 +1,12 @@
 # openUBMC for Codex
 
-**Current release:** 2.1.6
+**Current release:** 2.1.7
 
 Diagnose openUBMC systems, analyze log bundles, develop components, build firmware and verify delivery with persistent Runtime evidence.
 
 ## Install
 
-Requires Codex CLI 0.153.4. Linux and WSL need Python 3.12 with pip, Node.js 20+ with npm, and Git. A native Windows installation also needs WSL with those Linux dependencies. Run:
+Requires Codex CLI 0.153.4 or newer, Python 3.12 with pip, Node.js 20+ with npm, and Git on the Codex host. Windows device operations run natively; WSL is optional for a selected build environment. Run:
 
 ```bash
 codex plugin marketplace add lihuabai629-star/openubmc-codex-plugins && codex plugin add openubmc@openubmc-public
@@ -16,7 +16,7 @@ Alternatively, add `lihuabai629-star/openubmc-codex-plugins` as a Git marketplac
 
 Start a new Codex task after installation. The first startup downloads and verifies Python/npm dependencies; allow up to ten minutes on a slow connection. Later startups reuse the verified local cache. Credentials are configured separately.
 
-On Windows, the plugin starts from Codex directly and runs Runtime and knowledge-base work in WSL. One installed distribution is selected automatically. If several distributions are installed, ask Codex to check openUBMC setup and select one; the choice is saved locally. Missing WSL or dependencies opens a recoverable setup interface instead of preventing a task from starting.
+On Windows, Runtime, knowledge-base requests, credentials and Run history stay in the Windows user profile. Missing dependencies open a recoverable setup interface instead of preventing a task from starting. Firmware builds require a separately selected capable build environment.
 
 Try: “检查 openUBMC Runtime 状态，并说明缺少哪些配置。”
 
@@ -58,9 +58,13 @@ python3 -I <plugin-directory>/scripts/pluginctl.py doctor
 python3 -I <plugin-directory>/scripts/pluginctl.py prepare --repair
 ```
 
-Ask Codex: “打开 openUBMC 本机配置，检查插件状态。” The setup flow reports the package, Windows/WSL execution host, dependencies, Runtime/KB protocol health, activated configuration revisions, duplicate registrations, KB authentication and remote target authentication separately. It can open the private loopback configuration page and repair recognized stale launch overrides or duplicate loose Skills. Custom wrappers and environment settings are retained for reconciliation.
+Ask Codex: “打开 openUBMC 本机配置，检查插件状态。” The setup flow reports the package, actual execution host, dependencies, Runtime/KB protocol health, activated configuration revisions, duplicate registrations, KB authentication and remote target authentication separately. It can open the private loopback configuration page and repair recognized stale launch overrides or duplicate loose Skills. Custom wrappers and environment settings are retained for reconciliation.
 
-`doctor` checks the same local package and user-level configuration boundaries. Neither a healthy package nor a successful protocol resume proves that a particular desktop task has recovered: reopen that task and confirm its resume result. BMC and knowledge-service authentication require separate checks. On Windows, openUBMC target execution remains in the selected WSL distribution.
+`doctor` checks the same local package and user-level configuration boundaries. Neither a healthy package nor a successful protocol resume proves that a particular desktop task has recovered: reopen that task and confirm its resume result. BMC and knowledge-service authentication require separate checks. On Windows, openUBMC target execution remains on the Windows host.
+
+## Property changes
+
+The built-in `property-update-and-verify` intent can assign one Boolean or 8/16/32-bit integer configuration property through `execute`. An operator-maintained property contract is required; the default allowlist is empty. Read [the property modification contract](plugins/openubmc/skills/openubmc-debug/references/property-modification.md) before enabling a property. Timeouts retain an unknown outcome for read-only reconciliation; compensation requires a separately authorized assignment.
 
 ## License
 

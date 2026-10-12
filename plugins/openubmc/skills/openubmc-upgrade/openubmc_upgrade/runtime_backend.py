@@ -570,7 +570,9 @@ _STABLE_ARTIFACT_FIELDS = (
     "st_ino",
     "st_size",
     "st_mtime_ns",
-    "st_ctime_ns",
+    # Windows path stat reports creation time as ctime, while fstat reports
+    # metadata-change time. Birth time is consistent across both handles.
+    "st_birthtime_ns" if sys.platform == "win32" else "st_ctime_ns",
 )
 
 

@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import errno
 import hashlib
 import json
 import math
 from pathlib import Path, PurePosixPath
 import os
-import fcntl
 import platform
 import shutil
 import signal
@@ -19,8 +19,127 @@ import sys
 import time
 import threading
 
+if sys.platform != 'win32':
+    import fcntl
+
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def local_data_home(kind: str) -> Path:
+    key = {'data': 'XDG_DATA_HOME', 'cache': 'XDG_CACHE_HOME', 'state': 'XDG_STATE_HOME',
+           'config': 'XDG_CONFIG_HOME'}[kind]
+    if os.environ.get(key):
+        return Path(os.environ[key]).expanduser()
+    if sys.platform == 'win32':
+        return Path(os.environ.get('LOCALAPPDATA') or Path.home()/'AppData/Local')
+    suffix = {'data': '.local/share', 'cache': '.cache', 'state': '.local/state',
+              'config': '.config'}[kind]
+    return Path.home()/suffix
+
+
+def verified_windows_private(content: dict[str, bytes]):
+    import types
+    module = types.ModuleType('_verified_openubmc_windows_private')
+    path = 'skills/openubmc-target-runtime/openubmc_target_runtime/windows_private.py'
+    exec(compile(content[path], '<verified-windows-private>', 'exec'), module.__dict__)
+    return module
+
+
+def windows_private_roots() -> dict[str, Path]:
+    return {
+        'data': local_data_home('data')/'openubmc',
+        'cache': local_data_home('cache')/'openubmc',
+        'config': local_data_home('config')/'openubmc',
+        'state': local_data_home('state')/'openubmc-agent-workflow',
+    }
+
+
+def windows_storage_status(content: dict[str, bytes]) -> dict[str, object]:
+    if sys.platform != 'win32':
+        return {'ok': True, 'roots': []}
+    module = verified_windows_private(content)
+    grouped = {}
+    for root_id, path in windows_private_roots().items():
+        key = os.path.normcase(os.path.abspath(path))
+        if key in grouped:
+            grouped[key]['capabilities'].append(root_id)
+            continue
+        grouped[key] = {'root_id': root_id, 'capabilities': [root_id], 'path': str(path),
+                        **module.private_directory_recovery_status(path)}
+    roots = list(grouped.values())
+    ok = all(root['status'] == 'ready' for root in roots)
+    return {'ok': ok, 'error_code': None if ok else 'windows_private_root_conflict',
+            'recovery_action': None if ok else 'Open the local openUBMC configuration page to repair the listed current-user directory.',
+            'roots': roots}
+
+
+def repair_windows_storage(content: dict[str, bytes], root_id: str, expected_token: str) -> dict[str, object]:
+    if sys.platform != 'win32' or root_id not in windows_private_roots():
+        raise ValueError('private_root_unknown')
+    module = verified_windows_private(content)
+    root = windows_private_roots()[root_id]
+    transaction = module.repair_inherited_read_directory(root, expected_token=expected_token)
+    return {'ok': True, 'status': 'repaired', 'root_id': root_id, 'transaction': transaction,
+            'private_roots': windows_storage_status(content)}
+
+
+def restore_windows_storage(content: dict[str, bytes], root_id: str, transaction: str) -> dict[str, object]:
+    if sys.platform != 'win32' or root_id not in windows_private_roots():
+        raise ValueError('private_root_unknown')
+    module = verified_windows_private(content)
+    module.restore_inherited_read_directory(windows_private_roots()[root_id], transaction=transaction)
+    return {'ok': True, 'status': 'restored', 'root_id': root_id,
+            'private_roots': windows_storage_status(content)}
+
+
+def ensure_windows_private_roots(content: dict[str, bytes]) -> None:
+    if sys.platform != 'win32':
+        return
+    module = verified_windows_private(content)
+    for root in sorted(set(windows_private_roots().values())):
+        module.ensure_private_directory(root)
+
+
+def _acquire_cache_lock(stream, *, blocking: bool) -> None:
+    if sys.platform == 'win32':
+        import msvcrt
+        stream.seek(0)
+        if os.fstat(stream.fileno()).st_size == 0:
+            stream.write('\0')
+            stream.flush()
+        stream.seek(0)
+        msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK, 1)
+    else:
+        fcntl.flock(stream, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
+
+
+@contextmanager
+def file_lock(stream, *, exclusive: bool = True, blocking: bool = True):
+    if sys.platform == 'win32':
+        import msvcrt
+        stream.seek(0)
+        if os.fstat(stream.fileno()).st_size == 0:
+            stream.write('\0')
+            stream.flush()
+        stream.seek(0)
+        mode = msvcrt.LK_LOCK if blocking else msvcrt.LK_NBLCK
+        try:
+            msvcrt.locking(stream.fileno(), mode, 1)
+        except OSError as exc:
+            raise ValueError('Dependency cache lock timed out') from exc
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+    else:
+        mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+        fcntl.flock(stream, mode | (0 if blocking else fcntl.LOCK_NB))
+        try:
+            yield
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
 
 
 class DependencyCancelled(ValueError):
@@ -130,7 +249,10 @@ def dependency_root(content: dict[str, bytes], capability: str) -> Path:
     else:
         raise ValueError('Unknown dependency capability')
     key = hashlib.sha256(canonical(identity)).hexdigest()
-    data = Path(os.environ.get('XDG_DATA_HOME') or Path.home()/'.local/share')
+    data = local_data_home('data')
+    if sys.platform == 'win32':
+        # The Windows path budget also includes deep npm package members.
+        return data/'openubmc/d'/capability/key[:32]
     return data/'openubmc/plugin-dependencies'/capability/key
 
 
@@ -145,7 +267,10 @@ def dependency_inventory(root: Path) -> dict:
                 raise ValueError('dependency symlink escapes its cache')
             result[relative] = {'link': os.readlink(path)}
         elif path.is_file():
-            result[relative] = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'mode': path.stat().st_mode & 0o777}
+            identity = {'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+            if sys.platform != 'win32':
+                identity['mode'] = path.stat().st_mode & 0o777
+            result[relative] = identity
     return result
 
 
@@ -190,13 +315,28 @@ def _dependency_failure_code(stage: str, output: bytes) -> str:
     return 'dependency_prepare_failed'
 
 
+def npm_command() -> list[str]:
+    if sys.platform != 'win32':
+        return ['npm']
+    npm = shutil.which('npm.cmd')
+    node = shutil.which('node.exe')
+    cli = Path(npm).parent/'node_modules/npm/bin/npm-cli.js' if npm else None
+    if not node or cli is None or not cli.is_file():
+        print(json.dumps({'stage': 'npm', 'status': 'failed', 'error_code': 'npm_unavailable'},
+                         sort_keys=True), file=sys.stderr, flush=True)
+        raise DependencyPreparationError('npm_unavailable', 'Node.js and npm are required')
+    # Own the actual installer process before sealing the dependency receipt.
+    return [node, str(cli)]
+
+
 def _run_dependency_command(command: list[str], env: dict[str, str], *, timeout: float, stage: str, mutex_fd: int) -> None:
     """Stop the complete owned process group before cache cleanup or retry."""
     started=time.monotonic()
     output = tempfile.TemporaryFile()
     try:
-        process = subprocess.Popen(command, env=env, stdout=output, stderr=subprocess.STDOUT,
-                                   start_new_session=True, pass_fds=(mutex_fd,))
+        options = ({'creationflags': subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
+                   if sys.platform == 'win32' else {'start_new_session': True, 'pass_fds': (mutex_fd,)})
+        process = subprocess.Popen(command, env=env, stdout=output, stderr=subprocess.STDOUT, **options)
     except FileNotFoundError as exc:
         output.close()
         code = 'npm_unavailable' if stage == 'npm' else 'pip_unavailable'
@@ -223,10 +363,16 @@ def _run_dependency_command(command: list[str], env: dict[str, str], *, timeout:
         print(json.dumps({'stage': stage, 'status': 'completed', 'pid':process.pid, 'elapsed_seconds':time.monotonic()-started}, sort_keys=True), file=sys.stderr, flush=True)
     finally:
         # Even a successfully reaped parent can leave descendants holding pipes.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        if sys.platform == 'win32':
+            if process.poll() is None:
+                subprocess.run(['taskkill.exe', '/PID', str(process.pid), '/T', '/F'],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
+        else:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
         process.wait()
         output.close()
 
@@ -240,14 +386,15 @@ def prepare_dependencies(content: dict[str, bytes], repair: bool, *, capability:
         deadline = time.monotonic() + max(0.1, lock_timeout)
         while True:
             try:
-                fcntl.flock(mutex, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                _acquire_cache_lock(mutex, blocking=False)
                 break
             except OSError as exc:
-                if exc.errno != errno.EWOULDBLOCK or time.monotonic() >= deadline:
+                if (sys.platform != 'win32' and exc.errno != errno.EWOULDBLOCK) or time.monotonic() >= deadline:
                     raise ValueError('Dependency cache lock timed out') from exc
                 time.sleep(0.05)
-        staging = root.parent / (root.name + '.staging')
-        backup = root.parent / (root.name + '.previous')
+        short_name = root.name[:16] if sys.platform == 'win32' else root.name
+        staging = root.parent / (short_name + '.staging')
+        backup = root.parent / (short_name + '.previous')
         for path in (root, staging, backup):
             if path.is_symlink():
                 raise ValueError('Dependency cache must not be a symbolic link')
@@ -276,7 +423,7 @@ def prepare_dependencies(content: dict[str, bytes], repair: bool, *, capability:
             knowledge.mkdir()
             for name in ('package.json', 'package-lock.json'):
                 (knowledge/name).write_bytes(content['openubmc-kb-mcp/'+name])
-            command = ['npm', 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund', '--prefix', str(knowledge)]
+            command = [*npm_command(), 'ci', '--ignore-scripts', '--omit=dev', '--no-audit', '--no-fund', '--prefix', str(knowledge)]
             if offline:
                 command.append('--offline')
         commands = [command]
@@ -330,9 +477,11 @@ def prepare_dependencies(content: dict[str, bytes], repair: bool, *, capability:
     return root
 
 
-def execution_snapshot(content: dict[str, bytes], lock: dict, dependencies: Path) -> Path:
+def execution_snapshot_plan(content: dict[str, bytes], lock: dict,
+                            dependencies: Path) -> tuple[dict, dict, Path, str]:
     record = check_dependencies(dependencies)
-    expected = {name: {'sha256': hashlib.sha256(data).hexdigest(), 'mode': 0o500 if name.endswith('.sh') else 0o400}
+    expected = {name: {'sha256': hashlib.sha256(data).hexdigest(),
+                       **({} if sys.platform == 'win32' else {'mode': 0o500 if name.endswith('.sh') else 0o400})}
                 for name, data in content.items()}
     dependency_paths = {}
     for name, identity in record['files'].items():
@@ -345,13 +494,25 @@ def execution_snapshot(content: dict[str, bytes], lock: dict, dependencies: Path
         expected[destination] = identity
         dependency_paths[destination] = name
     key = hashlib.sha256(canonical({'plugin': lock['content_digest'], 'files': expected})).hexdigest()
-    cache = Path(os.environ.get('XDG_CACHE_HOME') or Path.home()/'.cache')/'openubmc/plugin-executions'
+    cache = local_data_home('cache')/('openubmc/x' if sys.platform == 'win32' else 'openubmc/plugin-executions')
+    if sys.platform == 'win32':
+        key = key[:32]
+    return expected, dependency_paths, cache, key
+
+
+def execution_snapshot(content: dict[str, bytes], lock: dict, dependencies: Path) -> Path:
+    expected, dependency_paths, cache, key = execution_snapshot_plan(content, lock, dependencies)
     cache.mkdir(parents=True, exist_ok=True)
     snapshot = cache/key
     with (cache/(key+'.lock')).open('a') as mutex:
-        fcntl.flock(mutex, fcntl.LOCK_EX)
+        _acquire_cache_lock(mutex, blocking=True)
+        for stale in cache.glob('.prepare-' + key[:12] + '-*'):
+            if stale.is_symlink():
+                raise ValueError('Execution snapshot staging must not be a symbolic link')
+            if stale.is_dir():
+                shutil.rmtree(stale)
         if not snapshot.exists():
-            with tempfile.TemporaryDirectory(prefix='.prepare-', dir=cache) as temporary:
+            with tempfile.TemporaryDirectory(prefix='.prepare-' + key[:12] + '-', dir=cache) as temporary:
                 stage = Path(temporary)/'snapshot'
                 stage.mkdir()
                 for name, identity in expected.items():
@@ -364,7 +525,8 @@ def execution_snapshot(content: dict[str, bytes], lock: dict, dependencies: Path
                         if hashlib.sha256(data).hexdigest() != identity['sha256']:
                             raise ValueError('Dependency cache changed during snapshot creation')
                         path.write_bytes(data)
-                        path.chmod(identity['mode'])
+                        if 'mode' in identity:
+                            path.chmod(identity['mode'])
                 if dependency_inventory(stage) != expected:
                     raise ValueError('Execution snapshot inventory mismatch')
                 stage.rename(snapshot)
@@ -391,7 +553,8 @@ def local_credentials_status(content: dict[str, bytes]) -> dict[str, object]:
     loaded = {prefix: package}
     sys.modules[prefix] = package
     try:
-        for name in ('credential_file', 'configuration', 'credentials'):
+        names = (('windows_private',) if sys.platform == 'win32' else ()) + ('credential_file', 'configuration', 'credentials')
+        for name in names:
             module = types.ModuleType(prefix + '.' + name)
             module.__package__ = prefix
             sys.modules[module.__name__] = loaded[module.__name__] = module
@@ -413,14 +576,15 @@ def local_configuration_status(content: dict[str, bytes]) -> dict[str, object]:
     sys.modules[prefix] = package
     try:
         modules = {}
-        for name in ('credential_file', 'configuration'):
+        names = (('windows_private',) if sys.platform == 'win32' else ()) + ('credential_file', 'configuration')
+        for name in names:
             module = types.ModuleType(prefix + '.' + name)
             module.__package__ = prefix
             sys.modules[module.__name__] = loaded[module.__name__] = module
             path = 'skills/openubmc-target-runtime/openubmc_target_runtime/' + name + '.py'
             exec(compile(content[path], '<verified-' + name + '>', 'exec'), module.__dict__)
             modules[name] = module
-        config_home = Path(os.environ.get('XDG_CONFIG_HOME') or Path.home()/'.config')/'openubmc'
+        config_home = local_data_home('config')/'openubmc'
         sources = {
             'targets': config_home/'credentials.json',
             'kb': config_home/'kb-mcp.json',
@@ -454,7 +618,7 @@ def cleanup_retired_processes(content: dict[str, bytes], lock: dict) -> dict[str
     exec(compile(content[path], '<verified-mcp-lifecycle>', 'exec'), module.__dict__)
     configured = os.environ.get('OPENUBMC_MCP_LIFECYCLE_DIR', '').strip()
     root = Path(configured).expanduser().absolute() if configured else (
-        Path.home()/'.local/state/openubmc-agent-workflow/mcp-processes').absolute()
+        (local_data_home('state')/'openubmc-agent-workflow/mcp-processes').absolute())
     before = module.inspect_mcp_process_records(root)
     retired = [item for item in before if item.get('source_commit') != lock['source_commit']]
     cleaned = module.cleanup_retired_orphaned_mcp_processes(
@@ -503,7 +667,7 @@ def probe_server(command: str, content: dict[str, bytes], lock: dict, knowledge_
     server_info_valid = isinstance(server_value, dict)
     ok = initialized and server_info_valid and names == expected and process.returncode == 0 and version_matches
     return {'ok': ok, 'server': server, 'version_matches_package': version_matches,
-            'timed_out': timed_out,
+            'exit_code': process.returncode, 'timed_out': timed_out,
             'tools': sorted(names), 'stderr': stderr[-1000:] if not ok else ''}
 
 
@@ -513,10 +677,27 @@ def write_timing(path: Path | None, stage: str, started: float) -> None:
             stream.write(json.dumps({'stage': stage, 'elapsed_seconds': time.monotonic()-started})+'\n')
 
 
+def run_verified_backend(argv: list[str], env: dict[str, str]) -> int:
+    if sys.platform != 'win32':
+        os.execvpe(argv[0], argv, env)
+        return 0
+    # The Windows CRT exec family does not preserve Python -c arguments with
+    # spaces.  Spawn with subprocess's Windows command-line quoting and retain
+    # ownership of the child until its stdio session closes.
+    child = subprocess.Popen(argv, env=env, stdin=sys.stdin, stdout=sys.stdout,
+                             stderr=sys.stderr, creationflags=subprocess.CREATE_NO_WINDOW)
+    try:
+        return child.wait()
+    except BaseException:
+        if child.poll() is None:
+            child.terminate()
+            child.wait(timeout=5)
+        raise
+
+
 def launch(command: str, content: dict[str, bytes], lock: dict, timings: Path | None = None, page_args: list[str] | None = None) -> int:
     argv, env = launch_plan(command, content, lock, timings, page_args)
-    os.execvpe(argv[0], argv, env)
-    return 0
+    return run_verified_backend(argv, env)
 
 
 def launch_plan(command: str, content: dict[str, bytes], lock: dict, timings: Path | None = None,
@@ -527,13 +708,13 @@ def launch_plan(command: str, content: dict[str, bytes], lock: dict, timings: Pa
         argv = [sys.executable, '-I', '-B', str(ROOT/'skills/openubmc-environment-setup/scripts/config_page.py'), *(page_args or [])]
         return argv, node_environment()
     started = time.monotonic()
-    dependencies = dependency_root(content, "runtime" if command in {"configure", "host-hook", "records", "export-records", "verify-records", "prune-records", "test-record"} else command)
+    dependencies = dependency_root(content, "runtime" if command in {"configure", "host-hook", "records", "export-records", "verify-records", "prune-records"} else command)
     write_timing(timings, 'dependency_identity', started)
     if not (dependencies/'receipt.json').is_file():
         raise ValueError('Dependencies are not prepared; run pluginctl.py prepare')
     started = time.monotonic()
     with (dependencies.parent/(dependencies.name+'.lock')).open('a') as mutex:
-        fcntl.flock(mutex, fcntl.LOCK_SH)
+        _acquire_cache_lock(mutex, blocking=True)
         write_timing(timings, 'dependency_lock', started)
         started = time.monotonic()
         snapshot = execution_snapshot(content, lock, dependencies)
@@ -541,8 +722,8 @@ def launch_plan(command: str, content: dict[str, bytes], lock: dict, timings: Pa
     env = node_environment()
     env['OPENUBMC_MCP_SOURCE_COMMIT'] = lock['source_commit']
     env['OPENUBMC_PLUGIN_CONTENT_DIGEST'] = lock['content_digest']
-    if command in {'host-hook', 'records', 'export-records', 'verify-records', 'prune-records', 'test-record'}:
-        host_command = {'host-hook': 'hook', 'records': 'handoff', 'export-records': 'export', 'verify-records': 'verify', 'prune-records': 'prune', 'test-record': 'test-record'}[command]
+    if command in {'host-hook', 'records', 'export-records', 'verify-records', 'prune-records'}:
+        host_command = {'host-hook': 'hook', 'records': 'handoff', 'export-records': 'export', 'verify-records': 'verify', 'prune-records': 'prune'}[command]
         argv = [sys.executable, '-I', '-B', '-c',
                 'import sys,runpy;sys.path.insert(0,sys.argv[1]);sys.argv=sys.argv[2:];runpy.run_path(sys.argv[0],run_name="__main__")',
                 str(snapshot/'python-packages'), str(snapshot/'scripts/launch_host_hook.py'), host_command, *(page_args or [])]
@@ -551,6 +732,9 @@ def launch_plan(command: str, content: dict[str, bytes], lock: dict, timings: Pa
                 'import sys,runpy;sys.path.insert(0,sys.argv[1]);runpy.run_path(sys.argv[2],run_name="__main__")',
                 str(snapshot/'python-packages'), str(snapshot/'scripts/launch_runtime.py')]
     else:
+        if sys.platform == 'win32':
+            env['OPENUBMC_WINDOWS_PYTHON'] = sys.executable
+            env['OPENUBMC_WINDOWS_HELPER'] = str(snapshot/'skills/openubmc-target-runtime/tools/windows_platform_helper.py')
         argv = ['node', str(snapshot/'openubmc-kb-mcp/src/server.js')]
     # Preserve the direct Codex parent across launch. Execution caches contain
     # only verified release/dependency bytes and persist independently of state.
@@ -569,13 +753,8 @@ def positive_timeout(value: str) -> float:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'host-hook', 'records', 'export-records', 'verify-records', 'prune-records', 'test-record', 'configure', 'migrate', 'repair-overrides', 'restore-legacy', 'cleanup-retired'])
+    parser.add_argument('command', choices=['verify', 'prepare', 'doctor', 'runtime', 'kb', 'host-hook', 'records', 'export-records', 'verify-records', 'prune-records', 'configure', 'migrate', 'repair-overrides', 'restore-legacy', 'cleanup-retired', 'storage-status', 'repair-storage', 'restore-storage'])
     parser.add_argument('--task-id')
-    parser.add_argument('--run-id')
-    parser.add_argument('--repo-ref')
-    parser.add_argument('--command-ref')
-    parser.add_argument('--timeout', type=positive_timeout, default=600)
-    parser.add_argument('--test-command', nargs=argparse.REMAINDER)
     parser.add_argument('--output-directory', type=Path)
     parser.add_argument('--record-file', type=Path)
     parser.add_argument('--evidence', type=Path)
@@ -590,6 +769,8 @@ def main() -> int:
     migration_mode.add_argument('--remove', dest='migration_mode', action='store_const', const='remove', help='Remove owned legacy registrations and Skill links')
     parser.add_argument('--preview', action='store_true', help='Inspect migration without changing files')
     parser.add_argument('--target-plugin', default='openubmc@openubmc-public', help='Plugin registration to preserve during migration')
+    parser.add_argument('--root-id', choices=['data', 'cache', 'config', 'state'])
+    parser.add_argument('--expected-token')
     parser.add_argument('--no-browser', action='store_true')
     parser.add_argument('--kind', choices=['targets', 'kb', 'conan'], default='targets')
     parser.add_argument('--focus-target')
@@ -616,6 +797,28 @@ def main() -> int:
         started = time.monotonic()
         lock, content = verify()
         write_timing(args.timings, 'verify', started)
+        if args.command == 'storage-status':
+            storage = windows_storage_status(content)
+            print(json.dumps(storage, sort_keys=True))
+            return 0 if storage['ok'] else 2
+        if args.command == 'repair-storage':
+            if not args.root_id or not args.expected_token:
+                raise ValueError('private_root_repair_requires_snapshot')
+            print(json.dumps(repair_windows_storage(content, args.root_id, args.expected_token), sort_keys=True))
+            return 0
+        if args.command == 'restore-storage':
+            if not args.root_id or not args.transaction:
+                raise ValueError('private_root_restore_requires_transaction')
+            print(json.dumps(restore_windows_storage(content, args.root_id, args.transaction), sort_keys=True))
+            return 0
+        if args.command in {'prepare', 'runtime', 'kb', 'host-hook', 'doctor'}:
+            storage = windows_storage_status(content)
+            if not storage['ok']:
+                print(json.dumps(storage, sort_keys=True),
+                      file=sys.stdout if args.command == 'doctor' else sys.stderr)
+                return 2
+        if args.command in {'prepare', 'runtime', 'kb', 'host-hook'}:
+            ensure_windows_private_roots(content)
         knowledge_package = json.loads(content['openubmc-kb-mcp/package.json'])
         knowledge_mcp_version = knowledge_package.get('version')
         report = {'ok': True, 'source_commit': lock['source_commit'], 'version': lock['version'],
@@ -643,9 +846,13 @@ def main() -> int:
             signal.signal(signal.SIGINT, _cancel_dependency_process)
             capabilities = ('runtime', 'kb') if args.capability == 'all' else (args.capability,)
             roots = {}
+            snapshots = {}
             for capability in capabilities:
-                roots[capability] = str(prepare_dependencies(content, args.repair, capability=capability, offline=args.offline, retries=args.retries, pip_timeout=args.pip_timeout, npm_timeout=args.npm_timeout, lock_timeout=args.lock_timeout))
+                root = prepare_dependencies(content, args.repair, capability=capability, offline=args.offline, retries=args.retries, pip_timeout=args.pip_timeout, npm_timeout=args.npm_timeout, lock_timeout=args.lock_timeout)
+                roots[capability] = str(root)
+                snapshots[capability] = str(execution_snapshot(content, lock, root))
             report['capability_dependencies'] = roots
+            report['capability_snapshots'] = snapshots
             report['dependencies'] = roots.get('runtime', roots.get('kb'))
         elif args.command == 'configure':
             page_args=['--purpose',args.purpose,'--transport',args.transport,'--home',str(args.home)]
@@ -656,19 +863,18 @@ def main() -> int:
             page_args.append('--no-browser' if args.no_browser else '--open-browser')
             for target in args.target: page_args.extend(['--target',target])
             return launch('configure',content,lock,page_args=page_args)
-        elif args.command in {'records', 'export-records', 'verify-records', 'prune-records', 'test-record'}:
+        elif args.command in {'records', 'export-records', 'verify-records', 'prune-records'}:
             host_args = []
-            for flag in ('task_id', 'run_id', 'repo_ref', 'command_ref', 'timeout', 'output_directory', 'record_file', 'evidence', 'before_timestamp'):
+            for flag in ('task_id', 'output_directory', 'record_file', 'evidence', 'before_timestamp'):
                 value = getattr(args, flag)
                 if value is not None:
                     host_args.extend(['--' + flag.replace('_', '-'), str(value)])
             if args.apply:
                 host_args.append('--apply')
-            if args.test_command:
-                host_args.extend(['--test-command', *args.test_command])
             return launch(args.command, content, lock, page_args=host_args)
         elif args.command == 'host-hook':
-            return launch('host-hook', content, lock, args.timings)
+            # Advisory hooks reuse prepared dependencies; never install at turn end.
+            return launch('host-hook', content, lock)
         elif args.command in ('runtime', 'kb'):
             if args.prepare_on_start and not (dependency_root(content, args.command)/'receipt.json').is_file():
                 prepare_for_start(content, args.command)
@@ -686,6 +892,10 @@ def main() -> int:
                     root = dependency_root(content, capability)
                     check_dependencies(root)
                     status.update(dependencies_ready=True, dependencies=str(root))
+                    if sys.platform == 'win32':
+                        _expected, _paths, cache, key = execution_snapshot_plan(content, lock, root)
+                        if not (cache/key).is_dir():
+                            raise ValueError('Execution snapshot is not prepared; run pluginctl.py prepare')
                     health = probe_server(capability, content, lock, knowledge_mcp_version)
                     status['startup_ready'] = health['ok']
                 except (OSError, ValueError, subprocess.SubprocessError) as error:

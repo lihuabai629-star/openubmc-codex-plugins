@@ -102,6 +102,7 @@ class TaskIntentKind(str, Enum):
     LIVE_PATCH = "live-patch"
     ROLLBACK = "rollback"
     UPGRADE_AND_VERIFY = "upgrade-and-verify"
+    PROPERTY_UPDATE_AND_VERIFY = "property-update-and-verify"
     BUNDLE_AND_DIAGNOSE = "bundle-and-diagnose"
 
     @classmethod
@@ -116,6 +117,7 @@ class TaskIntentKind(str, Enum):
             "live-patch": cls.LIVE_PATCH,
             "rollback": cls.ROLLBACK,
             "upgrade-and-verify": cls.UPGRADE_AND_VERIFY,
+            "property-update-and-verify": cls.PROPERTY_UPDATE_AND_VERIFY,
             "bundle-and-diagnose": cls.BUNDLE_AND_DIAGNOSE,
         }
         try:

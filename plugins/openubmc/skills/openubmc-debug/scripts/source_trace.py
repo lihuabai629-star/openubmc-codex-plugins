@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only, source-bound Lua call references; never runtime execution proof."""
+"""Read-only Lua call references and indexed source navigation; never execution proof."""
 from __future__ import annotations
 
 if __name__ == '__main__':
@@ -306,16 +306,42 @@ def inspect_source(source_root: str, symbol: str, *, max_files: int = 256,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", required=True)
-    parser.add_argument("--symbol", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--symbol")
+    mode.add_argument("--query", help="Search the incremental local source index")
     parser.add_argument("--max-files", type=int, default=256)
     parser.add_argument("--max-file-bytes", type=int, default=262144)
     parser.add_argument("--max-matches", type=int, default=80)
     parser.add_argument("--timeout", type=float, default=5.0)
+    parser.add_argument("--index-path", help="Optional disposable SQLite cache path for --query")
+    parser.add_argument("--index-max-files", type=int, default=4096)
+    parser.add_argument("--max-results", type=int, default=12)
+    parser.add_argument("--kb-result-file", help="Optional saved openubmc_kb_query MCP JSON receipt")
     args = parser.parse_args(argv)
     try:
-        result = inspect_source(args.source_root, args.symbol, max_files=args.max_files,
-                                max_file_bytes=args.max_file_bytes, max_matches=args.max_matches,
-                                timeout=args.timeout)
+        if args.query is not None:
+            from _workflow_source import navigate_source
+            receipt = None
+            if args.kb_result_file:
+                path = Path(args.kb_result_file)
+                if path.is_symlink():
+                    raise ValueError("KB receipt must be a regular file")
+                fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) |
+                             getattr(os, "O_NONBLOCK", 0))
+                with os.fdopen(fd, "rb") as stream:
+                    if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                        raise ValueError("KB receipt must be a regular file")
+                    raw = stream.read(65537)
+                if len(raw) > 65536:
+                    raise ValueError("KB receipt exceeds 64 KiB")
+                receipt = json.loads(raw)
+            result = navigate_source(args.source_root, args.query, index_path=args.index_path,
+                                     kb_receipt=receipt, max_results=args.max_results,
+                                     max_files=args.index_max_files, timeout=args.timeout)
+        else:
+            result = inspect_source(args.source_root, args.symbol, max_files=args.max_files,
+                                    max_file_bytes=args.max_file_bytes, max_matches=args.max_matches,
+                                    timeout=args.timeout)
     except ValueError as error:
         parser.error(str(error))
     print(json.dumps(result, ensure_ascii=False))

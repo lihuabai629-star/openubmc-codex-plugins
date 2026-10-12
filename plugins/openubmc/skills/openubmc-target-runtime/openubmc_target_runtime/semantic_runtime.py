@@ -1786,6 +1786,14 @@ def decode_run_command(
             raise AgentGatewayError(
                 "entry_arguments requires entry_operation"
             )
+        if intent == "property-update-and-verify" or entry_operation == "mdb_property_modify":
+            if targets or intent != "property-update-and-verify" or entry_operation != "mdb_property_modify":
+                raise AgentGatewayError("property modify requires its intent, entry operation and one target")
+            allowed_property_fields = {"contract_id", "expected_value", "value", "object", "interface", "property", "ssh_port"}
+            if set(entry_arguments) - allowed_property_fields:
+                raise AgentGatewayError("unsupported property entry_arguments")
+            if not {"contract_id", "expected_value", "value"} <= set(entry_arguments):
+                raise AgentGatewayError("property modify requires contract_id, expected_value and value")
         ports = {
             name: action.get(name, entry_arguments.get(name, default))
             for name, default in (("ssh_port", 22), ("telnet_port", 23), ("redfish_port", 443))

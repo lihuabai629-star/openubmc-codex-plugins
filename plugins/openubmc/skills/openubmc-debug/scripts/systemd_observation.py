@@ -134,7 +134,7 @@ def collect_systemd(names, run_ssh, *, deadline, secret_values=()):
             show = 'LC_ALL=C systemctl --system show --no-pager --property=' + ','.join(PROPERTIES) + ' -- ' + shlex.quote(name)
             before = parse_properties(command(show), name)
             journal_command = ('LC_ALL=C journalctl --system --no-pager --quiet --output=json --output-fields='
-                               + ','.join(JOURNAL_FIELDS) + ' --boot=' + boot + ' --lines=100 '
+                               + ','.join(JOURNAL_FIELDS) + ' --boot=' + boot.replace('-', '') + ' --lines=100 '
                                + '_SYSTEMD_UNIT=' + shlex.quote(name)
                                + ' _SYSTEMD_INVOCATION_ID=' + before['InvocationID']
                                + ' + _BOOT_ID=' + boot.replace('-', '')

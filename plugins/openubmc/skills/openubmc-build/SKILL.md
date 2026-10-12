@@ -30,6 +30,13 @@ only; it does not close a deployment or runtime-verification Gate. A complete
 tool-equivalence claim remains pending until the Build Plan binds it to actual
 checkout, command, dependency lock, artifact, and release gates.
 
+On native Windows, device Runtime remains available without a compiler, Conan,
+or Bingo. If a build request has no selected capable build host, return the
+typed `build_environment_unavailable` blocker with the actual host and missing
+tools; leave any Build Gate pending. Use WSL only when the task explicitly
+selects it as a build environment. Device operations stay on their bound
+Windows Runtime.
+
 Choose one mode before any persistent write:
 
 | Mode | Use when | Default persistent writes |

@@ -1765,6 +1765,8 @@ class RunEngine:
                 [],
             )
             if status == "partial" and (
+                not any(field in raw_payload for field in ("verified_findings", "remaining_work", "blocked_by"))
+            ) and (
                 not payload.get("component_validation")
                 or payload.get("change_impact", prior_impact) is None
             ):

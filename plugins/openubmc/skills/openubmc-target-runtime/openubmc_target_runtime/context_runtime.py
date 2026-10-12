@@ -6922,6 +6922,14 @@ class ContextRuntime:
         if operation == "debug_collect":
             arguments.setdefault("profile", "standard")
             arguments = enforce_fresh_verification(arguments)
+        if operation == "mdb_property_verify":
+            preceding = [item for item in projection.get("operations", [])
+                if isinstance(item, Mapping) and item.get("operation") == "mdb_property_modify"
+                and item.get("status") == "completed"
+                and item.get("workflow_cycle_id") == projection.get("workflow_cycle_id", "cycle-1")]
+            if len(preceding) != 1:
+                raise ValueError("property verifier requires one completed mutation in this Run")
+            arguments["_runtime_property_mutation_id"] = preceding[0]["operation_id"]
         if operation == "live_patch_run":
             developer = completed_phases.get("developer.change", {})
             artifact_ref = developer.get("artifact_ref")

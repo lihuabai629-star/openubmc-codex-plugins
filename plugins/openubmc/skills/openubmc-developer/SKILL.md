@@ -5,18 +5,14 @@ description: "Use only for unresolved openUBMC decisions about source ownership,
 
 # OpenUBMC Developer
 
-When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
-and load its owner before acting; carry the existing Run and authorization.
+At a stage change, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>) and its owner; carry the Run and authorization.
 
-Fit requested behavior into the repository's current structure. Own source
-analysis, design, implementation in existing components, and component-local
-verification. Scale the work to the uncertainty and risk instead of imposing a
-fixed ceremony on every change.
+Fit source work and component-local verification into the current repository structure.
+Scale analysis, design and implementation to the task's uncertainty and risk.
 
 ## Keep the primary owner clear
 
-Own work whose primary deliverable is understanding or changing behavior
-controlled by existing openUBMC source. This includes component code, models,
+Own understanding or changing existing openUBMC source: component code, models,
 service metadata, manifests, and declarative configuration.
 
 If the request also includes a later build, live patch, upgrade, or publication,
@@ -151,6 +147,9 @@ confirming the workspace is no longer needed.
 
 ## Verify and hand off
 
+Use the supplied output path and schema, with source-expression fields limited to the source expression.
+Put explanations in summary or evidence fields; check saved required fields, types, enums and expressions.
+
 Run the smallest sufficient repository-selected checks that prove the changed
 contract. Repository-local generation, compilation, unit-test builds, tests,
 and validators remain source verification. Prefer executing changed behavior or
@@ -164,10 +163,8 @@ Review the completed diff against the selected precedent for misplaced logic,
 duplicate ownership, layer leakage, bypassed interfaces, unnecessary public
 abstractions, incomplete generation, and missed consumers.
 
-For a straightforward implementation, hand off concisely: changed behavior,
-key files, focused checks and results, workspace state, and any remaining gap.
-For read-only work, report the responsible area, relevant flow and precedent,
-recommended change surface, material alternatives, and unresolved evidence.
+Hand off source changes with behavior, files, focused checks, workspace state and remaining gaps.
+For read-only work, report ownership, flow, precedent, change surface, alternatives and evidence gaps.
 
 Source completion alone does not authorize dependency resolution, a product or
 package build, a live-target patch, firmware upgrade, or publication. When the
@@ -211,9 +208,9 @@ change requires it.
   [hardware-vpd.md](references/hardware-vpd.md)
 - SR/DDS product records and effective product selection: [sr-dds-product-records.md](references/sr-dds-product-records.md)
 - ProfileSchema import/export, adapters, redaction, and compatibility: [profile-schema-import-export.md](references/profile-schema-import-export.md)
-
 ## Local specialist checks
 
 For changed MDB/Redfish JSON, concurrency candidates, Web Backend contracts,
 Redfish revision comparisons or interface documentation coverage, read
 [references/community-checks.md](references/community-checks.md).
+

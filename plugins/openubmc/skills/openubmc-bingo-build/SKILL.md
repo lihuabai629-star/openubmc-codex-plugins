@@ -13,6 +13,11 @@ Skill owns running Bingo in component and Manifest workspaces. It does not modif
 the Bingo CLI source, upload an already-built Conan component package, or deploy
 firmware to a BMC.
 
+On native Windows without a selected capable build environment, report
+`build_environment_unavailable` with the actual host and missing Bingo/toolchain
+prerequisites. Device Runtime remains on Windows. Use WSL for this build only
+when the task explicitly selected it.
+
 ## Establish the workspace and command
 
 Run `bingo --version` and the relevant `bingo <command> --help` before selecting

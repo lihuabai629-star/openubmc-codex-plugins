@@ -13,6 +13,7 @@ if __name__ == '__main__':
 
 import argparse
 import copy
+from datetime import datetime
 import fcntl
 import hashlib
 import json
@@ -217,18 +218,43 @@ def replace_directory(journal: Path, record: dict, key: str, candidate: Path) ->
 
 
 def verify_staged_config(before: bytes, after: bytes, home: Path, name: str) -> None:
+    def native_timestamp(value: object) -> bool:
+        if (type(value) is not str or not re.fullmatch(
+            r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z', value
+        )):
+            return False
+        try:
+            datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return False
+        return True
+
     expected = copy.deepcopy(tomllib.loads(before.decode()))
     marketplaces = expected.setdefault('marketplaces', {})
     entry = {'source_type':'local', 'source':str(home)}
-    if name in marketplaces and marketplaces[name] != entry:
-        raise ValueError('marketplace registration is owned by another source')
+    if name in marketplaces:
+        previous = marketplaces[name]
+        if (not isinstance(previous, dict)
+                or {key: previous.get(key) for key in entry} != entry
+                or set(previous) - set(entry) - {'last_updated'}
+                or ('last_updated' in previous and not native_timestamp(previous['last_updated']))):
+            raise ValueError('marketplace registration is owned by another source')
     marketplaces[name] = entry
     expected.setdefault('plugins', {}).setdefault('openubmc@'+name, {})['enabled'] = True
-    if tomllib.loads(after.decode()) != expected:
+    actual = tomllib.loads(after.decode())
+    actual_marketplaces = actual.get('marketplaces')
+    actual_entry = actual_marketplaces.get(name) if isinstance(actual_marketplaces, dict) else None
+    if isinstance(actual_entry, dict) and 'last_updated' in actual_entry:
+        if not native_timestamp(actual_entry['last_updated']):
+            raise ValueError('Codex changed unrelated staged configuration')
+        actual_entry.pop('last_updated')
+    if actual != expected:
         raise ValueError('Codex changed unrelated staged configuration')
 
 
 def activate(archive: Path, archive_sha: str, home: Path, codex: Path) -> dict:
+    home = home.resolve()
+    codex = codex.resolve()
     lock, files = read_archive(archive, archive_sha)
     env = dict(os.environ, HOME=str(home), CODEX_HOME=str(codex), XDG_CONFIG_HOME=str(home/'.config'),
                XDG_DATA_HOME=str(home/'.local/share'), XDG_CACHE_HOME=str(home/'.cache'))
@@ -312,11 +338,11 @@ def activate(archive: Path, archive_sha: str, home: Path, codex: Path) -> dict:
             installed = json.loads(command(['codex','plugin','add','openubmc@'+name,'--json'], stage_env))
             stage_cache = Path(installed['installedPath'])
             expected_cache = stage_codex/'plugins/cache'/name/'openubmc'/lock['version']
-            if stage_cache != expected_cache or verify_directory(stage_cache) != lock:
+            if stage_cache.resolve() != expected_cache.resolve() or verify_directory(stage_cache) != lock:
                 raise ValueError('Codex installed content differs from the selected release')
             after = file_bytes(stage_codex/'config.toml')
             verify_staged_config(migration_after, after, home, name)
-            cache = codex/stage_cache.relative_to(stage_codex)
+            cache = codex/expected_cache.relative_to(stage_codex)
             cache_before = identity(cache)
             if cache_before not in {None, lock['content_digest']}:
                 raise ValueError('existing Codex plugin cache has different content')

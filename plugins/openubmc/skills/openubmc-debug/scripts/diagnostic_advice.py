@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 REQUEST_SCHEMA = "openubmc-debug.diagnostic-advice-request.v1"
 ADVICE_SCHEMA = "openubmc-debug.diagnostic-advice.v1"
+STATE_SCHEMA = "openubmc-debug.local-diagnosis-state.v1"
 STAGES = ("hardware_discovery", "mdb", "northbound")
 MAX_INPUT_BYTES = 1024 * 1024
 MAX_ADVICE_BYTES = 16 * 1024
@@ -114,7 +115,7 @@ def _validate_request(request):
         raise ValueError("unsupported diagnostic advice request")
     if set(request) - {"schema", "target", "device", "sources", "facts", "queries", "snapshot_at",
                        "max_age_seconds", "target_epochs", "observation_refs", "include_fault_chain",
-                       "reference_target", "comparison_receipt"}:
+                       "reference_target", "comparison_receipt", "query_costs"}:
         raise ValueError("undeclared diagnostic advice request fields")
     if "include_fault_chain" in request and type(request["include_fault_chain"]) is not bool:
         raise ValueError("include_fault_chain must be boolean")
@@ -194,6 +195,10 @@ def _validate_request(request):
             if not isinstance(query, Mapping) or query.get("target") != request["target"]:
                 raise ValueError("suggested observation targets another device scope")
             query_type.from_query(query)
+    costs = request.get("query_costs", {})
+    if (not isinstance(costs, Mapping) or set(costs) - set(STAGES)
+            or any(type(value) is not int or not 1 <= value <= 1000 for value in costs.values())):
+        raise ValueError("query_costs must be bounded positive relative costs by stage")
 
 
 def _known_source(source, request, snapshot_at):
@@ -335,7 +340,9 @@ def build_diagnostic_advice(request: Mapping[str, object]) -> dict[str, object]:
         })
     remaining = {item["id"] for item in hypotheses if item["status"] != "contradicted"}
     next_observations = []
-    for index, stage in enumerate(STAGES):
+    costs = request.get("query_costs", {})
+    for stage in sorted(STAGES, key=lambda name: (costs.get(name, 1), STAGES.index(name))):
+        index = STAGES.index(stage)
         if selected.get(stage, {}).get("status") == "observed":
             continue
         expected = {
@@ -361,6 +368,73 @@ def build_diagnostic_advice(request: Mapping[str, object]) -> dict[str, object]:
     if len(json.dumps(advice, ensure_ascii=False).encode()) > MAX_ADVICE_BYTES:
         raise ValueError("diagnostic advice exceeds the output byte budget")
     return advice
+
+
+def _suggestion_digest(suggestion):
+    return source_digest({"stage": suggestion["stage"], "query": suggestion["query"]})
+
+
+def build_local_diagnosis_state(request, previous_state=None):
+    """Build caller-carried advisory state; never write a Runtime Run or Gate."""
+    advice = build_diagnostic_advice(request)
+    issued = []
+    if previous_state is not None:
+        if (not isinstance(previous_state, Mapping)
+                or previous_state.get("schema") != STATE_SCHEMA
+                or previous_state.get("target") != advice["target"]
+                or previous_state.get("device") != advice["device"]
+                or previous_state.get("target_epochs") != advice["snapshot"]["target_epochs"]
+                or not isinstance(previous_state.get("issued_query_digests"), list)
+                or len(previous_state["issued_query_digests"]) > 16
+                or any(not isinstance(item, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", item)
+                       for item in previous_state["issued_query_digests"])):
+            raise ValueError("previous local diagnosis state is incompatible")
+        issued = list(dict.fromkeys(previous_state["issued_query_digests"]))
+    selected = {fact["stage"]: fact for fact in advice["facts"] if fact["target"] == advice["target"]}
+    gaps = []
+    for stage in STAGES:
+        fact = selected.get(stage)
+        if fact is None:
+            gaps.append({"id": "gap:" + stage, "stage": stage, "reason": "not_captured", "evidence_ref": None})
+        elif fact["status"] != "observed":
+            gaps.append({"id": "gap:" + stage, "stage": stage,
+                         "reason": "unusable_or_stale", "evidence_ref": fact["evidence_ref"]})
+    candidates = [{
+        "id": candidate["id"],
+        "state": "ruled_out" if candidate["status"] == "contradicted" else
+                 "supported" if candidate["status"] == "fulfilled" else "open",
+        "ruled_out": candidate["status"] == "contradicted",
+        "supporting_refs": copy.deepcopy(candidate["supporting_refs"]),
+        "contradicting_refs": copy.deepcopy(candidate["contradicting_refs"]),
+        "remaining_gap_refs": [gap["id"] for gap in gaps] if candidate["status"] != "contradicted" else [],
+    } for candidate in advice["hypotheses"][:3]]
+    suggestion = advice["next_observations"][0] if advice["next_observations"] else None
+    next_observation = None
+    suggestion_status = "none_available"
+    if suggestion is not None:
+        digest = _suggestion_digest(suggestion)
+        if digest in issued:
+            suggestion_status = "already_issued"
+        else:
+            next_observation = {
+                **copy.deepcopy(suggestion),
+                "relative_cost": request.get("query_costs", {}).get(suggestion["stage"], 1),
+                "query_digest": digest,
+            }
+            issued.append(digest)
+            suggestion_status = "proposed"
+    state = {
+        "schema": STATE_SCHEMA, "status": "advisory", "target": advice["target"],
+        "device": copy.deepcopy(advice["device"]),
+        "target_epochs": copy.deepcopy(advice["snapshot"]["target_epochs"]),
+        "candidates": candidates, "remaining_gaps": gaps,
+        "next_observation": next_observation, "suggestion_status": suggestion_status,
+        "issued_query_digests": issued[-16:],
+        "root_cause_proven": False,
+    }
+    if len(json.dumps(state, ensure_ascii=False).encode()) > MAX_ADVICE_BYTES:
+        raise ValueError("local diagnosis state exceeds the output byte budget")
+    return state
 
 
 def attach_diagnostic_advice(capture: Mapping[str, object], request: Mapping[str, object]) -> dict[str, object]:
@@ -401,11 +475,21 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
     parser.add_argument("--attach-to", type=Path, help="emit the source capture with bound advisory metadata")
+    parser.add_argument("--local-state", action="store_true", help="emit caller-carried local candidate state")
+    parser.add_argument("--previous-state", type=Path, help="prior local state for duplicate suggestion suppression")
     args = parser.parse_args(argv)
     try:
+        if (args.local_state and args.attach_to) or (args.previous_state and not args.local_state):
+            raise ValueError("local state cannot be attached to Runtime evidence")
         request = _read_json(args.input)
-        advice = (attach_diagnostic_advice(_read_json(args.attach_to), request)
-                  if args.attach_to else build_diagnostic_advice(request))
+        if args.local_state:
+            advice = build_local_diagnosis_state(
+                request, _read_json(args.previous_state) if args.previous_state else None,
+            )
+        elif args.attach_to:
+            advice = attach_diagnostic_advice(_read_json(args.attach_to), request)
+        else:
+            advice = build_diagnostic_advice(request)
     except (ValueError, KeyError, TypeError, OSError, RecursionError) as error:
         print(str(error), file=sys.stderr)
         return 2

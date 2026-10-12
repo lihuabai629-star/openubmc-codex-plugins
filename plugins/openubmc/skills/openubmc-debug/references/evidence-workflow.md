@@ -76,6 +76,84 @@ The bundled helpers currently implement object access over SSH and log/file acce
 
 Search stable error text, EventName/EventCode, object path, property, interface, or stack symbols. With `.codegraph/`, use CodeGraph for caller/callee, dependency, and impact; use `rg` for exact strings and files. Without `.codegraph/`, use `rg` and direct source inspection.
 
+For a workspace containing both community and internal repositories, bounded
+search now attaches per-hit repository, commit, branch, inspected-file digest and
+modification status. Declare the product/component mapping once in the optional
+`<source-root>/.openubmc/source-catalog.json`. Missing or invalid mapping never
+blocks search; results remain unclassified/reference evidence. A community copy,
+wrong-product checkout or wrong pinned commit cannot become a product owner just
+because the symbol or directory name matches.
+
+```json
+{
+  "schema_version": 1,
+  "product": "board-a",
+  "repositories": [
+    {
+      "path": "community/network_adapter",
+      "origin": "community",
+      "component": "network_adapter",
+      "products": ["board-a"],
+      "role": "reference"
+    },
+    {
+      "path": "internal/network_adapter",
+      "origin": "internal",
+      "component": "network_adapter",
+      "products": ["board-a"],
+      "role": "implementation"
+    }
+  ]
+}
+```
+
+Paths stay under the source root. `origin` is `community`, `internal`, `third_party`
+or `unknown`; `role` is `reference` or `implementation`. Optional `commit` pins a
+full immutable Git hash. Product/ownership labels are local declarations, not
+externally verified facts. A matching implementation is a `product_source_candidate`,
+not proof of deployed firmware or runtime execution. Another product, a pinned
+revision mismatch, or a reference-only tree cannot contribute product implementation
+alignment. Two selected implementations of one component remain ambiguous; neither
+silently wins. Unmapped repositories stay `unknown` rather than guessing ownership
+from their names or remote visibility.
+
+Metadata lookup supports linked worktrees and is bounded to 32 repositories,
+2 seconds and the remaining search budget. File identity reads at most 1 MiB per
+matched file, without Git clean filters/hooks; `modified` covers that file only.
+Metadata failure yields warnings, never a search failure. Compact Evidence pools
+retain the annotations. This is local attribution, not a remote index upload.
+
+For a bounded offline lookup across Lua, C/C++ and model/configuration files,
+use the packaged Debug helper's query mode:
+
+```bash
+python <debug-skill>/scripts/source_trace.py --source-root <mixed-source-root> --query '0xE001' --timeout 8
+```
+
+The disposable SQLite index defaults to a private file under the user's cache
+directory; `--index-path` selects another cache file. It hashes each supported
+source file and rebuilds token/line entries only when content changes. Search
+results resolve catalog selection, repository root, commit, branch and file
+modification state at query time. `index.updated_files`, `unchanged_files` and
+`removed_files` describe that pass. `source.dirty` covers the matched file, not
+the whole checkout. Exact identifiers and paths rank first; query text without
+indexable identifiers uses the existing bounded source search. An unreadable or
+unavailable index also falls back to that search with `status=partial`. A
+language service is not required; syntax resolution remains the separate Lua
+trace below or a corroborated CodeGraph result.
+
+For a natural-language question, optionally save the already obtained
+`openubmc_kb_query` JSON MCP receipt and pass `--kb-result-file <receipt.json>`.
+The helper reads at most 64 KiB, accepts only bounded `reference_id` and
+`file_path` labels, and does not call the KB itself. Returned KB rows are
+`knowledge_candidate` entries with `applicability=unverified`; they never
+inherit a local source product or commit. A KB outage yields `status=partial`
+while retaining local hits. `evidence_ref` and `freshness` bind each local
+result to inspected bytes and query time. The index can cover at most 4,096
+files and 64 MiB per pass by default; partial coverage, truncation and missing
+provenance remain visible. Neither a local hit nor a KB candidate proves the
+source was deployed or that the path executed on a target.
+
 Distinguish these evidence levels:
 
 - definition: constant, event dictionary, schema, or interface declaration
@@ -150,6 +228,14 @@ Do not assemble a root cause from unrelated source hits. The bundled bounded sea
 
 Convert log timestamps only with the target's captured numeric UTC offset (for example, `+0800` as `480` minutes). A timezone abbreviation or a missing offset is not enough to compare a local log timestamp with an epoch alarm timestamp.
 
+### Local evidence batch
+
+`_evidence_batch.summarize_captured_snapshot` accepts only already captured `active_alarms` and `collect_logs` helper results. Pass the explicit target, source version and target epoch from the capture boundary. It groups exact duplicate events or lines within their source and path, retains a count and every `/alarms/...` or `/logs/...` raw pointer, and labels unknown timezone, failed timestamp parsing, missing physical sequence and partial collection. A grouped line is a display view; the original helper result remains the evidence.
+
+`compare_snapshots(before, after)` reports `incomparable` when target, source version or target epoch is unknown or differs, or either collection is partial. It never uses a matching log line to infer a cause. The combined workflow's `correlation.records[].temporal_relation` reports a bounded time match with `causal_proof=false`; source ownership and trigger still need independent evidence. If local batch processing fails, `correlation.batch` says `processor_failed` and the original evidence pool remains available.
+
+Compact workflow JSON groups exact duplicate selected log lines; each group keeps `ids` for every original `log_refs` index and `pointers` back to each raw line. Full workflow JSON still contains the unmodified captured lanes. The compact `batch` carries counts and uncertainty flags without repeating all group text.
+
 For start/end alarm snapshots, report stable identity changes separately from mutable payload changes. Mutable payload includes state, severity, timestamp, sample/reading/value, threshold/limit, and unit. Compare uptime growth with observer or BMC elapsed time so a reboot is still detected when the new uptime has already grown beyond the old uptime.
 
 ## Cross-target comparison
@@ -200,3 +286,11 @@ human-readable report rather than inventing a transport envelope. Use this order
 
 If the user requests machine-readable output for a direct runtime task, preserve these same
 sections in a task-local JSON object, but do not label it as the canonical Developer result.
+
+## Optional source-search failure
+
+`source_search_failed` means the auxiliary local source lookup failed, not that
+the device observations failed. Retain collected alarm/log lanes, finish normal
+freshness checks, and report the missing source correlation. After fixing the
+catalog/index, retry only the missing local lookup when the evidence is still
+valid; do not repeat a device operation merely to reconstruct a source result.

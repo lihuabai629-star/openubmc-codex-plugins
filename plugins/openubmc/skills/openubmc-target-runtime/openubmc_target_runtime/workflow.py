@@ -787,6 +787,10 @@ DEFAULT_WORKFLOW_REGISTRY = WorkflowRegistry(
     operation_owners=DEFAULT_OPERATION_CONTRACTS.operation_owners(),
     routes=(
         WorkflowRoute(
+            "property-update-and-verify",
+            (("operation", "mdb_property_modify"), ("operation", "mdb_property_verify")),
+        ),
+        WorkflowRoute(
             "bundle-and-diagnose",
             (
                 ("operation", "log_bundle_collect"), ("operation", "debug_run"),

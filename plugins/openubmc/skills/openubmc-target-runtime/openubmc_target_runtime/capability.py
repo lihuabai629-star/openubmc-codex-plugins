@@ -1076,6 +1076,7 @@ class DomainPackAuthorContract:
             "build",
             "live_patch",
             "upgrade",
+            "property_update",
             "verification",
         }:
             raise ValueError("Domain Pack closeout stage is invalid")

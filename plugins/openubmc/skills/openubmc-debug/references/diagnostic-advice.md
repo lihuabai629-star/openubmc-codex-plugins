@@ -78,6 +78,7 @@ facts. If that surface has no captured boolean fact, omit its binding and keep i
 `queries` uses the existing `ObservationQuery` contract, including its reviewed read-only selector
 grammar. The sample scanner name is illustrative: select the actual scanner observation for the
 device. The helper returns at most one query with `expected_outcomes.present/absent` candidate IDs.
+Optional `query_costs` maps stages to positive relative read-only costs (1 through 1000). When multiple existing `ObservationQuery` values distinguish the remaining candidates, the helper recommends the lowest-cost one, breaking ties in stage order. Without costs, all stages cost 1.
 Passing that query to `observe` is a separate Agent action; the helper itself performs no collection.
 Hardware discovery must have its own observation even when it is exposed through an MDB scanner.
 The business Drive object's existence cannot stand in for hardware discovery.
@@ -138,3 +139,11 @@ the existing `execute` contract.
 Fault-chain summaries are available in the standalone helper output. Runtime
 projects validated facts, hypotheses and next observations; it omits the helper
 fault chain because ComparisonReceipt provenance is validated separately.
+
+## Caller-carried local diagnosis state
+
+For repeated local analysis of the same captured Drive scope, invoke `diagnostic_advice.py --input <request.json> --local-state`. The result keeps at most three candidates with supporting and contradicting source references, a `ruled_out` flag, and remaining gap references. It does not form a `DiagnosisRecord` or prove a root cause. To avoid proposing the same unanswered read-only query again, provide the previous result with `--previous-state <state.json>`. Suggestion identities are carried by the caller and are valid only for the same target, device and target epochs. A fresh epoch starts a fresh local state. New contradictory observations change candidate state and can select a different query. Actual collection still uses Runtime `observe`.
+
+Each invocation must include the complete current set of captured fact bindings. Candidate support and contradiction are recalculated from those validated source documents; the previous state carries only issued query identities and cannot turn old, absent, or stale facts into current evidence.
+
+The default helper output and `--attach-to` keep the Runtime-validated v1 advice shape. `--local-state` cannot be combined with `--attach-to`; the local state is not persisted by Runtime and does not affect its Evidence, Gate or Outcome authority.

@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import queue
 import re
 import shutil
+import sqlite3
 import stat
 import subprocess
+import sys
 import threading
 import time
+from datetime import datetime, timezone
+from _source_catalog import SourceCatalog
 
 
 _SOURCE_LINE_LIMIT = 2000
@@ -174,7 +179,7 @@ def _search_term_with_rg(
             if not _literal_token_matches(line_text, term):
                 continue
             try:
-                path_text = str(Path(path_text).relative_to(root))
+                path_text = Path(path_text).relative_to(root).as_posix()
             except (ValueError, OSError):
                 pass
             match = _source_match(
@@ -228,7 +233,7 @@ def _python_source_search(
 
     def relative_path(path: Path) -> str:
         try:
-            return str(path.relative_to(root))
+            return path.relative_to(root).as_posix()
         except ValueError:
             return str(path)
 
@@ -495,6 +500,8 @@ def search_source_terms(
     if errors:
         overflow.update({term: True for term in unique_terms})
     matches = _merge_source_matches(unique_terms, per_term_matches)
+    provenance = SourceCatalog(root, timeout=max(0.0, min(float(timeout), 60.0) -
+                                                (time.monotonic() - started))).annotate(matches)
     per_term = {
         term: {
             "quota": quotas[term],
@@ -522,6 +529,7 @@ def search_source_terms(
         "rg_available": bool(rg),
         "codegraph_available": has_codegraph,
         "matches": matches,
+        "provenance": provenance,
         "hits": rendered_hits,
         "per_term": per_term,
         "requested_limit": max_matches,
@@ -539,4 +547,441 @@ def search_source_terms(
             and per_term[term]["returned"]
         ],
         "error": "; ".join(errors),
+    }
+
+
+# The index is a disposable local cache. SourceCatalog is deliberately consulted
+# after every query: branch, commit, catalog selection and matched-file dirty
+# state must describe the current checkout, not the last indexing pass.
+_INDEX_VERSION = "2"
+_INDEX_SUFFIXES = {
+    ".lua", ".c", ".cc", ".cpp", ".h", ".hpp", ".json", ".yaml",
+    ".yml", ".xml", ".ini", ".conf", ".toml",
+}
+_INDEX_TOKEN_RE = re.compile(
+    r"0x[0-9a-fA-F]+|/[A-Za-z_][A-Za-z0-9_./-]*|"
+    r"[A-Za-z_][A-Za-z0-9_]*(?:(?:::|[.:])[A-Za-z_][A-Za-z0-9_]*)*"
+)
+_QUERY_STOP_WORDS = {
+    "a", "an", "and", "are", "by", "does", "for", "from", "how", "in",
+    "is", "of", "on", "or", "the", "to", "what", "where", "which", "with",
+}
+
+
+class SourceIndexUnavailable(Exception):
+    """A local cache failed; callers should use bounded text search."""
+
+
+def _windows_private_storage():
+    """Find the Runtime sibling when this source helper runs alone."""
+    sibling = Path(__file__).resolve().parents[2] / "openubmc-target-runtime"
+    if str(sibling) not in sys.path:
+        sys.path.insert(0, str(sibling))
+    from openubmc_target_runtime import windows_private
+    return windows_private
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _default_index_path(root: Path) -> Path:
+    cache_root = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache").expanduser().absolute()
+    identity = hashlib.sha256(os.fsencode(str(root))).hexdigest()[:24]
+    return cache_root / "openubmc" / "source-index" / (identity + ".sqlite3")
+
+
+def _index_connection(root: Path, index_path: Path) -> sqlite3.Connection:
+    if index_path.is_symlink():
+        raise SourceIndexUnavailable("index_path_symlink")
+    if os.name == "nt":
+        _windows_private_storage().ensure_private_directory(index_path.parent)
+    else:
+        index_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    created = not index_path.exists()
+    if not index_path.exists():
+        try:
+            fd = os.open(index_path, os.O_CREAT | os.O_EXCL | os.O_RDWR |
+                         getattr(os, "O_NOFOLLOW", 0), 0o600)
+            os.close(fd)
+        except FileExistsError:
+            pass
+    fd = os.open(index_path, os.O_RDWR | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise SourceIndexUnavailable("index_not_regular")
+        if os.name == "nt":
+            private = _windows_private_storage()
+            if created:
+                private.harden_new_file(index_path)
+            else:
+                private.verify_private_path(index_path)
+        else:
+            os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
+    connection = sqlite3.connect(index_path, timeout=0.5)
+    connection.execute("PRAGMA busy_timeout=500")
+    connection.executescript("""
+        CREATE TABLE IF NOT EXISTS index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS index_files (
+            path TEXT PRIMARY KEY, digest TEXT NOT NULL, indexed_at TEXT NOT NULL,
+            warnings TEXT NOT NULL DEFAULT '[]'
+        );
+        CREATE TABLE IF NOT EXISTS index_lines (
+            path TEXT NOT NULL, line INTEGER NOT NULL, text TEXT NOT NULL,
+            PRIMARY KEY (path, line)
+        );
+        CREATE TABLE IF NOT EXISTS index_tokens (
+            token TEXT NOT NULL, path TEXT NOT NULL, line INTEGER NOT NULL,
+            PRIMARY KEY (token, path, line)
+        );
+        CREATE INDEX IF NOT EXISTS index_tokens_path ON index_tokens(path);
+    """)
+    metadata = dict(connection.execute("SELECT key, value FROM index_meta"))
+    if metadata and (metadata.get("root") != str(root)
+                     or metadata.get("version") not in {"1", _INDEX_VERSION}):
+        connection.close()
+        raise SourceIndexUnavailable("index_identity_mismatch")
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(index_files)")}
+    with connection:
+        if "warnings" not in columns:
+            connection.execute("ALTER TABLE index_files ADD COLUMN warnings TEXT NOT NULL DEFAULT '[]'")
+        if metadata.get("version") == "1":
+            # A v1 cache did not retain its incomplete-file warnings. Reindex
+            # those files before it can claim a complete result again.
+            connection.execute("UPDATE index_files SET digest='' ")
+            connection.execute("UPDATE index_meta SET value=? WHERE key='version'", (_INDEX_VERSION,))
+        if not metadata:
+            connection.executemany("INSERT INTO index_meta(key, value) VALUES (?, ?)",
+                                   [("version", _INDEX_VERSION), ("root", str(root))])
+    return connection
+
+
+def _remove_index_file(connection: sqlite3.Connection, relative: str) -> None:
+    connection.execute("DELETE FROM index_tokens WHERE path=?", (relative,))
+    connection.execute("DELETE FROM index_lines WHERE path=?", (relative,))
+    connection.execute("DELETE FROM index_files WHERE path=?", (relative,))
+
+
+def _sync_source_index(
+    root: Path, index_path: Path, *, max_files: int, deadline: float,
+) -> tuple[sqlite3.Connection, dict[str, object]]:
+    connection = _index_connection(root, index_path)
+    seen: set[str] = set()
+    scanned = updated = unchanged = removed = 0
+    bytes_read = 0
+    warnings: set[str] = set()
+    try:
+        with connection:
+            for directory, names, filenames in os.walk(root, onerror=lambda _: warnings.add("unreadable_directory")):
+                if time.monotonic() >= deadline:
+                    raise SourceIndexUnavailable("index_time_limit")
+                names[:] = [name for name in sorted(names)
+                            if name not in _SKIP_DIRECTORIES | {".openubmc"}
+                            and not Path(directory, name).is_symlink()]
+                for name in sorted(filenames):
+                    path = Path(directory, name)
+                    if path.absolute() == index_path:
+                        continue
+                    if path.suffix.casefold() not in _INDEX_SUFFIXES:
+                        continue
+                    if time.monotonic() >= deadline:
+                        raise SourceIndexUnavailable("index_time_limit")
+                    scanned += 1
+                    if scanned > max_files:
+                        raise SourceIndexUnavailable("index_file_limit")
+                    relative = path.relative_to(root).as_posix()
+                    seen.add(relative)
+                    try:
+                        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) |
+                                     getattr(os, "O_NONBLOCK", 0))
+                        with os.fdopen(fd, "rb") as stream:
+                            info = os.fstat(stream.fileno())
+                            if not stat.S_ISREG(info.st_mode) or info.st_size > 1024 * 1024:
+                                raise ValueError("unsupported source size or type")
+                            raw = stream.read(1024 * 1024 + 1)
+                        if len(raw) > 1024 * 1024:
+                            raise ValueError("source byte limit")
+                    except (OSError, ValueError):
+                        warnings.add("unreadable_or_oversize_file")
+                        _remove_index_file(connection, relative)
+                        continue
+                    bytes_read += len(raw)
+                    if bytes_read > 64 * 1024 * 1024:
+                        raise SourceIndexUnavailable("index_total_byte_limit")
+                    digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+                    previous = connection.execute(
+                        "SELECT digest, warnings FROM index_files WHERE path=?", (relative,)
+                    ).fetchone()
+                    if previous and previous[0] == digest:
+                        try:
+                            cached_warnings = json.loads(previous[1])
+                        except (TypeError, ValueError) as exc:
+                            raise SourceIndexUnavailable("invalid_cached_warnings") from exc
+                        if (not isinstance(cached_warnings, list)
+                                or not all(isinstance(value, str) for value in cached_warnings)):
+                            raise SourceIndexUnavailable("invalid_cached_warnings")
+                        warnings.update(cached_warnings)
+                        unchanged += 1
+                        continue
+                    _remove_index_file(connection, relative)
+                    text = raw.decode("utf-8", errors="replace")
+                    lines = []
+                    tokens = []
+                    file_warnings: set[str] = set()
+                    for number, line in enumerate(text.splitlines(), 1):
+                        if number % 1024 == 0 and time.monotonic() >= deadline:
+                            raise SourceIndexUnavailable("index_time_limit")
+                        if number > 20000:
+                            file_warnings.add("file_line_limit")
+                            break
+                        lines.append((relative, number, line[:_SOURCE_LINE_LIMIT]))
+                        unique = set()
+                        for match in _INDEX_TOKEN_RE.finditer(line):
+                            token = match.group().casefold()
+                            unique.add(token)
+                            # Preserve exact qualified identifiers and their
+                            # parts so prose can still locate Drive.update.
+                            unique.update(part for part in re.split(r":{2}|[.:/]", token)
+                                          if len(part) >= 3)
+                        if len(unique) > 256:
+                            file_warnings.add("line_token_limit")
+                        tokens.extend((token, relative, number) for token in sorted(unique)[:256])
+                    connection.executemany("INSERT INTO index_lines(path, line, text) VALUES (?, ?, ?)", lines)
+                    connection.executemany("INSERT INTO index_tokens(token, path, line) VALUES (?, ?, ?)", tokens)
+                    connection.execute(
+                        "INSERT INTO index_files(path, digest, indexed_at, warnings) VALUES (?, ?, ?, ?)",
+                        (relative, digest, _utc_now(), json.dumps(sorted(file_warnings))),
+                    )
+                    warnings.update(file_warnings)
+                    updated += 1
+            for (relative,) in connection.execute("SELECT path FROM index_files").fetchall():
+                if relative not in seen:
+                    _remove_index_file(connection, relative)
+                    removed += 1
+    except Exception:
+        connection.close()
+        raise
+    return connection, {
+        "path": str(index_path), "status": "partial" if warnings else "ready",
+        "scanned_files": scanned, "hashed_bytes": bytes_read,
+        "updated_files": updated, "unchanged_files": unchanged,
+        "removed_files": removed, "warnings": sorted(warnings),
+    }
+
+
+def _query_tokens(query: str) -> tuple[list[str], bool]:
+    exact = bool(query.isascii() and len(query) <= 200
+                 and re.fullmatch(r"[A-Za-z0-9_./:-]+", query))
+    if exact:
+        return [query.casefold()], True
+    tokens = [match.group().casefold() for match in _INDEX_TOKEN_RE.finditer(query)]
+    return list(dict.fromkeys(token for token in tokens if len(token) >= 3
+                              and token not in _QUERY_STOP_WORDS))[:8], False
+
+
+def _index_candidates(
+    connection: sqlite3.Connection, query: str, *, max_candidates: int,
+    deadline: float,
+) -> tuple[list[dict[str, object]], bool]:
+    terms, exact = _query_tokens(query)
+    candidates: dict[tuple[str, int], dict[str, object]] = {}
+    truncated = False
+    for term in terms:
+        if time.monotonic() >= deadline:
+            raise SourceIndexUnavailable("index_query_time_limit")
+        rows = connection.execute("""
+            SELECT t.path, t.line, l.text, f.digest, f.indexed_at
+            FROM index_tokens AS t JOIN index_lines AS l
+              ON l.path=t.path AND l.line=t.line
+            JOIN index_files AS f ON f.path=t.path
+            WHERE t.token=? ORDER BY t.path, t.line LIMIT ?
+        """, (term, max_candidates + 1)).fetchall()
+        if len(rows) > max_candidates:
+            truncated = True
+        for path, line, text, digest, indexed_at in rows[:max_candidates]:
+            key = path, line
+            item = candidates.setdefault(key, {"kind": "source", "path": path,
+                                               "line": line, "text": text,
+                                               "content_digest": digest,
+                                               "indexed_at": indexed_at,
+                                               "matched_terms": []})
+            if term not in item["matched_terms"]:
+                item["matched_terms"].append(term)
+    if exact:
+        # A filename or model/config path can be useful without a token on line 1.
+        for path, digest, indexed_at in connection.execute(
+            "SELECT path, digest, indexed_at FROM index_files ORDER BY path"
+        ):
+            if path.casefold() != query.casefold() and not path.casefold().endswith("/" + query.casefold()):
+                continue
+            key = path, 1
+            if key not in candidates:
+                row = connection.execute("SELECT text FROM index_lines WHERE path=? AND line=1", (path,)).fetchone()
+                candidates[key] = {"kind": "source", "path": path, "line": 1,
+                                   "text": row[0] if row else "", "content_digest": digest,
+                                   "indexed_at": indexed_at, "matched_terms": [query.casefold()],
+                                   "path_match": True}
+            else:
+                candidates[key]["path_match"] = True
+    values = list(candidates.values())
+    if len(values) > max_candidates:
+        truncated = True
+        values = values[:max_candidates]
+    for item in values:
+        item["match_type"] = (
+            "exact_path" if item.get("path_match") else
+            "exact_identifier" if exact else "query_terms"
+        )
+    return values, truncated
+
+
+def _knowledge_candidates(receipt: object) -> tuple[list[dict[str, object]], dict[str, object]]:
+    if receipt is None:
+        return [], {"status": "not_requested"}
+    if not isinstance(receipt, dict):
+        return [], {"status": "unavailable", "code": "invalid_receipt"}
+    payload = receipt.get("structuredContent", receipt)
+    if not isinstance(payload, dict):
+        return [], {"status": "unavailable", "code": "invalid_receipt"}
+    if payload.get("ok") is False:
+        error = payload.get("error")
+        return [], {"status": "unavailable", "code": str(error.get("code", "kb_failed"))[:80]
+                    if isinstance(error, dict) else "kb_failed"}
+    result = payload.get("result", payload)
+    if not isinstance(result, dict):
+        return [], {"status": "unavailable", "code": "invalid_receipt"}
+    references = result.get("references", [])
+    if not isinstance(references, list):
+        return [], {"status": "unavailable", "code": "invalid_references"}
+    items = []
+    seen = set()
+    for reference in references[:16]:
+        if not isinstance(reference, dict):
+            continue
+        identifier = reference.get("reference_id")
+        path = reference.get("file_path")
+        if not isinstance(identifier, (str, int)) or not isinstance(path, str):
+            continue
+        identifier = str(identifier)[:128]
+        path = path[:512]
+        if not identifier or not path or (identifier, path) in seen:
+            continue
+        seen.add((identifier, path))
+        items.append({"kind": "knowledge_candidate", "reference_id": identifier,
+                      "file_path": path, "evidence_ref": "kb:" + identifier,
+                      "applicability": "unverified", "score": 5})
+    status = "available" if items else "no_citable_references"
+    return items, {"status": status, "returned": len(items),
+                   "truncated": bool(result.get("truncated")) or len(references) > 16}
+
+
+def _rank_source_matches(matches: list[dict[str, object]], query: str) -> list[dict[str, object]]:
+    exact = _query_tokens(query)[1]
+    for item in matches:
+        source = item.get("source", {})
+        if not isinstance(source, dict):
+            source = {}
+            item["source"] = source
+        applicability = source.get("applicability")
+        base = 150 if item.get("match_type") == "exact_path" else (120 if exact else 30)
+        score = base + 12 * len(item.get("matched_terms", []))
+        if applicability == "product_source_candidate":
+            score += 40
+        elif source.get("product_match") is False:
+            score -= 20
+        if source.get("modified"):
+            score += 2  # visibly current dirty bytes, never a claim of deployment
+        item["score"] = score
+        item["evidence_ref"] = (f"source:{item['path']}:{item['line']}@{item['content_digest']}"
+                                if item.get("content_digest") else None)
+        source["dirty"] = source.get("modified")
+        source["dirty_scope"] = "matched_file"
+        item["freshness"] = {"indexed_at": item.pop("indexed_at", None),
+                             "checked_at": _utc_now(), "scope": "local_source_bytes",
+                             "identity_checked": bool(item.get("content_digest") and
+                                                      source.get("content_digest") == item["content_digest"])}
+    return sorted(matches, key=lambda item: (-item["score"], item["path"], item["line"]))
+
+
+def navigate_source(
+    source_root: str, query: str, *, index_path: str | None = None,
+    kb_receipt: object = None, max_results: int = 12, max_files: int = 4096,
+    timeout: float = 8.0,
+) -> dict[str, object]:
+    """Incremental local lookup with an optional already-fetched KB receipt.
+
+    This function never contacts a device or KB service. A failed index uses
+    the pre-existing bounded text search and preserves its provenance.
+    """
+    if not isinstance(query, str) or not query.strip() or len(query) > 2000:
+        raise ValueError("query must contain 1-2000 characters")
+    if not 1 <= max_results <= 40 or not 1 <= max_files <= 16384 or not 0 < timeout <= 30:
+        raise ValueError("source navigation limits are outside the supported range")
+    root = Path(source_root).resolve()
+    if not root.is_dir():
+        raise ValueError("source root does not exist")
+    query = query.strip()
+    index_file = Path(index_path).expanduser().absolute() if index_path else _default_index_path(root)
+    started = time.monotonic()
+    deadline = started + timeout
+    knowledge, kb_status = _knowledge_candidates(kb_receipt)
+    index_status: dict[str, object]
+    truncated = False
+    fallback = False
+    try:
+        if not _query_tokens(query)[0]:
+            raise SourceIndexUnavailable("query_not_indexable")
+        connection, index_status = _sync_source_index(root, index_file, max_files=max_files,
+                                                       deadline=started + timeout * 0.65)
+        try:
+            matches, truncated = _index_candidates(connection, query,
+                                                   max_candidates=min(256, max_results * 12),
+                                                   deadline=deadline)
+        finally:
+            connection.close()
+        provenance = SourceCatalog(root, timeout=max(0.0, deadline - time.monotonic())).annotate(matches)
+        if any(item.get("source", {}).get("content_digest") not in
+               {None, item["content_digest"]} for item in matches):
+            raise SourceIndexUnavailable("source_changed_during_query")
+    except (SourceIndexUnavailable, OSError, sqlite3.Error) as error:
+        fallback = True
+        index_status = {"path": str(index_file), "status": "unavailable",
+                        "code": str(error)[:100] if isinstance(error, SourceIndexUnavailable)
+                        else type(error).__name__}
+        terms, exact = _query_tokens(query)
+        search_terms = [query] if exact or not terms else terms[:3]
+        search = search_source_terms(str(root), search_terms, min(80, max_results * 4),
+                                     max(0.1, min(3.0, deadline - time.monotonic())))
+        provenance = search.get("provenance", {})
+        matches = [{**match, "kind": "source", "content_digest":
+                    match.get("source", {}).get("content_digest"),
+                    "matched_terms": match.get("terms", []),
+                    "match_type": "exact_identifier" if exact else "query_terms",
+                    "indexed_at": None} for match in search.get("matches", [])]
+        truncated = bool(search.get("truncated"))
+        index_status["fallback_method"] = search.get("method")
+        index_status["fallback_code"] = search.get("code")
+    ranked = _rank_source_matches(matches, query)
+    reserve_kb = (min(2, len(knowledge), max_results - (1 if ranked else 0))
+                  if not _query_tokens(query)[1] else 0)
+    selected = ranked[:max_results - reserve_kb]
+    remaining = max_results - len(selected)
+    selected.extend(knowledge[:remaining])
+    truncated = truncated or len(ranked) > max_results - reserve_kb or len(knowledge) > remaining
+    partial = (fallback or index_status["status"] != "ready" or
+               kb_status["status"] == "unavailable" or truncated or
+               bool(provenance.get("warnings")) or
+               any(not item["freshness"]["identity_checked"] for item in selected
+                   if item["kind"] == "source"))
+    return {
+        "schema": "openubmc.source-navigation.v1",
+        "status": "partial" if partial else "complete",
+        "query": query, "source_root": str(root), "index": index_status,
+        "provenance": provenance, "kb": kb_status,
+        "results": selected, "source_count": sum(item["kind"] == "source" for item in selected),
+        "knowledge_count": sum(item["kind"] == "knowledge_candidate" for item in selected),
+        "truncated": truncated, "fallback": fallback,
+        "proves_runtime_execution": False,
     }

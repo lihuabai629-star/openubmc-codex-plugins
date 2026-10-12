@@ -47,6 +47,10 @@ input, select { font: inherit; color: #243247; background: #fff; border: 1px sol
 .remember p { margin-bottom: 18px; }
 .remember .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .remember .actions { border: 0; margin-top: 0; padding-top: 18px; }
+.storage-recovery { padding: 20px; border: 1px solid #d8e5fb; border-radius: 10px; background: #f8fbff; }
+.storage-recovery h3 { margin: 0 0 6px; font-size: 16px; }
+.storage-recovery .storage-path { overflow-wrap: anywhere; color: #43516a; }
+.storage-recovery button { margin-top: 14px; }
 .kb-grid { grid-template-columns: 1fr; max-width: 600px; }
 .account-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .account-form > details { border: 0; padding-top: 0; margin: 14px 0 20px; }

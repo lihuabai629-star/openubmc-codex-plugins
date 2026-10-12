@@ -6,6 +6,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 import re
 
+from _evidence_batch import summarize_captured_snapshot
 from _workflow_freshness import alarm_identity, alarm_records, payload_result
 from _workflow_source import (
     search_source_terms,
@@ -41,16 +42,19 @@ def log_line_records(tool_result: dict[str, object]) -> list[dict[str, object]]:
                 physical_numbers[line_index]
                 if isinstance(physical_numbers, list)
                 and line_index < len(physical_numbers)
-                and isinstance(physical_numbers[line_index], int)
+                and type(physical_numbers[line_index]) is int
                 else None
             )
             records.append(
                 {
                     "id": len(records),
+                    "target": tool_result.get("ip"),
+                    "source": tool_result.get("tool", "collect_logs"),
                     "path": path,
                     "entry_index": entry_index,
                     "line_index": line_index,
                     "line_number": line_number,
+                    "pointer": f"/payload/result/entries/{entry_index}/lines/{line_index}",
                     "text": str(line),
                     "text_truncated": False,
                 }
@@ -225,6 +229,11 @@ def _implementation_alignment(
     path_dimensions: dict[str, set[str]] = {}
     path_refs: dict[str, list[int]] = {}
     for match in matches:
+        source = match.get("source", {})
+        if isinstance(source, dict) and source.get("origin_basis") == "catalog" and source.get("applicability") != "product_source_candidate":
+            # Keep these hits as references, but do not turn a community copy
+            # or another product's implementation into this product's owner.
+            continue
         path = str(match.get("path", "")).strip()
         if not path:
             continue
@@ -277,6 +286,8 @@ def build_correlation(
     enabled: bool,
     workflow_logs_result: dict[str, object] | None = None,
     time_window: int = 300,
+    source_version: str | None = None,
+    target_epoch: int | None = None,
 ) -> dict[str, object]:
     records = alarm_records(active_result)[:alarm_limit]
     alarm_line_records = log_line_records(alarm_logs_result)
@@ -293,22 +304,29 @@ def build_correlation(
     source_terms = list(alarm_terms)
     if workflow_keyword and workflow_keyword not in source_terms:
         source_terms.append(workflow_keyword)
-    source_search = (
-        search_source_terms(source_root, source_terms, max_matches, timeout)
-        if enabled
-        else {
-            "ok": False,
-            "code": "skipped",
-            "method": "none",
-            "rg_available": source_search_tool_available(),
-            "matches": [],
-            "hits": [],
-            "per_term": {},
-            "truncated": False,
-            "timed_out": False,
-            "error": "Source correlation disabled",
-        }
-    )
+    source_search = {
+        "ok": False,
+        "code": "skipped",
+        "method": "none",
+        "rg_available": source_search_tool_available(),
+        "matches": [],
+        "hits": [],
+        "per_term": {},
+        "truncated": False,
+        "timed_out": False,
+        "error": "Source correlation disabled",
+    }
+    if enabled:
+        try:
+            source_search = search_source_terms(source_root, source_terms, max_matches, timeout)
+        except Exception as exc:
+            # Source indexing is auxiliary to already-collected device evidence.
+            # Preserve those lanes and continue freshness collection. Never retry
+            # target operations because a local catalog/index failed.
+            source_search.update(
+                code="source_search_failed", error="Source search unavailable; " + type(exc).__name__,
+                recovery="repair_source_then_search", independent_evidence_preserved=True,
+            )
     source_matches = source_search.get("matches")
     source_pool = source_matches if isinstance(source_matches, list) else []
     since_boot = _since_boot_status(alarm_logs_result)
@@ -372,6 +390,16 @@ def build_correlation(
             and alarm_line_epochs[index] is not None
             and abs(int(alarm_line_epochs[index]) - record_epoch) <= time_window
         ]
+        if time_refs:
+            time_status = "within_window"
+        elif record_epoch is None:
+            time_status = "alarm_time_unknown"
+        elif utc_offset_minutes is None:
+            time_status = "timezone_unknown"
+        elif any(epoch is None for epoch in alarm_line_epochs):
+            time_status = "log_time_incomplete"
+        else:
+            time_status = "no_match_in_window"
         state_refs = [
             index
             for index in stable_log_refs
@@ -541,6 +569,12 @@ def build_correlation(
                 "timestamp_evidence": bool(time_refs),
                 "log_evidence_scope": evidence_scope,
                 "utc_offset_minutes": utc_offset_minutes,
+                "temporal_relation": {
+                    "status": time_status,
+                    "window_seconds": time_window,
+                    "matched_log_refs": time_refs,
+                    "causal_proof": False,
+                },
                 "completeness": {
                     "level": level,
                     "identity_timeline_complete": identity_complete,
@@ -574,7 +608,37 @@ def build_correlation(
         if workflow_keyword
         else []
     )
+    try:
+        batch = summarize_captured_snapshot(
+            target=str(active_result.get("ip") or alarm_logs_result.get("ip") or "") or None,
+            source_version=source_version,
+            target_epoch=target_epoch,
+            alarms=active_result,
+            logs=alarm_logs_result,
+            utc_offset_minutes=utc_offset_minutes,
+        )
+    except (ValueError, TypeError, OverflowError) as exc:
+        # Local processing is auxiliary. Keep the original captured evidence.
+        batch = {"status": "processor_failed", "error_type": type(exc).__name__,
+                 "raw_evidence_preserved": True}
+    target = active_result.get("ip")
+    captured_targets = [target, alarm_logs_result.get("ip")]
+    if workflow_logs_result is not None:
+        captured_targets.append(workflow_logs_result.get("ip"))
+    if any(not isinstance(value, str) or not value.strip() for value in captured_targets):
+        correlation_blocked_by = ["target_source_unknown"]
+    elif any(value != target for value in captured_targets):
+        correlation_blocked_by = ["target_source_conflict"]
+    else:
+        correlation_blocked_by = []
+    if correlation_blocked_by:
+        # Raw references remain inspectable, but mixed-device lines cannot
+        # establish temporal, instance, or workflow relationships.
+        correlations = []
+        keyword_refs = []
     return {
+        "batch": batch,
+        "correlation_blocked_by": correlation_blocked_by,
         "source_search": source_search,
         "since_boot": since_boot,
         "alarm_log_search": {
@@ -588,7 +652,7 @@ def build_correlation(
             "workflow_log_lines": workflow_line_records,
             "alarm_log_utc_offset_minutes": utc_offset_minutes,
         },
-        "records_considered": len(records),
+        "records_considered": len(records) if not correlation_blocked_by else 0,
         "records": correlations,
         "workflow_keyword": workflow_keyword,
         "workflow_keyword_refs": keyword_refs,

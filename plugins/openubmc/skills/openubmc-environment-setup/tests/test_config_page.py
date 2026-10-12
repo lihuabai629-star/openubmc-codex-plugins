@@ -11,6 +11,26 @@ SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "config_page.py"
 
 
 class ConfigPageTests(unittest.TestCase):
+    def test_kb_entry_keeps_requested_page_when_target_source_is_discovered(self):
+        spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
+        page = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(page)
+        with tempfile.TemporaryDirectory() as raw:
+            config_home = Path(raw)
+            target_source = config_home / "openubmc" / "credentials.json"
+            target_source.parent.mkdir()
+            target_source.write_text("{}")
+            target_source.chmod(0o600)
+            with page.LocalConfigurationServer(
+                config_home, sources={"targets": target_source}, kind="kb"
+            ) as server:
+                request = Request(
+                    server.origin + "/api/state",
+                    headers={"X-OpenUBMC-Session": server.session_token},
+                )
+                with urlopen(request, timeout=3) as response:
+                    self.assertEqual(json.load(response)["page_session"]["kind"], "kb")
+
     def test_verified_target_account_is_remembered_for_a_new_task_without_changing_defaults(self):
         spec = importlib.util.spec_from_file_location("config_page", SCRIPT)
         page = importlib.util.module_from_spec(spec)

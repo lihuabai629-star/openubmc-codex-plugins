@@ -15,6 +15,7 @@ import threading
 import time
 from typing import Any
 
+from _evidence_batch import collapse_compact_lines
 from _json_common import SCHEMA_VERSION
 from _workflow_contracts import validate_child_result_contract
 
@@ -811,12 +812,13 @@ def _compact_correlation(correlation: dict[str, object]) -> dict[str, object]:
                 item = dict(raw) if isinstance(raw, dict) else {"text": str(raw)}
                 text = str(item.get("text", ""))
                 item["id"] = index
+                item["_raw_text"] = text
                 item["text"] = _compact_text(text)
                 item["text_truncated"] = bool(
                     item.get("text_truncated") or len(text) > _COMPACT_TEXT_LIMIT
                 )
                 compact_lines.append(item)
-            return compact_lines
+            return collapse_compact_lines(compact_lines)
 
         pool["alarm_log_lines"] = indexed_lines(
             pool.get("alarm_log_lines"), alarm_refs
@@ -825,6 +827,9 @@ def _compact_correlation(correlation: dict[str, object]) -> dict[str, object]:
             pool.get("workflow_log_lines"), workflow_refs
         )
         compact["evidence_pool"] = pool
+    batch = compact.get("batch")
+    if isinstance(batch, dict) and batch.get("schema") == "openubmc-debug.evidence-batch.v1":
+        compact["batch"] = {key: value for key, value in batch.items() if key != "groups"}
     compact.pop("workflow_keyword_hits", None)
     return compact
 

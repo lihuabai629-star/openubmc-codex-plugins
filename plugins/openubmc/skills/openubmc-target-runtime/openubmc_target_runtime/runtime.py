@@ -24,6 +24,7 @@ from .contracts import (
     _validate_port,
 )
 from .mutation import (
+    PropertyMutationNoOp,
     FreshVerificationRequired,
     MutationAuthorization,
     MutationAuthorizationDenied,
@@ -2407,7 +2408,15 @@ class OpenUBMCTaskRun:
                         journal=journal,
                     )
                 )
-                journal.mark_effects_started()
+                no_op = isinstance(mutation_value, PropertyMutationNoOp)
+                if no_op:
+                    if (request.action != "mdb_property_modify" or journal.effects_started
+                        or journal.property_state is None
+                        or journal.property_state.expected != journal.property_state.desired):
+                        raise ValueError("property no-op does not match a zero-write journal")
+                    mutation_value = mutation_value.value
+                else:
+                    journal.mark_effects_started()
                 self._record_mutation_artifacts(journal, mutation_value)
                 journal.transition("applied", last_known_state="mutation-completed")
             except BaseException as exc:
@@ -2443,7 +2452,7 @@ class OpenUBMCTaskRun:
                 raise
 
             try:
-                epoch_after = self._advance_target_epoch(
+                epoch_after = epoch_before if no_op else self._advance_target_epoch(
                     coordinator,
                     reason=f"{request.action}-{request.operation_id}",
                 )
@@ -2892,6 +2901,11 @@ class OpenUBMCTaskRun:
 
         with self._lock:
             return tuple(self._mutation_journals.values())
+
+    def mutation_journal(self, operation_id: str) -> MutationJournal | None:
+        """Read the journal bound to an existing mutation identity."""
+        with self._lock:
+            return self._mutation_journals.get(operation_id)
 
     def prune_dead_connections(self) -> int:
         """Release dead transport state without discarding task evidence metadata."""

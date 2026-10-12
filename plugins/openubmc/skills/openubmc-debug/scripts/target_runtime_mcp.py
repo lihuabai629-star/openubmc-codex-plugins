@@ -10,6 +10,7 @@ if __name__ == '__main__':
     _openubmc_guard = _openubmc_Path(__file__).parent / '_plugin_entrypoint.py'
     _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
 
+
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 from contextlib import contextmanager
@@ -1398,6 +1399,10 @@ def create_service():
         "debug_run": debug_backend,
         "debug_collect": debug_backend,
     }
+    from mdb_property_backend import MdbPropertyBackend
+    property_backend = MdbPropertyBackend(journal_store=journal_store)
+    tool_backends["mdb_property_modify"] = property_backend
+    tool_backends["mdb_property_verify"] = property_backend
     log_backend = _load_log_analyzer_backend(artifact_store=artifact_store)
     if log_backend is not None:
         for operation in (

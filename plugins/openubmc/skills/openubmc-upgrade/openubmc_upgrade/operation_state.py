@@ -18,11 +18,15 @@ class UpgradeOperationStateStore:
 
     def __init__(self, root: Path) -> None:
         self.root = Path(root).expanduser().resolve() / "upgrade-operation-state"
-        self.root.mkdir(parents=True, exist_ok=True)
-        try:
-            self.root.chmod(0o700)
-        except OSError:
-            pass
+        if os.name == "nt":
+            from openubmc_target_runtime.windows_private import ensure_private_directory
+            ensure_private_directory(self.root)
+        else:
+            self.root.mkdir(parents=True, exist_ok=True)
+            try:
+                self.root.chmod(0o700)
+            except OSError:
+                pass
         self._lock = threading.RLock()
 
     @staticmethod
@@ -38,6 +42,10 @@ class UpgradeOperationStateStore:
         path = self._path(task_id, operation_id)
         with self._lock:
             try:
+                if os.name == "nt" and path.exists():
+                    from openubmc_target_runtime.windows_private import verify_private_path
+                    verify_private_path(self.root)
+                    verify_private_path(path)
                 raw = path.read_text(encoding="utf-8")
             except FileNotFoundError:
                 return None
@@ -128,6 +136,9 @@ class UpgradeOperationStateStore:
             f".{destination.name}.{os.getpid()}.{threading.get_ident()}.tmp"
         )
         with self._lock:
+            if os.name == "nt":
+                from openubmc_target_runtime.windows_private import verify_private_path
+                verify_private_path(self.root)
             try:
                 descriptor = os.open(
                     temporary,
@@ -135,6 +146,9 @@ class UpgradeOperationStateStore:
                     stat.S_IRUSR | stat.S_IWUSR,
                 )
                 with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                    if os.name == "nt":
+                        from openubmc_target_runtime.windows_private import harden_new_file
+                        harden_new_file(temporary)
                     handle.write(payload)
                     handle.flush()
                     os.fsync(handle.fileno())
