@@ -119,7 +119,9 @@ class MdbPropertyBackendTests(unittest.TestCase):
 
     def service(self):
         service = runtime.RuntimeMcpService(runtime.OrchestratedMcpBackend({"mdb_property_modify": self.backend,
-                                                                          "mdb_property_verify": self.backend}))
+                                                                          "mdb_property_verify": self.backend}),
+            artifact_store=runtime.LocalArtifactStore(
+                content_root=Path(self.temporary.name) / "artifacts"))
         self.addCleanup(service.close)
         return service
 
