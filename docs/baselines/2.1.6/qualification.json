@@ -1,0 +1,309 @@
+{
+  "archive_sha256": "085c19205392d7a9f71762754e7499fb4df2cb0c272efb5fe94e9010ff130979",
+  "content_digest": "09a16fff711b7b7690ab5fc67fdfd931cd5405ed898a96ed19bb67a07ab4cb34",
+  "desktop_gui": "not_run",
+  "hosted_ci": {
+    "conclusion": "success",
+    "head_commit": "691a3881f90dede7b5f50f54bd72658367608297",
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "Windows native plugin bootstrap"
+      },
+      {
+        "conclusion": "success",
+        "name": "verify"
+      }
+    ],
+    "run_id": 38111311651,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38111311651"
+  },
+  "installed_host_records": {
+    "codex": "codex-cli 0.153.4",
+    "content_digest": "09a16fff711b7b7690ab5fc67fdfd931cd5405ed898a96ed19bb67a07ab4cb34",
+    "desktop_ui_tested": false,
+    "fresh_v2_records": true,
+    "installed_export_verified": true,
+    "installed_test_record_verified": true,
+    "live_device_tested": false,
+    "live_model_tested": false,
+    "measurement_source_failure_and_recovery": true,
+    "native_hooks": true,
+    "native_resume_preserved_run": true,
+    "network_scope": "loopback only",
+    "passed": true,
+    "registered_task_only_measurements": true,
+    "same_task_project_switch": true,
+    "schema": "openubmc.installed-host-records.qualification/v1",
+    "source_commit": "cc03bc407e41320e7b40a33023ad7b6a96cb095d",
+    "two_project_bindings": true,
+    "unknown_usage_retained": true,
+    "version": "2.1.6"
+  },
+  "live_bmc": "not_run",
+  "native_three_host": {
+    "archive_repack": "mtime/uid/gid normalized; all extracted file bytes identical",
+    "content_digest": "09a16fff711b7b7690ab5fc67fdfd931cd5405ed898a96ed19bb67a07ab4cb34",
+    "desktop_gui": false,
+    "live_bmc": false,
+    "observations": [
+      {
+        "capability": "kb",
+        "host": "windows",
+        "native_detached_worker": true,
+        "seconds": 6.4,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "setup_mode": false,
+        "tool_count": 3,
+        "tool_names": [
+          "openubmc_kb_query",
+          "openubmc_kb_status",
+          "openubmc_kb_list"
+        ]
+      },
+      {
+        "capability": "runtime",
+        "host": "windows",
+        "native_detached_worker": true,
+        "seconds": 7.81,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "setup_mode": false,
+        "tool_count": 2,
+        "tool_names": [
+          "observe",
+          "execute"
+        ]
+      },
+      {
+        "capability": "kb",
+        "host": "windows",
+        "native_detached_worker": true,
+        "seconds": 6.7,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "setup_mode": false,
+        "tool_count": 3,
+        "tool_names": [
+          "openubmc_kb_query",
+          "openubmc_kb_status",
+          "openubmc_kb_list"
+        ]
+      },
+      {
+        "capability": "runtime",
+        "host": "windows",
+        "native_detached_worker": true,
+        "seconds": 7.88,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "setup_mode": false,
+        "tool_count": 2,
+        "tool_names": [
+          "observe",
+          "execute"
+        ]
+      },
+      {
+        "capability": "runtime",
+        "host": "0630",
+        "seconds": 3.61,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "setup_mode": false,
+        "tool_count": 2,
+        "tool_names": [
+          "observe",
+          "execute"
+        ]
+      },
+      {
+        "capability": "kb",
+        "host": "0630",
+        "seconds": 2.16,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "setup_mode": false,
+        "tool_count": 3,
+        "tool_names": [
+          "openubmc_kb_query",
+          "openubmc_kb_status",
+          "openubmc_kb_list"
+        ]
+      },
+      {
+        "capability": "runtime",
+        "host": "2603",
+        "seconds": 3.7,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "setup_mode": false,
+        "tool_count": 2,
+        "tool_names": [
+          "observe",
+          "execute"
+        ]
+      },
+      {
+        "capability": "kb",
+        "host": "2603",
+        "seconds": 3.33,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "setup_mode": false,
+        "tool_count": 3,
+        "tool_names": [
+          "openubmc_kb_query",
+          "openubmc_kb_status",
+          "openubmc_kb_list"
+        ]
+      }
+    ],
+    "package_archive_sha256": "085c19205392d7a9f71762754e7499fb4df2cb0c272efb5fe94e9010ff130979",
+    "passed": true,
+    "schema": "openubmc.multihost-startup.qualification/v1",
+    "scope": "exact archive on real Windows Node and both WSL distributions",
+    "source_commit": "cc03bc407e41320e7b40a33023ad7b6a96cb095d",
+    "tested_archive_sha256": "a768778f3e99b918efe3febcb6cc8a03e1670d3835bdca2480c607760f3d0662",
+    "version": "2.1.6"
+  },
+  "passed": true,
+  "public_behavior": {
+    "behavior": {
+      "artifacts": {
+        "passed": true,
+        "seconds": 4.838,
+        "tests": 4
+      },
+      "build": {
+        "passed": true,
+        "seconds": 1.466,
+        "tests": 6
+      },
+      "credentials": {
+        "passed": true,
+        "seconds": 1.239,
+        "tests": 9
+      },
+      "doctor": {
+        "passed": true,
+        "seconds": 4.598,
+        "tests": 5
+      },
+      "kb_loader": {
+        "passed": true,
+        "tests": 9
+      },
+      "logs": {
+        "passed": true,
+        "seconds": 0.16,
+        "tests": 3
+      },
+      "migration": {
+        "passed": true,
+        "seconds": 7.571,
+        "tests": 17
+      },
+      "python_entrypoints": {
+        "passed": true,
+        "seconds": 41.296,
+        "tests": 11
+      },
+      "skill_entry": {
+        "passed": true,
+        "seconds": 32.203,
+        "tests": 10
+      },
+      "ssh": {
+        "passed": true,
+        "seconds": 4.893,
+        "tests": 4
+      },
+      "startup": {
+        "passed": true,
+        "seconds": 2.77,
+        "tests": 5
+      },
+      "upgrade": {
+        "passed": true,
+        "seconds": 5.813,
+        "tests": 2
+      }
+    },
+    "cold_dependencies": {
+      "passed": true,
+      "seconds": 5.114
+    },
+    "content_digest": "09a16fff711b7b7690ab5fc67fdfd931cd5405ed898a96ed19bb67a07ab4cb34",
+    "dependency_locks": {
+      "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
+      "requirements.lock": "b608012e4804aa4131da7b6f12adccaf1c55431c873336315adf2251beef80f2"
+    },
+    "mcp_startup": {
+      "kb": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "stderr": "",
+        "timed_out": false,
+        "tools": [
+          "openubmc_kb_list",
+          "openubmc_kb_query",
+          "openubmc_kb_status"
+        ],
+        "version_matches_package": true
+      },
+      "runtime": {
+        "ok": true,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "stderr": "",
+        "timed_out": false,
+        "tools": [
+          "execute",
+          "observe"
+        ],
+        "version_matches_package": true
+      }
+    },
+    "ordinary_python_cli_before_mcp": true,
+    "package_integrity_after_checks": true,
+    "passed": true,
+    "platform": {
+      "codex": "codex-cli 0.153.4",
+      "machine": "x86_64",
+      "node": "v20.20.2",
+      "os": "Linux",
+      "python": "3.12.15"
+    },
+    "remote_business_qualification": "not_run",
+    "runtime_shutdown_verified": true,
+    "schema": "openubmc.public-behavior.v1",
+    "source_commit": "cc03bc407e41320e7b40a33023ad7b6a96cb095d",
+    "version": "2.1.6"
+  },
+  "source_commit": "cc03bc407e41320e7b40a33023ad7b6a96cb095d",
+  "status": "qualified",
+  "version": "2.1.6"
+}
