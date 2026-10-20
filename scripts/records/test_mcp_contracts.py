@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -572,6 +573,19 @@ class RuntimeMcpServiceTests(unittest.TestCase):
 
 
 class PersistentTaskContextTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # Fake domain operations must not resolve the operator's local credentials.
+        config = tempfile.TemporaryDirectory(prefix="mcp-test-config-")
+        self.addCleanup(config.cleanup)
+        environment = {
+            key: value for key, value in os.environ.items()
+            if not key.startswith(("OPENUBMC_", "REDFISH_"))
+        }
+        environment["XDG_CONFIG_HOME"] = config.name
+        patch = mock.patch.dict(os.environ, environment, clear=True)
+        patch.start()
+        self.addCleanup(patch.stop)
+
     @staticmethod
     def service_for(
         root: Path,

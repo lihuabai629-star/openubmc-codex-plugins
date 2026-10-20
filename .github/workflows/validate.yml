@@ -1,19 +1,25 @@
 name: Validate marketplace
 on:
   push:
+    branches: [main]
   pull_request:
 permissions:
   contents: read
+concurrency:
+  group: marketplace-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
       - name: Install locked Codex host
@@ -28,40 +34,43 @@ jobs:
       - name: Check packaged MDB property contracts and recovery
         run: python3 -B -m unittest discover -s scripts/property -p "test_*.py"
       - name: Check final plugin behavior and cold MCP startup
+        id: behavior
         run: python3 -I scripts/check_behavior.py --output "$RUNNER_TEMP/public-behavior.json"
       - name: Qualify installed Host records with native Codex
+        id: records
         run: >-
           python3 -B scripts/qualify_host_records.py
           --codex scripts/host/node_modules/.bin/codex
           --output "$RUNNER_TEMP/installed-host-records.json"
-      - name: Upload installed Host record evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: installed-host-records
-          path: ${{ runner.temp }}/installed-host-records.json
-          if-no-files-found: error
-      - name: Upload behavior evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: public-behavior
-          path: ${{ runner.temp }}/public-behavior.json
-          if-no-files-found: error
+      - name: Summarize qualification
+        if: ${{ !cancelled() }}
+        env:
+          BEHAVIOR_OUTCOME: ${{ steps.behavior.outcome }}
+          RECORDS_OUTCOME: ${{ steps.records.outcome }}
+        run: |
+          printf 'Plugin behavior: %s\n\nInstalled Host records: %s\n\n' \
+            "$BEHAVIOR_OUTCOME" "$RECORDS_OUTCOME" >> "$GITHUB_STEP_SUMMARY"
+          for report in "$RUNNER_TEMP/public-behavior.json" "$RUNNER_TEMP/installed-host-records.json"; do
+            if test -f "$report"; then
+              sha256sum "$report" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
 
   windows:
     name: Windows native plugin bootstrap
     runs-on: windows-2025
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '20'
       - name: Install locked Codex host
         shell: pwsh
         run: npm ci --ignore-scripts --no-audit --no-fund --prefix scripts/host
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
       - name: Check native Windows record export ACLs
