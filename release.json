@@ -1,37 +1,10 @@
 {
-  "archive_sha256": "0288586e708fa2320449f0eeaa334fe1b156ae185fc6f62ec2f3d48251034a5d",
-  "base_distribution_commit": "95ce3ca22ccb4d6c7a0213d7daf5c08176a7f01d",
-  "content_digest": "c0e65b83f348c0c3982cc746ae987cd88a7ba66dfe93b79b2ea969310adf452c",
-  "distribution_commit": "20a6bd4ec998b530b2ae64d8210d0920168c7b97",
-  "github_release_id": 410906078,
-  "hosted_ci": {
-    "conclusion": "success",
-    "head_commit": "20a6bd4ec998b530b2ae64d8210d0920168c7b97",
-    "jobs": [
-      {
-        "conclusion": "success",
-        "name": "verify"
-      },
-      {
-        "conclusion": "success",
-        "name": "Windows native plugin bootstrap"
-      }
-    ],
-    "run_id": 38290459883,
-    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/38290459883"
-  },
+  "version": "2.1.9",
+  "source_commit": "pending",
+  "content_digest": "pending",
+  "status": "candidate",
+  "upgrade_baseline": "2.1.7",
   "name": "openubmc",
-  "publication": "published",
-  "published_at": "2026-10-12T18:54:32Z",
   "release_scope": "codex-plugin",
-  "release_tag": "v2.1.7",
-  "release_url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/releases/tag/v2.1.7",
-  "source_commit": "b61f46997ca022b39a81ea73a35e733126e50e73",
-  "status": "released",
-  "tag_commit": "20a6bd4ec998b530b2ae64d8210d0920168c7b97",
-  "upgrade_baseline": "2.1.6",
-  "version": "2.1.7",
-  "workflow_contract_selector_commit": "839e2ea39afb64352c29c2b3a61bb37f11bf23a1",
-  "workflow_merged_main": "e210b99ae286484cfd060d88150411d35fa86f6a",
-  "workflow_source_commit": "61337999b6fc9884b2aeccaa4198251ff617572a"
+  "runtime_fix_commit": "6bc35bd0c5a09db8842dfcffc10e11aaa2dcf035"
 }
