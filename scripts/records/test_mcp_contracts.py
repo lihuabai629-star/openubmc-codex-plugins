@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
@@ -572,6 +573,29 @@ class RuntimeMcpServiceTests(unittest.TestCase):
 
 
 class PersistentTaskContextTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # The capturing backend performs no authentication. Restored resources
+        # still need local credentials, independent of the operator's account.
+        configuration = tempfile.TemporaryDirectory()
+        self.addCleanup(configuration.cleanup)
+        isolated = {key: value for key, value in os.environ.items() if key not in {
+            "OPENUBMC_CREDENTIALS_CONFIG", "OPENUBMC_CREDENTIALS_FILE",
+            "OPENUBMC_DEBUG_CREDENTIALS_FILE",
+        }}
+        isolated["XDG_CONFIG_HOME"] = configuration.name
+        environment = mock.patch.dict(os.environ, isolated, clear=True)
+        environment.start()
+        self.addCleanup(environment.stop)
+        credentials = mock.patch(
+            "openubmc_target_runtime.mcp.load_selected_credentials_file",
+            return_value={
+                "OPENUBMC_SSH_USER": "fixture-user",
+                "OPENUBMC_SSH_PASSWORD": "fixture-password",
+            },
+        )
+        credentials.start()
+        self.addCleanup(credentials.stop)
+
     @staticmethod
     def service_for(
         root: Path,

@@ -1,8 +1,144 @@
 {
-  "version": "2.1.9",
-  "source_commit": "pending",
-  "content_digest": "pending",
-  "status": "candidate",
-  "upgrade_baseline": "2.1.7",
-  "passed": false
+  "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
+  "installed_hosts": "pending",
+  "native_windows_runtime_regressions": {
+    "passed": 5,
+    "python": "3.12.14",
+    "tests": 5
+  },
+  "passed": true,
+  "property_checks": {
+    "passed": 42,
+    "tests": 42
+  },
+  "public_behavior": {
+    "behavior": {
+      "artifacts": {
+        "passed": true,
+        "seconds": 5.009,
+        "tests": 4
+      },
+      "build": {
+        "passed": true,
+        "seconds": 1.217,
+        "tests": 6
+      },
+      "credentials": {
+        "passed": true,
+        "seconds": 1.068,
+        "tests": 9
+      },
+      "doctor": {
+        "passed": true,
+        "seconds": 4.143,
+        "tests": 5
+      },
+      "kb_loader": {
+        "passed": true,
+        "tests": 9
+      },
+      "logs": {
+        "passed": true,
+        "seconds": 0.256,
+        "tests": 3
+      },
+      "migration": {
+        "passed": true,
+        "seconds": 9.255,
+        "tests": 17
+      },
+      "python_entrypoints": {
+        "passed": true,
+        "seconds": 38.758,
+        "tests": 11
+      },
+      "skill_entry": {
+        "passed": true,
+        "seconds": 32.699,
+        "tests": 10
+      },
+      "ssh": {
+        "passed": true,
+        "seconds": 4.713,
+        "tests": 4
+      },
+      "startup": {
+        "passed": true,
+        "seconds": 1.421,
+        "tests": 5
+      },
+      "upgrade": {
+        "passed": true,
+        "seconds": 6.252,
+        "tests": 2
+      }
+    },
+    "cold_dependencies": {
+      "passed": true,
+      "seconds": 34.501
+    },
+    "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
+    "dependency_locks": {
+      "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
+      "requirements.lock": "27e99ceb902b98111f4becff47a1f6754d951b9f57a8af3adda0b50650232f36"
+    },
+    "mcp_startup": {
+      "kb": {
+        "exit_code": 0,
+        "ok": true,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.0"
+        },
+        "stderr": "",
+        "timed_out": false,
+        "tools": [
+          "openubmc_kb_list",
+          "openubmc_kb_query",
+          "openubmc_kb_status"
+        ],
+        "version_matches_package": true
+      },
+      "runtime": {
+        "exit_code": 0,
+        "ok": true,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
+        },
+        "stderr": "",
+        "timed_out": false,
+        "tools": [
+          "execute",
+          "observe"
+        ],
+        "version_matches_package": true
+      }
+    },
+    "ordinary_python_cli_before_mcp": true,
+    "package_integrity_after_checks": true,
+    "passed": true,
+    "platform": {
+      "codex": "codex-cli 0.153.4",
+      "machine": "x86_64",
+      "node": "v20.18.0",
+      "os": "Linux",
+      "python": "3.12.3"
+    },
+    "remote_business_qualification": "not_run",
+    "runtime_shutdown_verified": true,
+    "schema": "openubmc.public-behavior.v1",
+    "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
+    "version": "2.1.9"
+  },
+  "records": {
+    "credential_fixture": "isolated capturing-backend defaults",
+    "passed": 167,
+    "skipped_native_windows": 3,
+    "tests": 170
+  },
+  "remote_business_qualification": "not_run",
+  "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
+  "status": "qualified",
+  "version": "2.1.9"
 }

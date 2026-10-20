@@ -1,0 +1,58 @@
+{
+  "base_distribution_commit": "4c94ec674cee99664ef63eac10f7850b35144b30",
+  "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
+  "local_preview_channels": {
+    "openubmc-panel-dev": {
+      "archive_sha256": "db732cd667055320bc9f1bcd88b32745e2a72c1e9ec87a3ac78b52b6c8e5e68e",
+      "content_digest": "94b1d81e4fbe859860a4b9ebd53713e948be468610542298d4928146af1bb49c",
+      "files": 318,
+      "ok": true,
+      "skills": [
+        "openubmc-bingo-build",
+        "openubmc-bingo-development",
+        "openubmc-build",
+        "openubmc-debug",
+        "openubmc-developer",
+        "openubmc-dt-testing",
+        "openubmc-environment-setup",
+        "openubmc-live-patch",
+        "openubmc-log-analyzer",
+        "openubmc-lua-component",
+        "openubmc-publish",
+        "openubmc-qemu-testing",
+        "openubmc-upgrade"
+      ],
+      "source_commit": "2cb5955c31570a5b2861d78fe292fe276d4d8cc1",
+      "version": "2.1.9"
+    },
+    "openubmc-panel-fast": {
+      "archive_sha256": "2e400e84cf264caf143fb5a495f24364cd3f5f223a76954cefa90ee1dc7a8145",
+      "content_digest": "5f5764c07c1af8a8a3676309f077e3e31f96c96f6da794f0ee5766788189c259",
+      "files": 319,
+      "ok": true,
+      "skills": [
+        "openubmc-bingo-build",
+        "openubmc-bingo-development",
+        "openubmc-build",
+        "openubmc-debug",
+        "openubmc-developer",
+        "openubmc-dt-testing",
+        "openubmc-environment-setup",
+        "openubmc-live-patch",
+        "openubmc-log-analyzer",
+        "openubmc-lua-component",
+        "openubmc-publish",
+        "openubmc-qemu-testing",
+        "openubmc-upgrade"
+      ],
+      "source_commit": "7086c3d0cff2e86995129aeb78be958e3c345db0",
+      "version": "2.1.9"
+    }
+  },
+  "public_package_scope": "2.1.7 payload with Runtime probe and idle timeout fixes",
+  "record_test_fixture_commit": "d04fdf0",
+  "runtime_fix_commit": "6bc35bd0c5a09db8842dfcffc10e11aaa2dcf035",
+  "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
+  "status": "candidate",
+  "version": "2.1.9"
+}

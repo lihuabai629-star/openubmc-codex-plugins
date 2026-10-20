@@ -1,8 +1,8 @@
 {
-  "version": "2.1.9",
-  "source_commit": "pending",
-  "content_digest": "pending",
+  "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
+  "passed": false,
+  "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
   "status": "candidate",
   "upgrade_baseline": "2.1.7",
-  "passed": false
+  "version": "2.1.9"
 }
