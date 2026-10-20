@@ -1,6 +1,31 @@
 {
   "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
-  "installed_hosts": "pending",
+  "hosted_ci": {
+    "conclusion": "success",
+    "head_commit": "68bc81254e716f65b4887ca3e68523b100d2f40c",
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "verify"
+      },
+      {
+        "conclusion": "success",
+        "name": "Windows native plugin bootstrap"
+      }
+    ],
+    "run_id": 39404719355,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/39404719355"
+  },
+  "installed_hosts": {
+    "hosts": [
+      "0630",
+      "2603",
+      "windows"
+    ],
+    "passed": true,
+    "plugin_installations": 5,
+    "receipt": "docs/installed-hosts-2.1.9.json"
+  },
   "native_windows_runtime_regressions": {
     "passed": 5,
     "python": "3.12.14",

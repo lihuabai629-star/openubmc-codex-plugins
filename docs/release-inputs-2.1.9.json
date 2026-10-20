@@ -1,6 +1,41 @@
 {
+  "acceptance_scope": {
+    "desktop_gui": "not_run",
+    "existing_desktop_resume": "not_run",
+    "external_model_tests": 0,
+    "installed_host_startup": "qualified on Windows native and WSL 0630/2603",
+    "remote_business": "not_run"
+  },
+  "archive_sha256": "715c0bf9eeec4a1b118f0cf70b449179cd2cbed8d8a44a4cce66d2ed283a869c",
   "base_distribution_commit": "4c94ec674cee99664ef63eac10f7850b35144b30",
   "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
+  "distribution_commit": "68bc81254e716f65b4887ca3e68523b100d2f40c",
+  "hosted_ci": {
+    "conclusion": "success",
+    "head_commit": "68bc81254e716f65b4887ca3e68523b100d2f40c",
+    "jobs": [
+      {
+        "conclusion": "success",
+        "name": "verify"
+      },
+      {
+        "conclusion": "success",
+        "name": "Windows native plugin bootstrap"
+      }
+    ],
+    "run_id": 39404719355,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/39404719355"
+  },
+  "installed_hosts": {
+    "hosts": [
+      "0630",
+      "2603",
+      "windows"
+    ],
+    "passed": true,
+    "plugin_installations": 5,
+    "receipt": "docs/installed-hosts-2.1.9.json"
+  },
   "local_preview_channels": {
     "openubmc-panel-dev": {
       "archive_sha256": "db732cd667055320bc9f1bcd88b32745e2a72c1e9ec87a3ac78b52b6c8e5e68e",
@@ -50,9 +85,17 @@
     }
   },
   "public_package_scope": "2.1.7 payload with Runtime probe and idle timeout fixes",
-  "record_test_fixture_commit": "d04fdf0",
+  "publication": {
+    "github_release_id": 418257098,
+    "published_at": "2026-10-20T10:08:32Z",
+    "status": "published",
+    "tag": "v2.1.9",
+    "tag_commit": "68bc81254e716f65b4887ca3e68523b100d2f40c",
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/releases/tag/v2.1.9"
+  },
+  "record_test_fixture_commit": "d04fdf0953563474526b988afd5cc0362b416e08",
   "runtime_fix_commit": "6bc35bd0c5a09db8842dfcffc10e11aaa2dcf035",
   "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
-  "status": "candidate",
+  "status": "qualified",
   "version": "2.1.9"
 }

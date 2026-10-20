@@ -1,8 +1,79 @@
 {
   "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
-  "passed": false,
+  "desktop_gui": false,
+  "distribution_commit": "68bc81254e716f65b4887ca3e68523b100d2f40c",
+  "existing_desktop_resume": false,
+  "external_models": 0,
+  "hosts": [
+    {
+      "host": "0630",
+      "native_os": "linux",
+      "passed": true,
+      "plugins": [
+        {
+          "doctor_passed": true,
+          "enabled": true,
+          "package_integrity": true,
+          "pluginId": "openubmc@openubmc-public",
+          "startup_ready": true,
+          "version": "2.1.9"
+        }
+      ]
+    },
+    {
+      "host": "2603",
+      "native_os": "linux",
+      "passed": true,
+      "plugins": [
+        {
+          "doctor_passed": true,
+          "enabled": true,
+          "package_integrity": true,
+          "pluginId": "openubmc@openubmc-public",
+          "startup_ready": true,
+          "version": "2.1.9"
+        }
+      ]
+    },
+    {
+      "host": "windows",
+      "native_os": "win32",
+      "passed": true,
+      "plugins": [
+        {
+          "doctor_passed": true,
+          "enabled": false,
+          "package_integrity": true,
+          "pluginId": "openubmc@openubmc-public",
+          "startup_ready": true,
+          "version": "2.1.9"
+        },
+        {
+          "doctor_passed": true,
+          "enabled": false,
+          "package_integrity": true,
+          "pluginId": "openubmc@openubmc-panel-dev",
+          "startup_ready": true,
+          "version": "2.1.9"
+        },
+        {
+          "doctor_passed": true,
+          "enabled": true,
+          "package_integrity": true,
+          "pluginId": "openubmc@openubmc-panel-fast",
+          "startup_ready": true,
+          "version": "2.1.9"
+        }
+      ]
+    }
+  ],
+  "live_bmc": false,
+  "passed": true,
+  "receipt": "docs/installed-hosts-2.1.9.json",
+  "schema": "openubmc.multihost-startup.qualification/v1",
+  "scope": "installed package integrity, local configuration and native MCP initialization/tools list",
   "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
-  "status": "candidate",
+  "status": "qualified",
   "upgrade_baseline": "2.1.7",
   "version": "2.1.9"
 }
