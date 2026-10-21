@@ -35,8 +35,9 @@ def _windows_handle_state(kernel, handle) -> tuple[bool, str]:
     import ctypes
     from ctypes import wintypes
 
-    class FileTime(ctypes.Structure):
-        _fields_ = [("low", wintypes.DWORD), ("high", wintypes.DWORD)]
+    # POINTER caches its target type globally; reuse the standard FILETIME so
+    # repeated probes cannot retain a new Structure and pointer type each time.
+    FileTime = wintypes.FILETIME
 
     kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
     kernel.GetExitCodeProcess.restype = wintypes.BOOL
@@ -53,7 +54,7 @@ def _windows_handle_state(kernel, handle) -> tuple[bool, str]:
     if not kernel.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exited),
                                   ctypes.byref(kernel_time), ctypes.byref(user_time)):
         return True, "unknown"
-    identity = (int(created.high) << 32) | int(created.low)
+    identity = (int(created.dwHighDateTime) << 32) | int(created.dwLowDateTime)
     return True, str(identity)
 
 
@@ -407,7 +408,7 @@ class McpProcessLifecycle:
             elif lifecycle_state == "orphaned":
                 reason = "parent-exited"
             elif (
-                lifecycle_state == "idle"
+                lifecycle_state in {"idle", "unknown-owner"}
                 and float(status["idle_seconds"]) >= self.idle_timeout_seconds
             ):
                 reason = "idle-timeout"

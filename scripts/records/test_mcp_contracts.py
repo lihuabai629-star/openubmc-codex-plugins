@@ -585,6 +585,15 @@ class PersistentTaskContextTests(unittest.TestCase):
         patch = mock.patch.dict(os.environ, environment, clear=True)
         patch.start()
         self.addCleanup(patch.stop)
+        credentials = mock.patch(
+            "openubmc_target_runtime.mcp.load_selected_credentials_file",
+            return_value={
+                "OPENUBMC_SSH_USER": "fixture-user",
+                "OPENUBMC_SSH_PASSWORD": "fixture-password",
+            },
+        )
+        credentials.start()
+        self.addCleanup(credentials.stop)
 
     @staticmethod
     def service_for(
