@@ -66,6 +66,10 @@ Ask Codex: “打开 openUBMC 本机配置，检查插件状态。” The setup 
 
 The built-in `property-update-and-verify` intent can assign one Boolean or 8/16/32-bit integer configuration property through `execute`. An operator-maintained property contract is required; the default allowlist is empty. Read [the property modification contract](plugins/openubmc/skills/openubmc-debug/references/property-modification.md) before enabling a property. Timeouts retain an unknown outcome for read-only reconciliation; compensation requires a separately authorized assignment.
 
+## Continuous validation
+
+Pull requests and `main` pushes run Linux package checks and native Windows bootstrap checks. Superseded runs are cancelled. Qualification status and report checksums appear in the Actions summary; ordinary checks do not upload artifacts or publish a Release.
+
 ## License
 
 [MulanPSL-2.0](LICENSE). Third-party dependencies retain their own licenses and are downloaded from their package registries.

@@ -574,18 +574,17 @@ class RuntimeMcpServiceTests(unittest.TestCase):
 
 class PersistentTaskContextTests(unittest.TestCase):
     def setUp(self) -> None:
-        # The capturing backend performs no authentication. Restored resources
-        # still need local credentials, independent of the operator's account.
-        configuration = tempfile.TemporaryDirectory()
-        self.addCleanup(configuration.cleanup)
-        isolated = {key: value for key, value in os.environ.items() if key not in {
-            "OPENUBMC_CREDENTIALS_CONFIG", "OPENUBMC_CREDENTIALS_FILE",
-            "OPENUBMC_DEBUG_CREDENTIALS_FILE",
-        }}
-        isolated["XDG_CONFIG_HOME"] = configuration.name
-        environment = mock.patch.dict(os.environ, isolated, clear=True)
-        environment.start()
-        self.addCleanup(environment.stop)
+        # Fake domain operations must not resolve the operator's local credentials.
+        config = tempfile.TemporaryDirectory(prefix="mcp-test-config-")
+        self.addCleanup(config.cleanup)
+        environment = {
+            key: value for key, value in os.environ.items()
+            if not key.startswith(("OPENUBMC_", "REDFISH_"))
+        }
+        environment["XDG_CONFIG_HOME"] = config.name
+        patch = mock.patch.dict(os.environ, environment, clear=True)
+        patch.start()
+        self.addCleanup(patch.stop)
         credentials = mock.patch(
             "openubmc_target_runtime.mcp.load_selected_credentials_file",
             return_value={
