@@ -61,13 +61,6 @@ process.stdin.on("end", () => {
     // existing trusted workspace selection is refreshed for subsequent Runs.
     const backend = adapter.resolveBackend();
     if (!backend.ok) throw new Error("host_unavailable");
-    if (adapter.hostPlatform === "win32" && backend.selected_wsl && typeof event.cwd === "string") {
-      const converted = adapter.run(process.env.OPENUBMC_PLUGIN_WSL_EXE || "wsl.exe",
-        ["-d", backend.selected_wsl, "--exec", "wslpath", "-a", "-u", event.cwd]);
-      if (converted.error || converted.status !== 0) throw new Error("host_cwd_unavailable");
-      event.cwd = adapter.decodeOutput(converted.stdout).trim();
-      input = JSON.stringify(event);
-    }
     const result = adapter.run(backend.command, [...backend.prefix, "host-hook"], {
       input, encoding: "utf8", timeout: 8000, maxBuffer: 65536,
     });

@@ -2,7 +2,7 @@
 
 当用户要看“当前告警 / 活动告警 / 健康状态 / 还在不在报”时，读这个文件。
 
-保持任务仓库为当前目录，并从 `$HOME/.agents/skills/openubmc-debug` 调用辅助脚本。
+保持任务仓库为当前目录，并从 `<plugin-root>/skills/openubmc-debug` 调用辅助脚本。
 
 ## 边界
 
@@ -13,8 +13,8 @@
 ## 快速路径
 
 ```
-python "$HOME/.agents/skills/openubmc-debug/scripts/preflight_remote.py" --ip <ip> --skip-telnet --json
-python "$HOME/.agents/skills/openubmc-debug/scripts/active_alarms.py" --ip <ip> --json --compact-json
+python "<plugin-root>/skills/openubmc-debug/scripts/preflight_remote.py" --ip <ip> --skip-telnet --json
+python "<plugin-root>/skills/openubmc-debug/scripts/active_alarms.py" --ip <ip> --json --compact-json
 ```
 
 `active_alarms.py` 默认先对标准端点 `bmc.kepler.event` + `/bmc/kepler/Systems/1/Events`
@@ -46,7 +46,7 @@ service unknown 或 name has no owner，reader 只清除该端点元数据，在
 需要手工复现发现过程时再执行：
 
 ```
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> \
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> \
   --action introspect \
   --service <introspected-service> \
   --path <introspected-object-path>
@@ -63,7 +63,7 @@ python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> 
 如果 introspect 返回尚未内置的签名，在确认该版本的参数语义后，可显式提供覆盖；覆盖签名必须与现场 introspect 完全一致：
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/active_alarms.py" --ip <ip> \
+python "<plugin-root>/skills/openubmc-debug/scripts/active_alarms.py" --ip <ip> \
   --call-signature '<introspected-signature>' \
   --call-arg '<arg-1>' \
   --call-arg '<arg-2>' \

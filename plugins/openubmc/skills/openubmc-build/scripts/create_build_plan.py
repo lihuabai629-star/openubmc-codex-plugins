@@ -24,7 +24,7 @@ import sys
 import tempfile
 import re
 
-from build_route import equivalence_receipt
+from build_route import equivalence_receipt, is_product_build_command
 
 
 SCHEMA = "openubmc-build/plan-v1"
@@ -392,17 +392,6 @@ def output_resource_lock(role: str, path: Path) -> dict[str, str]:
     }
 
 
-def is_product_build_command(command: list[str]) -> bool:
-    if len(command) < 2:
-        return False
-    if Path(command[0]).name != "bmcgo" or command[1] != "build":
-        return False
-    return any(
-        argument in {"-b", "--board"} or argument.startswith("--board=")
-        for argument in command[2:]
-    )
-
-
 def command_executable_identity(argv: list[str], cwd: Path) -> dict[str, object]:
     if not argv:
         return {}
@@ -649,8 +638,8 @@ def main(argv: list[str] | None = None) -> int:
         command_text = " ".join(command).lower()
         if re.search(r"\bbingo\s+build\b", command_text):
             raise BuildPlanError(
-                "bingo_build_handoff_required",
-                "an explicit bingo build belongs to openubmc-bingo-build",
+                "unsupported_build_tool",
+                "Bingo is no longer supported; select an explicit verified bmcgo command",
             )
         if re.search(r"\bconan\s+create\b", command_text) and equivalence is None:
             raise BuildPlanError(

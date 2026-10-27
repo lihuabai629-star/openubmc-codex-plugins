@@ -1,6 +1,6 @@
 ---
 name: openubmc-build
-description: "Build and test openUBMC components or firmware: 编译组件、生成代码、运行测试、打 HPM 包、构建失败。Use for bmcgo validation, component Conan packaging, or product HPM builds with verified local evidence. Explicit Bingo builds route to openubmc-bingo-build, while Bingo CLI source development routes to openubmc-bingo-development. Route environment setup, firmware activation, live diagnosis, and package upload to their owning skills."
+description: "Build and test openUBMC components or firmware: 编译组件、生成代码、运行测试、打 HPM 包、构建失败。Use for bmcgo validation, Conan dependency/build diagnosis, component packaging or product HPM builds. Bingo requests are unsupported without substituting commands. Plugin configuration, SDK installation, firmware activation, live diagnosis and uploads have separate owners."
 ---
 
 # openUBMC Build
@@ -20,7 +20,7 @@ Resolve every helper path relative to this `SKILL.md`. In examples, `<skill-dir>
 
 ## Route First
 
-Run `scripts/build_route.py` before selecting a build tool. An explicit Bingo build command or Bingo CLI development request is a handoff and must not fall through to `bmcgo` or raw `conan create`. Product/HPM and component-package routes require their workspace precondition. Tool substitution requires the equivalence receipt described in [references/build-routing.md](references/build-routing.md).
+Run `scripts/build_route.py` before selecting a build tool. An explicit Bingo build command or Bingo CLI development request is unsupported and must not fall through to `bmcgo` or raw `conan create`. Product/HPM and component-package routes require their workspace precondition. Tool substitution requires the equivalence receipt described in [references/build-routing.md](references/build-routing.md).
 
 For a Windows/WSL task already owned by a Target Runtime Case, check the
 Runtime MCP protocol and continue the typed `execute` Run when its build
@@ -30,12 +30,8 @@ only; it does not close a deployment or runtime-verification Gate. A complete
 tool-equivalence claim remains pending until the Build Plan binds it to actual
 checkout, command, dependency lock, artifact, and release gates.
 
-On native Windows, device Runtime remains available without a compiler, Conan,
-or Bingo. If a build request has no selected capable build host, return the
-typed `build_environment_unavailable` blocker with the actual host and missing
-tools; leave any Build Gate pending. Use WSL only when the task explicitly
-selects it as a build environment. Device operations stay on their bound
-Windows Runtime.
+Run the plugin and build tooling inside Linux or WSL. Native Windows execution
+returns `unsupported_platform`; it does not probe or install a native backend.
 
 Choose one mode before any persistent write:
 
@@ -75,9 +71,22 @@ Treat `build_type`, `stage`, `target`, `remote`, and `version` as independent in
 
 Use the checkout already selected by the user, handoff, or active task. Record its canonical root, Git HEAD, concrete git dir/common dir, and dirty-content fingerprint in the Build Plan.
 
-The default new-worktree budget is zero. Use another checkout only when the user or handoff selected it, or after showing a concrete Git-ref or write-conflict isolation need and receiving user confirmation. A dirty tree by itself is not such a conflict. A retry uses the Plan checkout; changing checkout creates a new Plan.
+Reuse the selected checkout. For a concrete Git-ref or write-conflict isolation need,
+create an isolated checkout yourself and report its path; routine reversible isolation
+needs no extra confirmation. A dirty tree alone does not require isolation. A retry
+uses the Plan checkout; changing checkout creates a new Plan.
 
 Worktree is not a cache, log, version, or retry-isolation mechanism.
+
+Keep large SDK downloads, temporary archives and raw images outside the checkout,
+or verify the exact generated directory with `git check-ignore -v -- <path>`.
+Use a precise local `.git/info/exclude` entry when needed; untracked output can
+otherwise enter host Git snapshots. Reuse existing download and build caches.
+Before a large build, inspect actual allocation with `du -sh` and free space with
+`df -h` on the output volume. In WSL also record the Windows volume holding the
+VHDX (for example, `Get-Volume` in PowerShell); guest free space alone does not
+establish host capacity. Address low space according to the expected build size;
+do not impose a fixed threshold or remove old user directories automatically.
 
 ### Make planned writes idempotent
 
@@ -92,6 +101,11 @@ For packaging modes, determine explicit expected and target values once, then us
 A retry never recalculates or increments a version.
 
 ### One Plan, one exact command
+
+For ordinary `validate` work without an existing Plan or Runtime build Gate, run the
+selected command directly, retaining cwd, argv, changed outputs and its bounded log.
+Packaging and an explicitly selected Plan/Attempt workflow use the contract below;
+do not require release metadata or a new Plan for a routine compile, generation or UT.
 
 A Build Plan binds one semantic command. `bmcgo gen`, a component package build, and a product HPM build are separate Plans when each must run.
 
@@ -111,7 +125,7 @@ Read [references/build-plan.md](references/build-plan.md) before creating or ret
 
 ### Retry as an Attempt
 
-Execute only through `scripts/run_build_attempt.py --plan <plan.json> --run-root <run-root>`.
+For Plan-based work, execute through `scripts/run_build_attempt.py --plan <plan.json> --run-root <run-root>`.
 
 An Attempt has the state sequence:
 
@@ -204,6 +218,11 @@ execute:
 Resume an interrupted continuation with `execute(kind=resume)` and the current `run_id`. A completed Gate cannot be reopened to replace its artifact; start a new Run for another delivery. Runtime owns the Upgrade continuation. Do not upload from Build or acquire a target lease. Do not perform an upgrade from Build.
 
 ## Supporting References
+
+When the requested next stage is a source commit, fork push, or MR/PR, read
+`openubmc-code-submit`. Carry the source revision, changed components, actual
+checks, artifact identity and package-binding gaps. A successful build does not
+authorize a code push or imply that a later amended commit was built.
 
 Read only when the selected branch requires them:
 

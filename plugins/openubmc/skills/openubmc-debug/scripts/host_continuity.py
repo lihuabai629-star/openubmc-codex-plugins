@@ -21,10 +21,6 @@ from _target_runtime_adapter import _load_runtime_module
 
 
 def _default_state_dir() -> Path:
-    if os.name == "nt":
-        local = Path(os.environ.get("XDG_STATE_HOME") or os.environ.get("LOCALAPPDATA")
-                     or Path.home() / "AppData" / "Local")
-        return local / "openubmc" / "runtime-state"
     return Path.home() / ".local" / "state" / "openubmc-target-runtime"
 
 

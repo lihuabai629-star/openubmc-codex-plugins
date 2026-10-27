@@ -1,22 +1,23 @@
 {
   "files": {
-    "behavior/config.test.mjs": "083ba97f4eff85244b7988d9188fccb9411dadac3bd83ebebf74fcee12ffeed6",
-    "behavior/plugin_fixture.py": "b2a1039dca2ee7cfb5b2f83c04b6b47d5b03df4614ee7430852999381eb32b95",
+    "behavior/config.test.mjs": "106753ceb4802b90f00d36173cb6550e25c4952b9f1e50657298ae2234a33541",
+    "behavior/plugin_fixture.py": "5f397d0faac04b56f4f93140bc1debd74846c359598aae607b261facefeea025",
     "behavior/redfish_fixture.py": "ec5883c8fc3cbfc8718e91c2508834391c9d26addbf6978369d29f56e41b6145",
     "behavior/test_artifact_retention.py": "8661bb3733a157841b9d2f16177808cce393f871428edc432b5dd962696a4408",
     "behavior/test_bundle_extraction.py": "32e9fcfdf52e0808876b8dcb621e3f02b71ffa39902fb63612ddf05e242b48a5",
     "behavior/test_credential_commands.py": "879d31480aef97d36c54c4a6b1d59b1e0a50d9f924c7664a2b5fe36cce4cc0b4",
-    "behavior/test_failure_gates.py": "cc57abdba373782e535100f645a17db5a27be5068f8eadbc6e0b891a6150bd2e",
-    "behavior/test_openssh_timeouts.py": "f20e2ee205cde4e6a35afdff2f7beb0dd1556c5dff285f23ec83c304452c7fd6",
+    "behavior/test_failure_gates.py": "a2924f6920229b8987ed7034f9d95432f1d61d6000b6d7a10904886a0235d108",
+    "behavior/test_openssh_timeouts.py": "f8f67a7990fdda641128a4dc073663b00154792429b9c0526f177c4398ba4bcc",
     "behavior/test_plugin_credentials.py": "390a8385a68731d0e44c28504e2bf2e2d57ce54fada51184968e4e84f53571e7",
     "behavior/test_plugin_disable_migration.py": "f4caae8e61d441a286578585f9ff258c452311028e15db5294a0564e7892a580",
-    "behavior/test_plugin_python_entrypoints.py": "64818aa9edd3b6e42aaaad3bcd55cf7a1605e7b45a68df96b797bb49ad1b7a83",
-    "behavior/test_plugin_skill_entry.py": "1cdb9227902594138526a456ad48b240566c64e097ec30e87edec1590165dc42",
-    "behavior/test_plugin_startup.py": "da3e1411363cead7a96f5c830f21cdf476d8ebffd50151e4aa104c0eae8c07f9",
+    "behavior/test_plugin_python_entrypoints.py": "33eb1eb9bd98bbe856dcd4419e050fbae414ea1f85cf334fead6b89f2ec6b956",
+    "behavior/test_plugin_skill_entry.py": "478c597f9532680c7b5482146c78d6a70ae5d515d5b49463014da281200e1b67",
+    "behavior/test_plugin_startup.py": "8930f254b0b8a1f9b390fe634bbee959bab2a6be8d6017bc6ae666ee7bf36fa1",
     "behavior/test_upgrade_task_states.py": "3fba0983ea5a074822c3857bdf5e690e35ca3c99870aba4bd9c79b4e09cbdeba",
-    "check_behavior.py": "8ccd1f45fe448278989f13a26f0605da6fb32cbe71685e029a74502f916a2419",
+    "check_behavior.py": "9c13ad3ed74dedc58f689110fe766e33c6fc8cc03198def4c1e4691b2c093127",
     "host/package-lock.json": "3d456708625217a8fe548dda38925d1882444a2f40ec7209a5968e5d5d615b4c",
-    "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5"
+    "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5",
+    "test-support/private-fixture.mjs": "7d04ee27258f661015c9589b4a287243f6b05fbad5885986368814beeef2197b"
   },
-  "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98"
+  "source_commit": "c08d3a13895587d24d98640747d186f3225e746d"
 }

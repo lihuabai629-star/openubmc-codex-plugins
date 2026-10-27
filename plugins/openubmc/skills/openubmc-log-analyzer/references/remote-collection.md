@@ -22,7 +22,9 @@
 2. 已知远端日志包路径
 3. 需要通过 SSH 执行远端命令生成日志包
 
-内部研发模式可以直接传账号密码；需要重复使用时也可以选择环境变量。
+Agent 使用 Runtime 的私有凭据解析器，只传目标和配置引用。模型工具参数、聊天、计划
+和持久化 Case 均不携带密码值。以下环境变量示例仅引用人工预置的本地环境；Agent
+不把聊天中的密码写入命令或工具环境参数。
 
 人工终端使用时，`--ip` 可以不传；脚本会提示：
 
@@ -32,8 +34,8 @@
 
 如果使用机器可读模式（`--json`），必须显式传 `--ip`，避免脚本阻塞在交互输入上。
 
-SSH/Redfish 密码不再内置默认值。可以直接传入，也可以使用 `--ssh-password-env` /
-`--redfish-password-env`；非 JSON 模式缺失时脚本会交互提示输入，JSON 模式缺失时会直接返回 `missing_secret`。
+人工终端可使用 `--ssh-password-env` / `--redfish-password-env`，或在非 JSON 模式
+通过交互输入。旧直接密码参数仅保留人工兼容；JSON 模式缺失时返回 `missing_secret`。
 
 Redfish 登录阶段如果遇到瞬时 `HTTP 502/503/504`，脚本会自动重试；这种网关错误先按临时管理面抖动处理，不需要立刻切换到 SSH。
 
@@ -48,8 +50,6 @@ Redfish 登录阶段如果遇到瞬时 `HTTP 502/503/504`，脚本会自动重�
 ### 1) Redfish 一键采集
 
 ```bash
-export RF_USER=Administrator
-export RF_PASS='<Redfish 密码>'
 python scripts/pull_bundle.py \
   --transport redfish \
   --ip <ip> \
@@ -101,8 +101,6 @@ python scripts/pull_bundle.py \
 如果日志包已经存在于 BMC 文件系统，可以直接让 Redfish 下载：
 
 ```bash
-export RF_USER=Administrator
-export RF_PASS='<Redfish 密码>'
 python scripts/pull_bundle.py \
   --transport redfish \
   --ip <ip> \
@@ -115,8 +113,6 @@ python scripts/pull_bundle.py \
 如果 Redfish 不可用，但 SSH/SCP 可以拿到同一路径，就强制走 SSH：
 
 ```bash
-export BMC_USER=Administrator
-export BMC_PASS='<SSH 密码>'
 python scripts/pull_bundle.py \
   --transport ssh \
   --ip <ip> \
@@ -131,8 +127,6 @@ python scripts/pull_bundle.py \
 最佳实践是：远端命令执行完成后打印 `BUNDLE_PATH=/path/to/archive.tar.gz`。
 
 ```bash
-export BMC_USER=Administrator
-export BMC_PASS='<SSH 密码>'
 python scripts/pull_bundle.py \
   --transport ssh \
   --ip <ip> \
@@ -147,8 +141,6 @@ python scripts/pull_bundle.py \
 ### 4) Auto 模式
 
 ```bash
-export RF_USER=Administrator
-export RF_PASS='<Redfish 密码>'
 python scripts/pull_bundle.py \
   --transport auto \
   --ip <ip> \
@@ -162,8 +154,6 @@ python scripts/pull_bundle.py \
 ### 5) SSH 自动发现最新日志包
 
 ```bash
-export BMC_USER=Administrator
-export BMC_PASS='<SSH 密码>'
 python scripts/pull_bundle.py \
   --transport ssh \
   --ip <ip> \

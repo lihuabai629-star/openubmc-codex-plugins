@@ -1,0 +1,120 @@
+{
+  "behavior": {
+    "artifacts": {
+      "passed": true,
+      "seconds": 4.609,
+      "tests": 4
+    },
+    "build": {
+      "passed": true,
+      "seconds": 1.218,
+      "tests": 6
+    },
+    "credentials": {
+      "passed": true,
+      "seconds": 0.693,
+      "tests": 9
+    },
+    "doctor": {
+      "passed": true,
+      "seconds": 2.887,
+      "tests": 5
+    },
+    "kb_loader": {
+      "passed": true,
+      "tests": 9
+    },
+    "logs": {
+      "passed": true,
+      "seconds": 0.078,
+      "tests": 3
+    },
+    "migration": {
+      "passed": true,
+      "seconds": 7.314,
+      "tests": 17
+    },
+    "python_entrypoints": {
+      "passed": true,
+      "seconds": 33.654,
+      "tests": 13
+    },
+    "skill_entry": {
+      "passed": true,
+      "seconds": 22.297,
+      "tests": 10
+    },
+    "ssh": {
+      "passed": true,
+      "seconds": 13.509,
+      "tests": 4
+    },
+    "startup": {
+      "passed": true,
+      "seconds": 0.76,
+      "tests": 7
+    },
+    "upgrade": {
+      "passed": true,
+      "seconds": 5.671,
+      "tests": 2
+    }
+  },
+  "cold_dependencies": {
+    "passed": true,
+    "seconds": 2.869
+  },
+  "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+  "dependency_locks": {
+    "openubmc-kb-mcp/package-lock.json": "acff33474be7a162ad912da7573b790575aa8430a5b4312a5ddad04b38edb7e5",
+    "requirements.lock": "8eb3b8a6fda4512f6cbc4f2f921063f8bad7163786d8e577b075b7e2581abf93"
+  },
+  "mcp_startup": {
+    "kb": {
+      "exit_code": 0,
+      "ok": true,
+      "server": {
+        "name": "openubmc-kb-mcp-server",
+        "version": "1.3.4"
+      },
+      "stderr": "",
+      "timed_out": false,
+      "tools": [
+        "openubmc_kb_list",
+        "openubmc_kb_query",
+        "openubmc_kb_status"
+      ],
+      "version_matches_package": true
+    },
+    "runtime": {
+      "exit_code": 0,
+      "ok": true,
+      "server": {
+        "name": "openubmc-target-runtime",
+        "version": "openubmc.target-runtime.v1"
+      },
+      "stderr": "",
+      "timed_out": false,
+      "tools": [
+        "execute",
+        "observe"
+      ],
+      "version_matches_package": true
+    }
+  },
+  "ordinary_python_cli_before_mcp": true,
+  "package_integrity_after_checks": true,
+  "passed": true,
+  "platform": {
+    "codex": "codex-cli 0.153.4",
+    "machine": "x86_64",
+    "node": "v20.18.0",
+    "os": "Linux",
+    "python": "3.12.3"
+  },
+  "remote_business_qualification": "not_run",
+  "runtime_shutdown_verified": true,
+  "schema": "openubmc.public-behavior.v1",
+  "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+  "version": "2.2.16"
+}

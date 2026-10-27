@@ -1,0 +1,1 @@
+2026-08-31T11:00:03+08:00 thermal fan snapshot reports speed ratio 0 percent

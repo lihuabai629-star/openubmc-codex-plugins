@@ -18,6 +18,7 @@ python3 scripts/community_checks.py compliance --repo /path/to/repo --file intf/
 python3 scripts/community_checks.py concurrency --repo /path/to/repo --file src/example.cpp
 python3 scripts/community_checks.py web-backend --repo /path/to/rackmount --file interface_config/web_backend/example.lua
 python3 scripts/community_checks.py redfish-diff --repo /path/to/rackmount --old-ref BASE --new-ref HEAD --output /path/to/report
+python3 scripts/community_checks.py redfish-diff --repo /path/to/workspace --old-dir /path/to/old --new-dir /path/to/new --output /path/to/new-report
 ```
 
 Use actual changed files. Empty or nonmatching scopes are skipped; `incomplete`
@@ -46,6 +47,12 @@ before sharing outside the workspace.
 
 The pinned source and per-tool licenses are recorded in
 [provenance.json](../resources/community/provenance.json).
+
+Redfish comparison always uses the local offline mode: no credential lookup/API
+enrichment, remote fetch or new worktree. Ref inputs must already resolve locally
+and are exported to temporary archive trees. Prefer prepared directory snapshots
+when already available. Use a new/empty output directory so prior reports remain
+intact; record snapshot provenance separately when inputs are directories.
 
 Interface documentation coverage uses prepared local snapshots. Run
 `python3 scripts/interface_coverage.py /path/to/interface-input.json`; see

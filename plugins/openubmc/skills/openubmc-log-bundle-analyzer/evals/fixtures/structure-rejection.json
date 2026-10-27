@@ -1,0 +1,12 @@
+{
+  "cases": [
+    {
+      "name": "multiple-dump-info",
+      "kind": "multiple_dump_info"
+    },
+    {
+      "name": "symbolic-link",
+      "kind": "symbolic_link"
+    }
+  ]
+}

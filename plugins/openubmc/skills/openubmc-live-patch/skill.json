@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "name": "openubmc-live-patch",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "规划、应用、验证和回滚 openUBMC 现场单文件临时替换，默认 plan-only，并保留备份、校验和挂载恢复证据。",
   "author": "OpenUBMC Team",
   "license": "MulanPSL-2.0",

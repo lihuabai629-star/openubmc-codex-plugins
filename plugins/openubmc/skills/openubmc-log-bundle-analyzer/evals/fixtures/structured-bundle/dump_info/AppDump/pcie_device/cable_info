@@ -1,0 +1,3 @@
+[BizTopoMonitor] Port: name=A1a, status=1, unit=[uid=111111111111111111, index=1, port_id=17]
+[BizTopoMonitor] Port: name=A1c, status=0, unit=[uid=, index=0, port_id=0]
+[BizTopoMonitor] Config: slot=SEU-5, status=255, unit=[uid=222222222222222222, index=0]

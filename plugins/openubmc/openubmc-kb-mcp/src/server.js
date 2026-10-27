@@ -101,18 +101,14 @@ function createProcessLifecycle(path) {
     process.env.OPENUBMC_KB_STATE_PATH?.trim()
       || path
       || join(process.env.XDG_CONFIG_HOME?.trim()
-        || (process.platform === "win32"
-          ? process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local")
-          : join(homedir(), ".config")), "openubmc", "kb-mcp.json")
+        || join(homedir(), ".config"), "openubmc", "kb-mcp.json")
   );
   const runtimeStateRoot = process.env.OPENUBMC_TARGET_RUNTIME_STATE_DIR?.trim()
     || "";
   const lifecycleRoot = resolve(
     process.env.OPENUBMC_MCP_LIFECYCLE_DIR?.trim()
       || join(process.env.XDG_STATE_HOME?.trim()
-        || (process.platform === "win32"
-          ? process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local")
-          : join(homedir(), ".local", "state")),
+        || join(homedir(), ".local", "state"),
       "openubmc-agent-workflow", "mcp-processes")
   );
   let idleTimeoutSeconds = 1800;
@@ -215,6 +211,7 @@ export class PendingResponses {
 
 
 async function main() {
+  if (process.platform === "win32") throw new Error("unsupported_platform: run the plugin inside Linux or WSL");
   const selectedConfigPath = configPath(process.argv.slice(2));
   const { lifecycle: processLifecycle, startupError } = createProcessLifecycle(
     selectedConfigPath

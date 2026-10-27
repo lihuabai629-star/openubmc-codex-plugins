@@ -22,21 +22,11 @@ from typing import NamedTuple
 import uuid
 import sys
 
-if sys.platform != 'win32':
-    import fcntl
+import fcntl
 
 
 def _lock_stream(stream) -> None:
-    if sys.platform == 'win32':
-        import msvcrt
-        stream.seek(0)
-        if os.fstat(stream.fileno()).st_size == 0:
-            stream.write('\0')
-            stream.flush()
-        stream.seek(0)
-        msvcrt.locking(stream.fileno(), msvcrt.LK_LOCK, 1)
-    else:
-        fcntl.flock(stream, fcntl.LOCK_EX)
+    fcntl.flock(stream, fcntl.LOCK_EX)
 
 
 def digest(data: bytes) -> str:
@@ -62,8 +52,6 @@ def save(path: Path, value: dict) -> None:
 
 
 def journal_root(home: Path) -> Path:
-    if sys.platform == 'win32':
-        return Path(os.environ.get('LOCALAPPDATA') or home/'AppData/Local')/'openubmc/migrations'
     return home/'.local/share/openubmc/migrations'
 
 

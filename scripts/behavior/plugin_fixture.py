@@ -15,7 +15,7 @@ def package_fixture(base: Path) -> Path:
         return Path(selected).resolve()
     source = base/'source'
     source.mkdir()
-    for name in subprocess.check_output(['git', 'ls-files', '-z'], cwd=ROOT).decode().split('\0'):
+    for name in subprocess.check_output(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=ROOT).decode().split('\0'):
         if name and (ROOT/name).is_file():
             target = source/name
             target.parent.mkdir(parents=True, exist_ok=True)

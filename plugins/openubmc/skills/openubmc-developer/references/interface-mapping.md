@@ -25,6 +25,10 @@ metadata.
 
 ## Build processing flows
 
+For `Property`/`Method`/`List`/`Task`, request validation, aliases, conditions and
+iteration syntax, read [mapping DSL recipes](mapping-dsl-recipes.md). Check every
+recipe against the current parser and the nearest working mapping before editing.
+
 Use only flow elements supported by the target repository version. Keep path,
 member, parameter order, and types aligned with the backend contract. Make
 aliases unique and ordering dependencies visible.

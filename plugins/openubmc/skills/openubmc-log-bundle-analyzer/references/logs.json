@@ -1,0 +1,2427 @@
+{
+  "version": "2026-09-02",
+  "basis": [
+    "Repository-maintained openUBMC one-click bundle catalog",
+    "Generic problem-to-log routing validated by unit fixtures",
+    "File purposes remain heuristic unless source_reference contains a stable public URL to a specific source revision"
+  ],
+  "definition_metadata": {
+    "definition_status": ["documented", "community_supported", "observed_path", "maintained_heuristic", "bundle_local_routing"],
+    "source_type": ["component_documentation", "community_discussion", "public_repository", "validated_bundle_structure", "repository_maintained", "bundle_local"],
+    "reliability": ["documented", "heuristic", "observed_only", "local_only"],
+    "default": {
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "reliability": "heuristic",
+      "source_reference": "repository-maintained heuristic"
+    }
+  },
+  "directories": {
+    "LogDump": "Core runtime logs (primary entry for most issues)",
+    "AppDump": "Per-component logs and MDB snapshots",
+    "RTOSDump": "OS/systemd/kernel logs and system info",
+    "OSDump": "System snapshots and recent OS/BIOS serial or console recordings",
+    "SpLogDump": "Version metadata; exact contents remain platform-specific",
+    "BMALogDump": "Observed section without a reliable cross-product definition; keep contents opaque unless a product-specific source is supplied",
+    "DeviceDump": "Device-specific low-level logs",
+    "3rdDump": "Third-party service artifacts; observed contents may include Nginx text logs and configuration, but meanings vary by product",
+    "CoreDump": "Crash artifacts or nested core archives; keep opaque unless deeper inspection is explicitly authorized",
+    "OptBMC": "Product-specific configuration or state artifacts; potentially sensitive and not assigned a stable cross-product contract"
+  },
+  "files": [
+    {
+      "name": "app.log",
+      "paths": ["dump_info/LogDump/app.log"],
+      "component": "business components",
+      "purpose": "component-emitted runtime logs, normally including NOTICE and ERROR records",
+      "keywords": ["error", "exception", "业务", "功能异常", "组件", "报错", "逻辑异常", "接口失败"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "framework.log",
+      "paths": ["dump_info/LogDump/framework.log"],
+      "component": "framework (maca/hwdiscovery/hwproxy)",
+      "purpose": "maca, hwdiscovery, and hwproxy runtime logs, including service health/restarts and object or hardware activity",
+      "keywords": ["startup", "crash", "respawn", "hwdiscovery", "hwproxy", "maca", "启动失败", "进程重启", "拉起失败", "反复重启", "上树失败", "资源树"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "operation.log",
+      "paths": ["dump_info/LogDump/operation.log"],
+      "component": "operation_logger / oms",
+      "purpose": "northbound user-operation audit records",
+      "keywords": ["audit", "operation", "login", "配置", "操作", "命令", "登录失败", "认证失败", "账号锁定", "修改密码", "配置变更"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "security.log",
+      "paths": ["dump_info/LogDump/security.log"],
+      "component": "security/iam",
+      "purpose": "user login, validation, and related security events",
+      "keywords": ["login", "auth", "permission", "证书", "签名", "失败", "安全", "登录失败", "bmc登录失败", "bmc 登录失败", "web登录失败", "web 登录失败", "ssh登录失败", "ssh 登录失败", "无法登录", "认证失败", "密码错误", "账号锁定", "账户锁定", "权限异常"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "maintenance.log",
+      "paths": ["dump_info/LogDump/maintenance.log"],
+      "component": "maintenance",
+      "purpose": "maintenance events and fault codes",
+      "keywords": ["maintenance", "fault", "维护", "故障码"]
+    },
+    {
+      "name": "running.log",
+      "paths": ["dump_info/LogDump/running.log"],
+      "component": "system monitor",
+      "purpose": "runtime anomalies and key process events",
+      "keywords": ["running", "anomaly", "健康", "稳定", "异常", "卡顿", "波动", "不稳定"]
+    },
+    {
+      "name": "sensor.log",
+      "paths": ["dump_info/LogDump/sensor.log"],
+      "component": "sensor",
+      "purpose": "sensor events, SEL, read failures",
+      "keywords": ["sensor", "SEL", "reading", "传感器", "读值", "告警"],
+      "evidence_keywords": ["alarm", "asserted", "deasserted", "threshold crossed", "reading failed", "read failed", "告警", "越限", "读值失败"]
+    },
+    {
+      "name": "alarm.log",
+      "paths": ["dump_info/LogDump/alarm.log"],
+      "component": "event/alarm",
+      "purpose": "alarm assert/deassert lifecycle",
+      "keywords": ["alarm", "assert", "deassert", "告警", "事件"]
+    },
+    {
+      "name": "cooling_control.log",
+      "paths": ["dump_info/LogDump/cooling_control.log"],
+      "component": "cooling/thermal_mgmt",
+      "purpose": "real-time cooling and fan-speed control strategy decisions",
+      "keywords": ["fan", "cooling", "thermal", "风扇", "温控", "散热"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "Thermal.log",
+      "paths": ["dump_info/LogDump/Thermal.log"],
+      "component": "thermal_mgmt",
+      "purpose": "thermal policy debug",
+      "keywords": ["thermal", "温度", "过温", "策略"]
+    },
+    {
+      "name": "bmc_health.log",
+      "paths": ["dump_info/LogDump/bmc_health.log"],
+      "component": "bmc_health",
+      "purpose": "BMC CPU utilization history",
+      "keywords": ["cpu", "performance", "性能", "资源"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "ps_black_box.log",
+      "paths": ["dump_info/LogDump/ps_black_box.log"],
+      "component": "power_mgmt",
+      "purpose": "PSU black-box snapshots",
+      "keywords": ["psu", "power", "电源", "黑匣子", "故障"]
+    },
+    {
+      "name": "net_stream.log",
+      "paths": ["dump_info/LogDump/net_stream.log"],
+      "component": "network stack",
+      "purpose": "network traffic/protocol summaries",
+      "keywords": ["network", "ncsi", "lan", "链路", "网络"]
+    },
+    {
+      "name": "hw_stream.log",
+      "paths": ["dump_info/LogDump/hw_stream.log"],
+      "component": "hwproxy/driver",
+      "purpose": "hardware bus traffic summaries",
+      "keywords": ["i2c", "pcie", "hwproxy", "总线", "硬件"]
+    },
+    {
+      "name": "mc_stream.log",
+      "paths": ["dump_info/LogDump/mc_stream.log"],
+      "component": "micro-component",
+      "purpose": "inter-component RPC flow",
+      "keywords": ["rpc", "mdb", "dbus", "组件间", "调用"]
+    },
+    {
+      "name": "journalctl.log",
+      "paths": ["dump_info/RTOSDump/sysinfo/journalctl.log", "dump_info/LogDump/journalctl.log"],
+      "component": "systemd",
+      "purpose": "systemd journal logs",
+      "keywords": ["systemd", "service", "boot", "启动", "失败", "kernel"]
+    },
+    {
+      "name": "current_event.txt",
+      "paths": ["dump_info/AppDump/event/current_event.txt"],
+      "component": "event",
+      "purpose": "current active alarms",
+      "keywords": ["current alarm", "active alarm", "当前告警", "活动告警", "未清除告警"],
+      "evidence_keywords": ["active alarm", "alarm asserted", "Critical", "Major", "Minor", "Warning", "Emergency"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "sel.txt",
+      "paths": ["dump_info/AppDump/event/sel.txt"],
+      "component": "event",
+      "purpose": "historical system event records",
+      "keywords": ["sel", "system event", "event history", "历史事件", "历史告警", "系统事件"],
+      "evidence_keywords": ["system event", "event recorded", "Asserted", "Deasserted", "Critical", "Major", "Minor", "Normal"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "eo_sel.csv",
+      "paths": ["dump_info/AppDump/event/eo_sel.csv"],
+      "component": "event",
+      "purpose": "CSV-form historical event records",
+      "keywords": ["sel", "system event", "event history", "历史事件", "历史告警", "系统事件"],
+      "evidence_keywords": ["system event", "event recorded", "Asserted", "Deasserted", "Critical", "Major", "Minor", "Normal"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic",
+      "structured_parser": "delimited_records"
+    },
+    {
+      "name": "mask_event.txt",
+      "paths": ["dump_info/AppDump/event/mask_event.txt"],
+      "component": "event",
+      "purpose": "masked event records",
+      "keywords": ["masked event", "event mask", "屏蔽事件", "事件屏蔽", "告警被屏蔽", "告警不显示"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "event.db",
+      "paths": ["dump_info/AppDump/event/event.db"],
+      "component": "event",
+      "purpose": "observed event persistence database artifact; preserve path and size without querying tables or inferring a schema",
+      "keywords": ["event database", "event persistence", "事件数据库", "事件持久化"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "event_reset.db",
+      "paths": ["dump_info/AppDump/event/event_reset.db"],
+      "component": "event",
+      "purpose": "observed event-reset persistence database artifact; preserve path and size without querying tables or inferring a schema",
+      "keywords": ["event reset database", "event reset persistence", "事件复位数据库", "事件复位持久化"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "fan_info.txt",
+      "paths": ["dump_info/AppDump/thermal_mgmt/fan_info.txt"],
+      "component": "thermal_mgmt",
+      "purpose": "fan identity, slot, model, speed, speed ratio, and part-number snapshot",
+      "keywords": ["fan", "speed", "model", "风扇", "转速", "风扇型号", "混插"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "thermal_info.txt",
+      "paths": ["dump_info/AppDump/thermal_mgmt/thermal_info.txt"],
+      "component": "thermal_mgmt",
+      "purpose": "thermal-management fan information snapshot",
+      "keywords": ["fan", "thermal", "speed", "风扇", "散热", "转速", "部件编码"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "network_adapter_net_card_info",
+      "paths": ["dump_info/AppDump/network_adapter/net_card_info"],
+      "component": "network_adapter",
+      "purpose": "network adapter and port snapshot; optical-module data may be present when BMA collection is enabled",
+      "keywords": ["network adapter", "nic", "port", "optical module", "网卡", "网口", "光模块", "链路状态"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/2597/6",
+      "source_revision": "topic-2597-post-6",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "nginx_access_log",
+      "paths": ["dump_info/3rdDump/access_log"],
+      "component": "nginx/web",
+      "purpose": "HTTP/HTTPS request and response access records when emitted by the product",
+      "keywords": ["web", "https", "http", "nginx", "网页", "访问失败", "状态码"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "nginx_error_log",
+      "paths": ["dump_info/3rdDump/error_log"],
+      "component": "nginx/web",
+      "purpose": "Nginx request handling, TLS, upstream, and gateway errors when emitted by the product",
+      "keywords": ["web", "https", "http", "nginx", "tls", "ssl", "网页", "访问失败", "网关"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "raid_controller_lib.log",
+      "paths": ["dump_info/AppDump/storage/raid_controller_lib.log"],
+      "component": "storage",
+      "purpose": "RAID library/hardware interaction",
+      "keywords": ["raid", "storage", "timeout", "控制器", "阵列"]
+    },
+    {
+      "name": "dmesg_info",
+      "paths": ["dump_info/LogDump/dmesg_info"],
+      "component": "kernel",
+      "purpose": "kernel ring buffer snapshot",
+      "keywords": ["dmesg", "ext4", "oom", "io error", "内核", "驱动"]
+    },
+    {
+      "name": "linux_kernel_log",
+      "paths": ["dump_info/LogDump/linux_kernel_log"],
+      "component": "kernel/driver",
+      "purpose": "SDK low-level driver load and unload logs",
+      "keywords": ["i2c", "smbus", "ncsi", "pcie", "driver", "链路"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "cpumem_usage_info_dump.csv",
+      "paths": ["dump_info/LogDump/cpumem_usage_info_dump.csv"],
+      "component": "bmc_health",
+      "purpose": "CPU/memory usage history",
+      "keywords": ["cpu", "memory", "performance", "性能", "资源"]
+    },
+    {
+      "name": "mem_info_*.csv",
+      "paths": ["dump_info/LogDump/mem_info_*.csv"],
+      "component": "system monitor",
+      "purpose": "memory usage breakdown by subsystem",
+      "keywords": ["memory", "rss", "slab", "pagetables", "内存", "泄漏"]
+    },
+    {
+      "name": "remote_log",
+      "paths": ["dump_info/LogDump/remote_log"],
+      "component": "remote_console",
+      "purpose": "KVM/virtual media session logs",
+      "keywords": ["kvm", "vmm", "virtual media", "远程控制台", "挂载失败"]
+    },
+    {
+      "name": "LSI_RAID_Controller_Log",
+      "paths": ["dump_info/LogDump/LSI_RAID_Controller_Log"],
+      "component": "storage",
+      "purpose": "RAID controller firmware logs",
+      "keywords": ["lsi", "raid", "scsi", "timeout", "掉盘"]
+    },
+    {
+      "name": "M3LogDump/m3_log",
+      "paths": ["dump_info/LogDump/M3LogDump/m3_log"],
+      "component": "soc m3",
+      "purpose": "M3 co-processor boot/power logs",
+      "keywords": ["m3", "watchdog", "reset", "power sequence", "上电", "重启"]
+    },
+    {
+      "name": "netcard_info.txt",
+      "paths": [
+        "dump_info/AppDump/network_adapter/netcard/netcard_info.txt",
+        "dump_info/LogDump/netcard/netcard_info.txt"
+      ],
+      "component": "network_adapter",
+      "purpose": "NIC-related diagnostic snapshot used as a secondary source for adapter, port, or optical-module investigation",
+      "keywords": ["nic", "optics", "link", "网卡", "光模块"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/2597/2",
+      "source_revision": "topic-2597-post-2",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "pcie_error_log.bin",
+      "paths": [
+        "dump_info/AppDump/network_adapter/pciecard/*/error_log_*.bin",
+        "dump_info/LogDump/pciecard/*/error_log_*.bin"
+      ],
+      "component": "pcie_device",
+      "purpose": "observed PCIe device error artifact with device-specific binary or padded content; keep opaque without a stable decoder",
+      "keywords": ["pcie", "dpu", "npu", "error log", "固件", "崩溃"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "pcie_operate_log.bin",
+      "paths": ["dump_info/LogDump/pciecard/*/operate_log_*.bin"],
+      "component": "pcie_device",
+      "purpose": "observed PCIe device operation artifact with device-specific binary or padded content; keep opaque without a stable decoder",
+      "keywords": ["pcie", "operate log", "状态机", "行为轨迹"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "storage_ctrllog",
+      "paths": ["dump_info/LogDump/storage/ctrllog"],
+      "component": "storage",
+      "purpose": "RAID controller firmware log",
+      "keywords": ["raid", "controller", "firmware", "掉盘", "初始化失败"]
+    },
+    {
+      "name": "storage_smartattribute",
+      "paths": ["dump_info/LogDump/storage/drivelog/*/SMARTAttribute"],
+      "component": "storage",
+      "purpose": "disk SMART attributes snapshot",
+      "keywords": ["smart", "disk", "reallocated", "健康", "预警"],
+      "include_rotations": false
+    },
+    {
+      "name": "storage_sata_log",
+      "paths": ["dump_info/LogDump/storage/drivelog/*/SATA_Log"],
+      "component": "storage",
+      "purpose": "SATA log data",
+      "keywords": ["sata", "udma", "crc", "链路", "传输"]
+    },
+    {
+      "name": "storage_phy_error_count",
+      "paths": [
+        "dump_info/LogDump/storage/phy/*/PHY_Error_Count.csv",
+        "dump_info/LogDump/storage/phy/*/*_PHY_Error_Count*.csv"
+      ],
+      "component": "storage",
+      "purpose": "SAS PHY error counters",
+      "keywords": ["sas", "phy", "phy error count", "crc", "sync", "背板", "线缆"]
+    },
+    {
+      "name": "veth_drv_info",
+      "paths": ["dump_info/RTOSDump/driver_info/veth_drv_info"],
+      "component": "rtos",
+      "purpose": "virtual ethernet driver state",
+      "keywords": ["veth", "inband", "host agent", "带内", "连接失败"]
+    },
+    {
+      "name": "cdev_drv_info",
+      "paths": ["dump_info/RTOSDump/driver_info/cdev_drv_info"],
+      "component": "rtos",
+      "purpose": "character device driver state (KCS/BT/SMIC)",
+      "keywords": ["kcs", "ipmi", "cdev", "bt", "smic"]
+    },
+    {
+      "name": "edma_drv_info",
+      "paths": ["dump_info/RTOSDump/driver_info/edma_drv_info"],
+      "component": "rtos",
+      "purpose": "EDMA driver state",
+      "keywords": ["edma", "dma", "unknown symbol", "传输"]
+    },
+    {
+      "name": "kbox_info",
+      "paths": ["dump_info/RTOSDump/driver_info/kbox_info"],
+      "component": "rtos",
+      "purpose": "kernel blackbox snapshot",
+      "keywords": ["panic", "watchdog", "reset", "kbox"]
+    },
+    {
+      "name": "lsmod_info",
+      "paths": ["dump_info/RTOSDump/driver_info/lsmod_info"],
+      "component": "rtos",
+      "purpose": "loaded kernel modules",
+      "keywords": ["lsmod", "module", "driver", "模块"]
+    },
+    {
+      "name": "rtos_dmesg_info",
+      "paths": ["dump_info/RTOSDump/driver_info/dmesg_info"],
+      "component": "rtos",
+      "purpose": "kernel ring buffer output",
+      "keywords": ["dmesg", "kernel", "driver", "内核"]
+    },
+    {
+      "name": "services",
+      "paths": ["dump_info/RTOSDump/networkinfo/services"],
+      "component": "rtos",
+      "purpose": "network services configuration/status",
+      "keywords": ["service", "port", "网络服务"]
+    },
+    {
+      "name": "resolv.conf",
+      "paths": ["dump_info/RTOSDump/networkinfo/resolv.conf"],
+      "component": "rtos",
+      "purpose": "DNS configuration",
+      "keywords": ["dns", "resolv", "解析失败"]
+    },
+    {
+      "name": "dhclient.conf",
+      "paths": ["dump_info/RTOSDump/networkinfo/dhclient.conf", "dump_info/RTOSDump/networkinfo/dhclient6.conf"],
+      "component": "rtos",
+      "purpose": "DHCP client config/lease",
+      "keywords": ["dhcp", "lease", "ip获取", "dhclient"]
+    },
+    {
+      "name": "iptables_nat_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/iptables_nat_info", "dump_info/RTOSDump/networkinfo/ip6tables_nat_info"],
+      "component": "rtos",
+      "purpose": "NAT rules (IPv4/IPv6)",
+      "keywords": ["iptables", "nat", "masquerade", "端口转发"]
+    },
+    {
+      "name": "netstat_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/netstat_info"],
+      "component": "rtos",
+      "purpose": "listening ports and active connections",
+      "keywords": ["netstat", "listening", "连接数"]
+    },
+    {
+      "name": "route_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/route_info"],
+      "component": "rtos",
+      "purpose": "routing table",
+      "keywords": ["route", "gateway", "路由"]
+    },
+    {
+      "name": "ifconfig_info",
+      "paths": ["dump_info/RTOSDump/networkinfo/ifconfig_info"],
+      "component": "rtos",
+      "purpose": "interface config and stats",
+      "keywords": ["ifconfig", "link", "rx", "tx", "丢包"]
+    },
+    {
+      "name": "server_config.txt",
+      "paths": ["dump_info/RTOSDump/versioninfo/server_config.txt"],
+      "component": "rtos",
+      "purpose": "observed server model and configuration artifact whose embedded field encoding is not maintained as a text contract",
+      "keywords": ["server config", "型号", "配置"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "package_info",
+      "paths": ["dump_info/RTOSDump/versioninfo/package_info"],
+      "component": "rtos",
+      "purpose": "installed package list",
+      "keywords": ["package", "rpm", "版本", "依赖"]
+    },
+    {
+      "name": "RTOS-Revision",
+      "paths": ["dump_info/RTOSDump/versioninfo/RTOS-Revision"],
+      "component": "rtos",
+      "purpose": "OS revision",
+      "keywords": ["rtos", "revision", "版本"]
+    },
+    {
+      "name": "RTOS-Release",
+      "paths": ["dump_info/RTOSDump/versioninfo/RTOS-Release"],
+      "component": "rtos",
+      "purpose": "OS release",
+      "keywords": ["rtos", "release", "版本"]
+    },
+    {
+      "name": "app_revision.txt",
+      "paths": ["dump_info/RTOSDump/versioninfo/app_revision.txt"],
+      "component": "rtos",
+      "purpose": "app/component revision list",
+      "keywords": ["app revision", "组件版本", "版本"]
+    },
+    {
+      "name": "login",
+      "paths": ["dump_info/RTOSDump/other_info/login"],
+      "component": "rtos",
+      "purpose": "login policy or records",
+      "keywords": ["login", "password policy", "锁定", "console login", "串口登录", "本地登录", "tty"]
+    },
+    {
+      "name": "sshd",
+      "paths": ["dump_info/RTOSDump/other_info/sshd"],
+      "component": "rtos",
+      "purpose": "sshd config/status",
+      "keywords": ["ssh", "sshd", "cipher", "登录失败", "ssh登录失败", "pam", "认证模式", "协议不匹配"]
+    },
+    {
+      "name": "remotelog.conf",
+      "paths": ["dump_info/RTOSDump/other_info/remotelog.conf"],
+      "component": "rtos",
+      "purpose": "remote syslog config",
+      "keywords": ["syslog", "remote log", "上报失败"]
+    },
+    {
+      "name": "ash_history",
+      "paths": ["dump_info/RTOSDump/other_info/command_records/*/ash_history"],
+      "component": "rtos",
+      "purpose": "shell command history",
+      "keywords": ["audit", "history", "命令记录"]
+    },
+    {
+      "name": "top_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/top_info"],
+      "component": "rtos",
+      "purpose": "top output snapshot",
+      "keywords": ["cpu", "load", "top", "卡顿", "性能"]
+    },
+    {
+      "name": "ps_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/ps_info"],
+      "component": "rtos",
+      "purpose": "process/thread snapshot",
+      "keywords": ["ps", "process", "hang", "僵尸"]
+    },
+    {
+      "name": "free_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/free_info"],
+      "component": "rtos",
+      "purpose": "memory usage summary",
+      "keywords": ["memory", "free", "oom", "内存"]
+    },
+    {
+      "name": "vmstat",
+      "paths": ["dump_info/RTOSDump/sysinfo/vmstat"],
+      "component": "rtos",
+      "purpose": "virtual memory stats",
+      "keywords": ["vmstat", "swap", "io wait", "性能"]
+    },
+    {
+      "name": "uptime",
+      "paths": ["dump_info/RTOSDump/sysinfo/uptime", "dump_info/RTOSDump/sysinfo/loadavg"],
+      "component": "rtos",
+      "purpose": "uptime and load averages",
+      "keywords": ["uptime", "loadavg", "重启", "负载"]
+    },
+    {
+      "name": "meminfo",
+      "paths": ["dump_info/RTOSDump/sysinfo/meminfo"],
+      "component": "rtos",
+      "purpose": "detailed memory breakdown",
+      "keywords": ["meminfo", "slab", "kernel memory", "内核"]
+    },
+    {
+      "name": "slabinfo",
+      "paths": ["dump_info/RTOSDump/sysinfo/slabinfo"],
+      "component": "rtos",
+      "purpose": "slab allocator stats",
+      "keywords": ["slab", "leak", "inode", "dentry"]
+    },
+    {
+      "name": "softirqs",
+      "paths": ["dump_info/RTOSDump/sysinfo/softirqs"],
+      "component": "rtos",
+      "purpose": "softirq counters",
+      "keywords": ["softirq", "ksoftirqd", "网络风暴"]
+    },
+    {
+      "name": "interrupts",
+      "paths": ["dump_info/RTOSDump/sysinfo/interrupts"],
+      "component": "rtos",
+      "purpose": "hardware interrupt counts",
+      "keywords": ["interrupt", "irq", "中断风暴"]
+    },
+    {
+      "name": "modules",
+      "paths": ["dump_info/RTOSDump/sysinfo/modules"],
+      "component": "rtos",
+      "purpose": "kernel modules list",
+      "keywords": ["modules", "driver", "加载失败"]
+    },
+    {
+      "name": "cmdline",
+      "paths": ["dump_info/RTOSDump/sysinfo/cmdline"],
+      "component": "rtos",
+      "purpose": "kernel boot parameters",
+      "keywords": ["cmdline", "boot", "参数"]
+    },
+    {
+      "name": "df_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/df_info"],
+      "component": "rtos",
+      "purpose": "disk usage",
+      "keywords": ["disk full", "df", "/var/log", "/data"]
+    },
+    {
+      "name": "lsof_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/lsof_info"],
+      "component": "rtos",
+      "purpose": "open file handles",
+      "keywords": ["lsof", "fd leak", "too many open files"]
+    },
+    {
+      "name": "diskstats",
+      "paths": ["dump_info/RTOSDump/sysinfo/diskstats"],
+      "component": "rtos",
+      "purpose": "disk IO statistics",
+      "keywords": ["diskstats", "io", "flash wear"]
+    },
+    {
+      "name": "partitions",
+      "paths": ["dump_info/RTOSDump/sysinfo/partitions"],
+      "component": "rtos",
+      "purpose": "partition table",
+      "keywords": ["partition", "mtd", "layout"]
+    },
+    {
+      "name": "mtd",
+      "paths": ["dump_info/RTOSDump/sysinfo/mtd"],
+      "component": "rtos",
+      "purpose": "MTD layout",
+      "keywords": ["mtd", "flash", "分区"]
+    },
+    {
+      "name": "filesystems",
+      "paths": ["dump_info/RTOSDump/sysinfo/filesystems"],
+      "component": "rtos",
+      "purpose": "supported filesystems",
+      "keywords": ["filesystem", "ext4", "支持"]
+    },
+    {
+      "name": "ipcs",
+      "paths": ["dump_info/RTOSDump/sysinfo/ipcs_s", "dump_info/RTOSDump/sysinfo/ipcs_q", "dump_info/RTOSDump/sysinfo/ipcs_s_detail"],
+      "component": "rtos",
+      "purpose": "System V IPC status",
+      "keywords": ["ipcs", "semaphore", "queue", "死锁"]
+    },
+    {
+      "name": "locks",
+      "paths": ["dump_info/RTOSDump/sysinfo/locks"],
+      "component": "rtos",
+      "purpose": "kernel file locks",
+      "keywords": ["lock", "file lock", "争抢"]
+    },
+    {
+      "name": "uname_info",
+      "paths": ["dump_info/RTOSDump/sysinfo/uname_info"],
+      "component": "rtos",
+      "purpose": "kernel version summary",
+      "keywords": ["uname", "kernel version"]
+    },
+    {
+      "name": "version",
+      "paths": ["dump_info/RTOSDump/sysinfo/version"],
+      "component": "rtos",
+      "purpose": "kernel build version",
+      "keywords": ["proc version", "gcc", "build"]
+    },
+    {
+      "name": "cpuinfo",
+      "paths": ["dump_info/RTOSDump/sysinfo/cpuinfo"],
+      "component": "rtos",
+      "purpose": "CPU model and cores",
+      "keywords": ["cpuinfo", "core", "频率"]
+    },
+    {
+      "name": "devices",
+      "paths": ["dump_info/RTOSDump/sysinfo/devices"],
+      "component": "rtos",
+      "purpose": "registered devices list",
+      "keywords": ["devices", "char", "block", "节点"]
+    },
+    {
+      "name": "rpc_records.log",
+      "paths": ["dump_info/AppDump/*/rpc_records.log"],
+      "component": "per-component",
+      "purpose": "RPC call counts and statistics",
+      "keywords": ["rpc", "dbus", "调用", "频繁", "统计", "调用风暴", "调用堆积", "阻塞"]
+    },
+    {
+      "name": "sync_property_trace.log",
+      "paths": ["dump_info/AppDump/*/sync_property_trace.log"],
+      "component": "per-component",
+      "purpose": "property-synchronization source and value-history trace, including fetch and change-signal origins",
+      "keywords": ["property", "sync", "dbus signal", "属性", "不同步", "对象不更新", "属性不更新", "信号未到"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/2870/2",
+      "source_revision": "topic-2870-post-2",
+      "reliability": "heuristic"
+    },
+    {
+      "name": "mdb_info.log",
+      "paths": ["dump_info/AppDump/*/mdb_info.log"],
+      "component": "per-component",
+      "purpose": "MDB object tree snapshot",
+      "keywords": ["mdb", "object", "csr", "上树", "对象", "对象缺失", "对象不存在", "资源树", "接口缺失"],
+      "definition_status": "community_supported",
+      "source_type": "community_discussion",
+      "source_reference": "https://discuss.openubmc.cn/t/topic/290",
+      "source_revision": "topic-290-post-1",
+      "reliability": "heuristic",
+      "structured_parser": "mdb_properties"
+    },
+    {
+      "name": "cable_info",
+      "paths": ["dump_info/AppDump/pcie_device/cable_info"],
+      "component": "pcie_device",
+      "purpose": "PCIe topology port and configured-slot status records",
+      "keywords": ["pcie", "cable", "topology", "port", "slot", "线缆", "端口", "槽位", "缺卡", "接错"],
+      "definition_status": "maintained_heuristic",
+      "source_type": "repository_maintained",
+      "source_reference": "repository-maintained heuristic",
+      "reliability": "heuristic",
+      "structured_parser": "pcie_topology_records"
+    }
+    ,
+    {
+      "name": "appdump_sensor",
+      "paths": ["dump_info/AppDump/sensor/"],
+      "component": "sensor",
+      "purpose": "sensor readings and SEL/event generation",
+      "keywords": ["sensor", "sel", "reading", "阈值", "告警"]
+    },
+    {
+      "name": "appdump_power_mgmt",
+      "paths": ["dump_info/AppDump/power_mgmt/"],
+      "component": "power_mgmt",
+      "purpose": "PSU management and power readings",
+      "keywords": ["psu", "power", "功率", "电源"]
+    },
+    {
+      "name": "appdump_thermal_mgmt",
+      "paths": ["dump_info/AppDump/thermal_mgmt/"],
+      "component": "thermal_mgmt",
+      "purpose": "fan control and thermal policy",
+      "keywords": ["fan", "thermal", "温控", "散热"]
+    },
+    {
+      "name": "appdump_network_adapter",
+      "paths": ["dump_info/AppDump/network_adapter/"],
+      "component": "network_adapter",
+      "purpose": "NIC/optics/NCSI info",
+      "keywords": ["ncsi", "nic", "optics", "网卡", "链路"]
+    },
+    {
+      "name": "appdump_pcie_device",
+      "paths": ["dump_info/AppDump/pcie_device/"],
+      "component": "pcie_device",
+      "purpose": "PCIe topology and device inventory",
+      "keywords": ["pcie", "topology", "bdf", "线缆"]
+    },
+    {
+      "name": "appdump_storage",
+      "paths": ["dump_info/AppDump/storage/"],
+      "component": "storage",
+      "purpose": "RAID/drive/volume management",
+      "keywords": ["raid", "storage", "disk", "阵列"]
+    },
+    {
+      "name": "appdump_redfish",
+      "paths": ["dump_info/AppDump/redfish/"],
+      "component": "redfish",
+      "purpose": "Redfish API service",
+      "keywords": ["redfish", "api", "http", "接口"]
+    },
+    {
+      "name": "appdump_frudata",
+      "paths": ["dump_info/AppDump/frudata/"],
+      "component": "frudata",
+      "purpose": "FRU data management",
+      "keywords": ["fru", "elabel", "sn", "资产"]
+    },
+    {
+      "name": "appdump_bios",
+      "paths": ["dump_info/AppDump/bios/"],
+      "component": "bios",
+      "purpose": "BIOS config and management",
+      "keywords": ["bios", "boot", "post", "配置"]
+    },
+    {
+      "name": "appdump_chassis",
+      "paths": ["dump_info/AppDump/chassis/"],
+      "component": "chassis",
+      "purpose": "chassis state and LED/UID",
+      "keywords": ["chassis", "uid", "led", "入侵"]
+    },
+    {
+      "name": "appdump_account",
+      "paths": ["dump_info/AppDump/account/", "dump_info/AppDump/iam/"],
+      "component": "account/iam",
+      "purpose": "user auth and access control",
+      "keywords": ["login", "auth", "permission", "账户"]
+    },
+    {
+      "name": "appdump_event",
+      "paths": ["dump_info/AppDump/event/", "dump_info/AppDump/event_policy/"],
+      "component": "event/event_policy",
+      "purpose": "event generation and policies",
+      "keywords": ["event", "alarm", "policy", "告警"]
+    },
+    {
+      "name": "appdump_observability",
+      "paths": ["dump_info/AppDump/observability/"],
+      "component": "observability",
+      "purpose": "metrics collection",
+      "keywords": ["metrics", "cpu", "memory", "观测"]
+    },
+    {
+      "name": "appdump_rmcpd",
+      "paths": ["dump_info/AppDump/rmcpd/"],
+      "component": "rmcpd",
+      "purpose": "IPMI over LAN service",
+      "keywords": ["ipmi", "rmcp", "lan", "会话"]
+    },
+    {
+      "name": "appdump_mctpd",
+      "paths": ["dump_info/AppDump/mctpd/"],
+      "component": "mctpd",
+      "purpose": "MCTP endpoint discovery",
+      "keywords": ["mctp", "pcie", "endpoint", "发现"]
+    },
+    {
+      "name": "appdump_hwproxy",
+      "paths": ["dump_info/AppDump/hwproxy/"],
+      "component": "hwproxy",
+      "purpose": "hardware access proxy",
+      "keywords": ["i2c", "smbus", "gpio", "timeout"]
+    },
+    {
+      "name": "appdump_hwdiscovery",
+      "paths": ["dump_info/AppDump/hwdiscovery/"],
+      "component": "hwdiscovery",
+      "purpose": "hardware discovery and CSR load",
+      "keywords": ["csr", "probe", "connector", "发现"]
+    },
+    {
+      "name": "appdump_maca",
+      "paths": ["dump_info/AppDump/maca/"],
+      "component": "maca",
+      "purpose": "process health and startup checks",
+      "keywords": ["startupcheck", "respawn", "health", "启动失败"]
+    },
+    {
+      "name": "appdump_bmc_network",
+      "paths": ["dump_info/AppDump/bmc_network/"],
+      "component": "bmc_network",
+      "purpose": "BMC network configuration",
+      "keywords": ["ip", "vlan", "route", "网络配置"]
+    },
+    {
+      "name": "appdump_bmc_time",
+      "paths": ["dump_info/AppDump/bmc_time/"],
+      "component": "bmc_time",
+      "purpose": "NTP/RTC time management",
+      "keywords": ["ntp", "time", "时间跳变"]
+    },
+    {
+      "name": "appdump_bmc_upgrade",
+      "paths": ["dump_info/AppDump/bmc_upgrade/"],
+      "component": "bmc_upgrade",
+      "purpose": "firmware upgrade workflow",
+      "keywords": ["upgrade", "hpm", "升级失败"]
+    },
+    {
+      "name": "skynet_info.json",
+      "paths": ["dump_info/AppDump/*/skynet_info.json"],
+      "component": "per-component",
+      "purpose": "observed per-component diagnostic JSON artifact; field names and cross-product semantics are not maintained",
+      "keywords": ["skynet_info.json", "component diagnostic artifact", "组件诊断工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "hwdiscovery_sr_artifact",
+      "paths": ["dump_info/AppDump/hwdiscovery/*.sr"],
+      "component": "hwdiscovery",
+      "purpose": "observed serialized hardware-discovery resource artifact; keep opaque without a product-specific format contract",
+      "keywords": ["hwdiscovery sr", "serialized resource", "硬件发现工件", "资源描述工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "hwdiscovery_binary_artifact",
+      "paths": ["dump_info/AppDump/hwdiscovery/*.bin"],
+      "component": "hwdiscovery",
+      "purpose": "observed binary hardware-discovery companion artifact; keep opaque without a product-specific decoder",
+      "keywords": ["hwdiscovery binary", "connector binary", "硬件发现二进制", "连接器工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "storage_smartattribute_rotations",
+      "paths": ["dump_info/LogDump/storage/drivelog/*/SMARTAttribute.*"],
+      "component": "storage",
+      "purpose": "observed disk SMART attribute artifact family; numeric suffix and field semantics may vary by product",
+      "keywords": ["smart attribute", "disk health artifact", "SMART属性", "磁盘健康工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "include_rotations": false
+    },
+    {
+      "name": "storage_subhealthy_record",
+      "paths": ["dump_info/LogDump/storage/drivelog/*/SubhealthyRecord.csv"],
+      "component": "storage",
+      "purpose": "observed per-drive sub-health record artifact; column meanings require a product-specific contract",
+      "keywords": ["subhealthy record", "disk sub-health", "亚健康记录", "磁盘亚健康"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "storage_controller_binary_artifact",
+      "paths": ["dump_info/LogDump/storage/ctrllog/*/*"],
+      "component": "storage controller",
+      "purpose": "observed controller firmware or diagnostic artifact; keep binary and compressed payloads opaque without a vendor decoder",
+      "keywords": ["controller dump", "controller firmware artifact", "控制器工件", "阵列卡二进制"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "pcie_maintenance_binary_artifact",
+      "paths": ["dump_info/LogDump/pciecard/*/maintenance_log_*.bin"],
+      "component": "pcie_device",
+      "purpose": "observed PCIe device maintenance binary artifact; keep opaque without a device-specific decoder",
+      "keywords": ["pcie maintenance log", "device maintenance artifact", "PCIe维护工件", "设备维护日志"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "pcie_npu_ecc_info",
+      "paths": ["dump_info/LogDump/pciecard/*/npu_ecc_info.json"],
+      "component": "pcie_device/NPU",
+      "purpose": "observed NPU ECC diagnostic JSON artifact; exact counters and status values require a device-specific contract",
+      "keywords": ["npu ecc", "ecc diagnostic artifact", "NPU error correction", "纠错码工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "fault_diagnosis_database",
+      "paths": ["dump_info/AppDump/fault_diagnosis/*.db"],
+      "component": "fault_diagnosis",
+      "purpose": "observed fault-diagnosis persistence database; do not query or decode without a schema and explicit need",
+      "keywords": ["fault diagnosis database", "fdm database", "故障诊断数据库", "持久化工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "fault_diagnosis_archive",
+      "paths": ["dump_info/AppDump/fault_diagnosis/*.tar.gz"],
+      "component": "fault_diagnosis",
+      "purpose": "observed nested fault-diagnosis archive; record path and size and do not unpack by default",
+      "keywords": ["fault diagnosis archive", "fdm archive", "故障诊断归档", "诊断日志归档"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "nginx_configuration_artifact",
+      "paths": ["dump_info/3rdDump/nginx.conf", "dump_info/3rdDump/nginx_*.conf"],
+      "component": "nginx/web",
+      "purpose": "observed Nginx configuration artifact; report presence without exposing configuration text by default",
+      "keywords": ["nginx configuration", "nginx conf", "Nginx配置", "Web配置工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "rtos_ntp_configuration",
+      "paths": ["dump_info/RTOSDump/other_info/ntp.conf"],
+      "component": "RTOSDump/time",
+      "purpose": "NTP client or service configuration snapshot",
+      "keywords": ["ntp config", "time sync", "NTP配置", "时间同步"]
+    },
+    {
+      "name": "rtos_process_stat",
+      "paths": ["dump_info/RTOSDump/sysinfo/stat"],
+      "component": "RTOSDump/kernel",
+      "purpose": "kernel and CPU aggregate statistics snapshot",
+      "keywords": ["proc stat", "cpu statistics", "CPU统计", "系统统计"]
+    },
+    {
+      "name": "sp_version_metadata",
+      "paths": ["dump_info/SpLogDump/version.json", "dump_info/SpLogDump/spinfo.ini"],
+      "component": "SpLogDump",
+      "purpose": "observed platform/version metadata artifact; individual fields may remain product-specific",
+      "keywords": ["sp version", "platform version", "SP版本", "平台版本"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only"
+    },
+    {
+      "name": "bios_info",
+      "paths": ["dump_info/AppDump/bios/*/bios_info"],
+      "component": "bios",
+      "purpose": "BIOS configuration information",
+      "keywords": ["bios_info", "bios configuration", "BIOS配置"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bios_current_value",
+      "paths": ["dump_info/AppDump/bios/*/currentvalue.json"],
+      "component": "bios",
+      "purpose": "current effective BIOS configuration",
+      "keywords": ["currentvalue.json", "current bios configuration", "当前BIOS配置"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bios_registry",
+      "paths": ["dump_info/AppDump/bios/*/registry.json"],
+      "component": "bios",
+      "purpose": "BIOS registry and configuration metadata",
+      "keywords": ["registry.json", "bios registry", "BIOS注册表"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bios_redfish_result",
+      "paths": ["dump_info/AppDump/bios/*/result.json"],
+      "component": "bios",
+      "purpose": "result of BIOS settings submitted through Redfish",
+      "keywords": ["result.json", "bios redfish result", "BIOS设置结果"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bios_pending_settings",
+      "paths": ["dump_info/AppDump/bios/*/setting.json"],
+      "component": "bios",
+      "purpose": "BIOS settings submitted through Redfish that have not taken effect",
+      "keywords": ["setting.json", "pending bios settings", "待生效BIOS设置"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bmc_network_lldp_info",
+      "paths": ["dump_info/AppDump/bmc_network/lldp_info.txt"],
+      "component": "bmc_network",
+      "purpose": "LLDP configuration and packet statistics",
+      "keywords": ["lldp_info.txt", "lldp statistics", "LLDP统计"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bmc_network_interface_info",
+      "paths": ["dump_info/AppDump/bmc_network/network_info.txt"],
+      "component": "bmc_network",
+      "purpose": "BMC network interface configuration snapshot",
+      "keywords": ["network_info.txt", "network interface", "网络接口配置"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bmc_soc_nandflash_info",
+      "paths": ["dump_info/AppDump/bmc_soc/nandflash_info.txt"],
+      "component": "bmc_soc",
+      "purpose": "NAND flash information",
+      "keywords": ["nandflash_info.txt", "nand flash", "NAND闪存"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bmc_time_ntp_info",
+      "paths": ["dump_info/AppDump/bmc_time/ntp_info.txt"],
+      "component": "bmc_time",
+      "purpose": "NTP synchronization failure information",
+      "keywords": ["ntp_info.txt", "ntp synchronization", "NTP同步失败"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bmc_time_zone",
+      "paths": ["dump_info/AppDump/bmc_time/time_zone.txt"],
+      "component": "bmc_time",
+      "purpose": "BMC time-zone configuration",
+      "keywords": ["time_zone.txt", "bmc time zone", "BMC时区"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bmc_upgrade_info",
+      "paths": ["dump_info/AppDump/bmc_upgrade/bmc_upgrade_info.txt"],
+      "component": "bmc_upgrade",
+      "purpose": "BMC firmware update information",
+      "keywords": ["bmc_upgrade_info.txt", "firmware update", "BMC升级信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "compute_cpu_info",
+      "paths": ["dump_info/AppDump/compute/cpu_info"],
+      "component": "compute",
+      "purpose": "detailed information about CPUs configured for the server",
+      "keywords": ["cpu_info", "configured cpu", "CPU配置信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "compute_memory_info",
+      "paths": ["dump_info/AppDump/compute/mem_info"],
+      "component": "compute",
+      "purpose": "detailed information about DIMMs configured for the server",
+      "keywords": ["mem_info", "configured dimm", "内存条配置信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "firmware_mgmt_info",
+      "paths": ["dump_info/AppDump/firmware_mgmt/firmware_mgmt_info.txt"],
+      "component": "firmware_mgmt",
+      "purpose": "firmware-management component information",
+      "keywords": ["firmware_mgmt_info.txt", "firmware management", "固件管理"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "fructrl_info",
+      "paths": ["dump_info/AppDump/fructrl/fructrl_info.txt"],
+      "component": "fructrl",
+      "purpose": "FRU-control component information",
+      "keywords": ["fructrl_info.txt", "fru control", "FRU控制"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "fru_asset_info",
+      "paths": ["dump_info/AppDump/frudata/fruinfo.txt"],
+      "component": "frudata",
+      "purpose": "FRU asset-tag information",
+      "keywords": ["fruinfo.txt", "asset tag", "资产标签"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "general_hardware_cpu_board_dfx",
+      "paths": ["dump_info/AppDump/general_hardware/DFX_CpuBoard*"],
+      "component": "general_hardware",
+      "purpose": "CPU-board DFX information",
+      "keywords": ["DFX_CpuBoard", "cpu board dfx", "CPU板DFX"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "general_hardware_disk_backplane_dfx",
+      "paths": ["dump_info/AppDump/general_hardware/DFX_DiskBP*"],
+      "component": "general_hardware",
+      "purpose": "drive-backplane DFX information",
+      "keywords": ["DFX_DiskBP", "disk backplane dfx", "硬盘背板DFX"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "general_hardware_expander_dfx",
+      "paths": ["dump_info/AppDump/general_hardware/DFX_ExpBoard*"],
+      "component": "general_hardware",
+      "purpose": "expander-board DFX information",
+      "keywords": ["DFX_ExpBoard", "expander dfx", "扩展板DFX"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "general_hardware_fan_board_dfx",
+      "paths": ["dump_info/AppDump/general_hardware/DFX_FanBoard*"],
+      "component": "general_hardware",
+      "purpose": "fan-backplane DFX information",
+      "keywords": ["DFX_FanBoard", "fan backplane dfx", "风扇背板DFX"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "general_hardware_cpld_registers",
+      "paths": ["dump_info/AppDump/general_hardware/cpld_reg_info*"],
+      "component": "general_hardware",
+      "purpose": "SMC/CPLD register information",
+      "keywords": ["cpld_reg_info", "smc registers", "CPLD寄存器"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "general_hardware_vrd_info",
+      "paths": ["dump_info/AppDump/general_hardware/vrd_info"],
+      "component": "general_hardware",
+      "purpose": "VRD register information",
+      "keywords": ["vrd_info", "vrd registers", "VRD寄存器"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "general_hardware_vrd_fault_registers",
+      "paths": ["dump_info/AppDump/general_hardware/vrd_reg_dump"],
+      "component": "general_hardware",
+      "purpose": "VR power-fault register log",
+      "keywords": ["vrd_reg_dump", "vr power fault", "VR电源故障寄存器"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "hwdiscovery_connectors",
+      "paths": ["dump_info/AppDump/hwdiscovery/connectors.txt"],
+      "component": "hwdiscovery",
+      "purpose": "hardware connector information",
+      "keywords": ["connectors.txt", "hardware connector", "硬件连接器"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "hwproxy_smc_dfx_info",
+      "paths": ["dump_info/AppDump/hwproxy/smc_dfx_info.txt"],
+      "component": "hwproxy",
+      "purpose": "SmcDfxInfo component configuration and data snapshot",
+      "keywords": ["smc_dfx_info.txt", "smc dfx", "SMC诊断信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "hwproxy_snapshot",
+      "paths": ["dump_info/AppDump/hwproxy/snapshot.csv"],
+      "component": "hwproxy",
+      "purpose": "Accessor and Scanner snapshot",
+      "keywords": ["hwproxy snapshot.csv", "accessor scanner", "访问器扫描器快照"],
+      "semantic_level": "purpose",
+      "artifact_format": "csv",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "hwproxy_topology",
+      "paths": ["dump_info/AppDump/hwproxy/topology.txt"],
+      "component": "hwproxy",
+      "purpose": "hardware-topology link information",
+      "keywords": ["hwproxy topology.txt", "hardware topology", "硬件拓扑"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "iam_info",
+      "paths": ["dump_info/AppDump/iam/iam_info.txt"],
+      "component": "iam",
+      "purpose": "identity and access-management component information",
+      "keywords": ["iam_info.txt", "iam information", "身份访问管理信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "highly_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "ipmi_channel_status",
+      "paths": ["dump_info/AppDump/ipmi_core/ipmbeth_info.txt"],
+      "component": "ipmi_core",
+      "purpose": "management-system IPMI channel status",
+      "keywords": ["ipmbeth_info.txt", "ipmi channel status", "IPMI通道状态"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "ipmi_route_table",
+      "paths": ["dump_info/AppDump/ipmi_core/route_table.txt"],
+      "component": "ipmi_core",
+      "purpose": "IPMI module route information",
+      "keywords": ["route_table.txt", "ipmi route", "IPMI路由"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "pcie_device_card_info",
+      "paths": ["dump_info/AppDump/pcie_device/card_info"],
+      "component": "pcie_device",
+      "purpose": "PCIe card information configured for the server",
+      "keywords": ["pcie card_info", "configured pcie card", "PCIe卡信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "persistence_permanent",
+      "paths": ["dump_info/AppDump/persistence/PermanentPer.json"],
+      "component": "persistence",
+      "purpose": "persistent component data",
+      "keywords": ["PermanentPer.json", "persistent data", "持久化数据"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "persistence_poweroff",
+      "paths": ["dump_info/AppDump/persistence/PoweroffPer.json"],
+      "component": "persistence",
+      "purpose": "persistent data retained across power-off",
+      "keywords": ["PoweroffPer.json", "poweroff persistence", "掉电持久化数据"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "persistence_reset",
+      "paths": ["dump_info/AppDump/persistence/ResetPer.json"],
+      "component": "persistence",
+      "purpose": "persistent data associated with reset",
+      "keywords": ["ResetPer.json", "reset persistence", "复位持久化数据"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "persistence_temporary",
+      "paths": ["dump_info/AppDump/persistence/TemporaryPer.json"],
+      "component": "persistence",
+      "purpose": "temporary persistent component data",
+      "keywords": ["TemporaryPer.json", "temporary persistence", "临时持久化数据"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "power_mgmt_psu_info",
+      "paths": ["dump_info/AppDump/power_mgmt/psu_info.txt"],
+      "component": "power_mgmt",
+      "purpose": "server PSU information",
+      "keywords": ["psu_info.txt", "server psu", "服务器电源信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "product_hardware_inventory",
+      "paths": ["dump_info/AppDump/product_mgmt/hardware_inventory.json"],
+      "component": "product_mgmt",
+      "purpose": "hardware asset inventory",
+      "keywords": ["hardware_inventory.json", "hardware inventory", "硬件资产清单"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "product_mgmt_status",
+      "paths": ["dump_info/AppDump/product_mgmt/product_mgmt_dumpinfo"],
+      "component": "product_mgmt",
+      "purpose": "ProductMgmt component status information",
+      "keywords": ["product_mgmt_dumpinfo", "product management status", "产品管理状态"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "remote_console_status",
+      "paths": ["dump_info/AppDump/remote_console/remote_console_dumpinfo"],
+      "component": "remote_console",
+      "purpose": "RemoteConsole component status information",
+      "keywords": ["remote_console_dumpinfo", "remote console status", "远程控制台状态"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "rmcpd_status",
+      "paths": ["dump_info/AppDump/rmcpd/rmcpd_dumpinfo"],
+      "component": "rmcpd",
+      "purpose": "RMCP daemon status information",
+      "keywords": ["rmcpd_dumpinfo", "rmcp daemon status", "RMCP服务状态"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "sensor_sdr_info",
+      "paths": ["dump_info/AppDump/sensor/sdr_info.txt"],
+      "component": "sensor",
+      "purpose": "sensor data record information",
+      "keywords": ["sdr_info.txt", "sensor data record", "传感器数据记录"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "sensor_sel_log",
+      "paths": ["dump_info/AppDump/sensor/sel_log.csv"],
+      "component": "sensor",
+      "purpose": "system event log exported by the sensor component",
+      "keywords": ["sel_log.csv", "system event log", "系统事件日志"],
+      "semantic_level": "purpose",
+      "artifact_format": "csv",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "sensor_sel_raw_data",
+      "paths": ["dump_info/AppDump/sensor/sel_raw_data.dat"],
+      "component": "sensor",
+      "purpose": "raw system event log data",
+      "keywords": ["sel_raw_data.dat", "raw sel data", "SEL原始数据"],
+      "semantic_level": "purpose",
+      "artifact_format": "binary",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "sensor_database",
+      "paths": ["dump_info/AppDump/sensor/sensor.db"],
+      "component": "sensor",
+      "purpose": "current sensor database",
+      "keywords": ["sensor.db", "sensor database", "传感器数据库"],
+      "semantic_level": "purpose",
+      "artifact_format": "sqlite",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "sensor_inventory",
+      "paths": ["dump_info/AppDump/sensor/sensor_info.txt"],
+      "component": "sensor",
+      "purpose": "list of server sensors",
+      "keywords": ["sensor_info.txt", "sensor list", "传感器列表"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "uboot_environment",
+      "paths": ["dump_info/AppDump/soctrl/uboot_env.txt"],
+      "component": "soctrl",
+      "purpose": "U-Boot environment-variable snapshot",
+      "keywords": ["uboot_env.txt", "uboot environment", "U-Boot环境变量"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "storage_raid_controller_info",
+      "paths": ["dump_info/AppDump/storage/RAID_Controller_Info.txt"],
+      "component": "storage",
+      "purpose": "RAID controller, logical-drive, and physical-drive information",
+      "keywords": ["RAID_Controller_Info.txt", "raid controller information", "RAID控制器信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bmc_serial_log",
+      "paths": ["dump_info/LogDump/bmccom.dat"],
+      "component": "BMC serial console",
+      "purpose": "BMC serial-port log",
+      "keywords": ["bmccom.dat", "bmc serial log", "BMC串口日志"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "os_screenshot",
+      "paths": ["dump_info/OSDump/img*.jpeg"],
+      "component": "OSDump",
+      "purpose": "last captured server-OS screenshots",
+      "keywords": ["os screenshot", "img jpeg", "OS截图"],
+      "semantic_level": "purpose",
+      "artifact_format": "image",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "highly_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "os_sol_archive",
+      "paths": ["dump_info/OSDump/systemcom.tar"],
+      "component": "OSDump",
+      "purpose": "SOL serial-port information archive",
+      "keywords": ["systemcom.tar", "sol serial archive", "SOL串口归档"],
+      "semantic_level": "purpose",
+      "artifact_format": "archive",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "highly_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "os_reset_video",
+      "paths": ["dump_info/OSDump/*.rep"],
+      "component": "OSDump",
+      "purpose": "automatically recorded server-OS video",
+      "keywords": ["os reset video", "video_osreset.rep", "OS录像"],
+      "semantic_level": "purpose",
+      "artifact_format": "video",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "highly_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "rtos_dhcp_configuration",
+      "paths": ["dump_info/RTOSDump/networkinfo/dhclient_ip.conf", "dump_info/RTOSDump/networkinfo/dhclient6_ip.conf"],
+      "component": "RTOSDump/network",
+      "purpose": "DHCP client configuration snapshots",
+      "keywords": ["dhclient_ip.conf", "dhclient6_ip.conf", "DHCP配置"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "rtos_logrotate_status",
+      "paths": ["dump_info/RTOSDump/other_info/logrotate.status"],
+      "component": "RTOSDump/logging",
+      "purpose": "logrotate status record",
+      "keywords": ["logrotate.status", "log rotation status", "日志轮转状态"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "ordinary",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bundle_component_log_index",
+      "paths": ["dump_info/dump_app_log"],
+      "component": "one-click collection",
+      "purpose": "list of component logs included by one-click collection",
+      "keywords": ["dump_app_log", "component log index", "组件日志清单"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bundle_collection_result_index",
+      "paths": ["dump_info/dump_log"],
+      "component": "one-click collection",
+      "purpose": "list of one-click collection results",
+      "keywords": ["dump_log", "collection result index", "收集结果清单"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "component_documentation",
+      "source_reference": "https://gitcode.com/openUBMC/web_online_help/blob/760dc2b615aa3b4679f367ce19081f9dff9a82a6/src/openUBMC/openUBMC_cn/bmc_help_0055.html",
+      "source_revision": "760dc2b615aa3b4679f367ce19081f9dff9a82a6"
+    },
+    {
+      "name": "bios_smbios_configuration",
+      "paths": ["dump_info/AppDump/bios/*/SMBIOS_CONF"],
+      "component": "bios",
+      "purpose": "SMBIOS data exported by the BIOS component",
+      "keywords": ["SMBIOS_CONF", "smbios data", "SMBIOS数据"],
+      "semantic_level": "purpose",
+      "artifact_format": "binary",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "highly_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/bios/blob/6c465b77f3fa04c5171b27105eb84de8cb814767/src/lualib/pojo/smbios_object.lua",
+      "source_revision": "6c465b77f3fa04c5171b27105eb84de8cb814767"
+    },
+    {
+      "name": "bios_silkscreen_configuration",
+      "paths": ["dump_info/AppDump/bios/*/silkconfig.json", "dump_info/AppDump/bios/*/silkconfig_bak.json"],
+      "component": "bios",
+      "purpose": "server silkscreen information reported by BMC to BIOS",
+      "keywords": ["silkconfig.json", "silkscreen configuration", "丝印配置"],
+      "semantic_level": "purpose",
+      "artifact_format": "json",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "configuration_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/bios/blob/6c465b77f3fa04c5171b27105eb84de8cb814767/src/lualib/pojo/bios_object_mutihost.lua",
+      "source_revision": "6c465b77f3fa04c5171b27105eb84de8cb814767"
+    },
+    {
+      "name": "chassis_led_info",
+      "paths": ["dump_info/AppDump/chassis/LedInfo"],
+      "component": "chassis",
+      "purpose": "LED names, modes, states, timing, and color capabilities",
+      "keywords": ["LedInfo", "led state", "LED状态"],
+      "semantic_level": "structure",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/chassis/blob/8d7d31810bd023d455f4ff56bfd35d9aa6f06300/src/lualib/led_service.lua",
+      "source_revision": "8d7d31810bd023d455f4ff56bfd35d9aa6f06300"
+    },
+    {
+      "name": "devmon_chip_access_statistics",
+      "paths": ["dump_info/AppDump/devmon/chips_access_statistic.csv"],
+      "component": "devmon",
+      "purpose": "chip-access statistics exported by devmon",
+      "keywords": ["devmon chips_access_statistic.csv", "chip access statistics", "芯片访问统计"],
+      "semantic_level": "purpose",
+      "artifact_format": "csv",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/devmon/blob/db22260667d8432aa28c82d878fec5ffca511d87/tests/README.md",
+      "source_revision": "db22260667d8432aa28c82d878fec5ffca511d87"
+    },
+    {
+      "name": "devmon_driver_load_info",
+      "paths": ["dump_info/AppDump/devmon/drivers_load_info.csv"],
+      "component": "devmon",
+      "purpose": "driver-load information exported by devmon",
+      "keywords": ["drivers_load_info.csv", "driver load information", "驱动加载信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "csv",
+      "route_mode": "automatic",
+      "sensitivity": "ordinary",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/devmon/blob/db22260667d8432aa28c82d878fec5ffca511d87/tests/README.md",
+      "source_revision": "db22260667d8432aa28c82d878fec5ffca511d87"
+    },
+    {
+      "name": "devmon_scanner_accessor_snapshot",
+      "paths": ["dump_info/AppDump/devmon/snapshot.csv"],
+      "component": "devmon",
+      "purpose": "Scanner and Accessor snapshot exported by devmon",
+      "keywords": ["devmon snapshot.csv", "scanner accessor snapshot", "扫描器访问器快照"],
+      "semantic_level": "purpose",
+      "artifact_format": "csv",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/devmon/blob/db22260667d8432aa28c82d878fec5ffca511d87/tests/README.md",
+      "source_revision": "db22260667d8432aa28c82d878fec5ffca511d87"
+    },
+    {
+      "name": "devmon_topology",
+      "paths": ["dump_info/AppDump/devmon/topology.txt"],
+      "component": "devmon",
+      "purpose": "hardware-device topology exported by devmon",
+      "keywords": ["devmon topology.txt", "device topology", "设备拓扑"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/devmon/blob/db22260667d8432aa28c82d878fec5ffca511d87/libs/common/src/topology/device_topo.cpp",
+      "source_revision": "db22260667d8432aa28c82d878fec5ffca511d87"
+    },
+    {
+      "name": "general_hardware_card_info",
+      "paths": ["dump_info/AppDump/general_hardware/card_info"],
+      "component": "general_hardware",
+      "purpose": "general-hardware card inventory exported by board, GPU, or DPU services",
+      "keywords": ["general_hardware card_info", "card inventory", "板卡清单"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/general_hardware/blob/99d05b380438c88d562b0c5cbdbd1ee7be852e98/src/lualib/dpu_service/dpu_service.lua",
+      "source_revision": "99d05b380438c88d562b0c5cbdbd1ee7be852e98"
+    },
+    {
+      "name": "general_hardware_mcu_info",
+      "paths": ["dump_info/AppDump/general_hardware/mcu_info"],
+      "component": "general_hardware",
+      "purpose": "MCU information exported by the general-hardware MCU service",
+      "keywords": ["mcu_info", "mcu information", "MCU信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/general_hardware/blob/99d05b380438c88d562b0c5cbdbd1ee7be852e98/src/lualib/mcu/mcu_service.lua",
+      "source_revision": "99d05b380438c88d562b0c5cbdbd1ee7be852e98"
+    },
+    {
+      "name": "general_hardware_mcu_text_dump",
+      "paths": ["dump_info/AppDump/general_hardware/mcu_txt_dump"],
+      "component": "general_hardware",
+      "purpose": "MCU diagnostic text dump",
+      "keywords": ["mcu_txt_dump", "mcu diagnostic dump", "MCU诊断日志"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/general_hardware/blob/99d05b380438c88d562b0c5cbdbd1ee7be852e98/src/lualib/mcu/mcu_service.lua",
+      "source_revision": "99d05b380438c88d562b0c5cbdbd1ee7be852e98"
+    },
+    {
+      "name": "hwproxy_chip_access_statistics",
+      "paths": ["dump_info/AppDump/hwproxy/chips_access_statistic.csv"],
+      "component": "hwproxy",
+      "purpose": "chip-access statistics exported by hwproxy",
+      "keywords": ["hwproxy chips_access_statistic.csv", "hwproxy chip access", "硬件代理芯片访问统计"],
+      "semantic_level": "purpose",
+      "artifact_format": "csv",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/devmon/blob/db22260667d8432aa28c82d878fec5ffca511d87/libs/hwproxy/src/hwproxy_service.cpp",
+      "source_revision": "db22260667d8432aa28c82d878fec5ffca511d87"
+    },
+    {
+      "name": "mctp_info",
+      "paths": ["dump_info/AppDump/mctpd/mctp_info"],
+      "component": "mctpd",
+      "purpose": "system EID entries, MCTP route table, and PCIe controller communication state",
+      "keywords": ["mctp_info", "mctp route table", "MCTP路由表"],
+      "semantic_level": "structure",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/mctpd/blob/cc0c2a753dfd6bdc4526bfc964986bc837800043/src/config/chipv2/mctp_dump.lua",
+      "source_revision": "cc0c2a753dfd6bdc4526bfc964986bc837800043"
+    },
+    {
+      "name": "network_adapter_optical_module_static_info",
+      "paths": ["dump_info/AppDump/network_adapter/optical_module/optical_module_static_info"],
+      "component": "network_adapter",
+      "purpose": "optical-module static information exported by network_adapter",
+      "keywords": ["optical_module_static_info", "optical module static information", "光模块静态信息"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/network_adapter/blob/c237a8e54a772c5290ef8f2f1c3ee598a0c667ba/src/lualib/device/device_manager.lua",
+      "source_revision": "c237a8e54a772c5290ef8f2f1c3ee598a0c667ba"
+    },
+    {
+      "name": "network_adapter_last_word_binary",
+      "paths": ["dump_info/AppDump/network_adapter/pciecard/*/last_word_*.bin"],
+      "component": "network_adapter",
+      "purpose": "device-specific network-adapter last-word binary log",
+      "keywords": ["last_word binary", "network adapter last word", "网卡临终日志"],
+      "semantic_level": "purpose",
+      "artifact_format": "binary",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/network_adapter/blob/c237a8e54a772c5290ef8f2f1c3ee598a0c667ba/src/lualib/device/class/network_adapter.lua",
+      "source_revision": "c237a8e54a772c5290ef8f2f1c3ee598a0c667ba"
+    },
+    {
+      "name": "network_adapter_running_binary",
+      "paths": ["dump_info/AppDump/network_adapter/pciecard/*/running_log_*.bin"],
+      "component": "network_adapter",
+      "purpose": "device-specific network-adapter running binary log",
+      "keywords": ["running_log binary", "network adapter running log", "网卡运行二进制日志"],
+      "semantic_level": "purpose",
+      "artifact_format": "binary",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/network_adapter/blob/c237a8e54a772c5290ef8f2f1c3ee598a0c667ba/src/lualib/device/class/network_adapter.lua",
+      "source_revision": "c237a8e54a772c5290ef8f2f1c3ee598a0c667ba"
+    },
+    {
+      "name": "power_mgmt_current_psu_black_box",
+      "paths": ["dump_info/AppDump/power_mgmt/current_psu_black_box_info.txt"],
+      "component": "power_mgmt",
+      "purpose": "current PSU black-box information exported by power_mgmt",
+      "keywords": ["current_psu_black_box_info.txt", "current psu black box", "当前电源黑匣子"],
+      "semantic_level": "purpose",
+      "artifact_format": "text",
+      "route_mode": "automatic",
+      "sensitivity": "identifier_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/power_mgmt/blob/4f84568222b554a44058754004228551fdfecfca/src/lualib/log_service.lua",
+      "source_revision": "4f84568222b554a44058754004228551fdfecfca"
+    },
+    {
+      "name": "system_last_login_record",
+      "paths": ["dump_info/LogDump/lastlog"],
+      "component": "rootfs_user/sshd",
+      "purpose": "binary record of the last login information used by sshd",
+      "keywords": ["lastlog", "last login record", "上次登录记录"],
+      "semantic_level": "purpose",
+      "artifact_format": "binary",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque",
+      "route_mode": "explicit_only",
+      "sensitivity": "highly_sensitive",
+      "source_type": "public_repository",
+      "source_reference": "https://gitcode.com/openUBMC/rootfs_user/blob/a275c7a385ce417965c0b54efe42469ab09feb2d/dist/v1/rc.sysinit",
+      "source_revision": "a275c7a385ce417965c0b54efe42469ab09feb2d"
+    },
+    {
+      "name": "observed_logdump_artifact",
+      "paths": [
+        "dump_info/LogDump/*",
+        "dump_info/LogDump/*/*",
+        "dump_info/LogDump/*/*/*",
+        "dump_info/LogDump/*/*/*/*"
+      ],
+      "component": "LogDump",
+      "purpose": "observed LogDump artifact without a maintained file-specific contract; preserve path and size and do not infer fields from the filename alone",
+      "keywords": ["unclassified artifact", "unknown artifact", "未确认工件", "未分类工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "observed_appdump_artifact",
+      "paths": [
+        "dump_info/AppDump/*/*",
+        "dump_info/AppDump/*/*/*",
+        "dump_info/AppDump/*/*/*/*"
+      ],
+      "component": "AppDump component",
+      "purpose": "observed AppDump component artifact without a maintained file-specific contract; preserve path and size and do not infer fields from the filename alone",
+      "keywords": ["unclassified artifact", "unknown artifact", "未确认工件", "未分类工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "observed_rtosdump_artifact",
+      "paths": [
+        "dump_info/RTOSDump/*",
+        "dump_info/RTOSDump/*/*",
+        "dump_info/RTOSDump/*/*/*",
+        "dump_info/RTOSDump/*/*/*/*"
+      ],
+      "component": "RTOSDump",
+      "purpose": "observed RTOSDump artifact without a maintained file-specific contract; preserve path and size and do not infer fields from the filename alone",
+      "keywords": ["unclassified artifact", "unknown artifact", "未确认工件", "未分类工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "observed_osdump_artifact",
+      "paths": [
+        "dump_info/OSDump/*",
+        "dump_info/OSDump/*/*",
+        "dump_info/OSDump/*/*/*"
+      ],
+      "component": "OSDump",
+      "purpose": "observed OSDump serial, console, image, or archive artifact; keep opaque unless the incident requires bounded inspection",
+      "keywords": ["serial artifact", "console artifact", "OSDump", "串口工件", "控制台工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "observed_splogdump_artifact",
+      "paths": [
+        "dump_info/SpLogDump/*",
+        "dump_info/SpLogDump/*/*",
+        "dump_info/SpLogDump/*/*/*"
+      ],
+      "component": "SpLogDump",
+      "purpose": "observed platform-specific or version artifact whose fields vary by product; preserve path and size before interpretation",
+      "keywords": ["platform artifact", "version artifact", "SpLogDump", "平台工件", "版本工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "observed_bma_artifact",
+      "paths": [
+        "dump_info/BMALogDump/*",
+        "dump_info/BMALogDump/*/*",
+        "dump_info/BMALogDump/*/*/*"
+      ],
+      "component": "BMALogDump",
+      "purpose": "observed BMALogDump artifact; record path and size without assigning cross-product semantics",
+      "keywords": ["BMALogDump", "BMA日志工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "observed_device_artifact",
+      "paths": [
+        "dump_info/DeviceDump/*",
+        "dump_info/DeviceDump/*/*",
+        "dump_info/DeviceDump/*/*/*",
+        "dump_info/DeviceDump/*/*/*/*"
+      ],
+      "component": "DeviceDump",
+      "purpose": "observed device-level low-level or register artifact; do not decode binary content without a product-specific contract",
+      "keywords": ["device artifact", "register artifact", "DeviceDump", "设备工件", "寄存器工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "observed_thirdparty_artifact",
+      "paths": [
+        "dump_info/3rdDump/*",
+        "dump_info/3rdDump/*/*",
+        "dump_info/3rdDump/*/*/*"
+      ],
+      "component": "3rdDump",
+      "purpose": "observed third-party service artifact; inspect only with a product-specific contract and avoid exposing configuration contents by default",
+      "keywords": ["third-party artifact", "3rdDump", "第三方工件", "配置工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    },
+    {
+      "name": "opaque_core_dump_artifact",
+      "paths": [
+        "dump_info/CoreDump/*",
+        "dump_info/CoreDump/*/*",
+        "dump_info/CoreDump/*/*/*"
+      ],
+      "component": "CoreDump",
+      "purpose": "opaque crash artifact; record path and size only and do not recursively unpack by default",
+      "keywords": ["core dump", "crash artifact", "CoreDump", "崩溃工件", "core文件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque"
+    },
+    {
+      "name": "opaque_optbmc_artifact",
+      "paths": [
+        "dump_info/OptBMC/*",
+        "dump_info/OptBMC/*/*",
+        "dump_info/OptBMC/*/*/*"
+      ],
+      "component": "OptBMC",
+      "purpose": "opaque product-specific configuration or state artifact; record path and size only and do not expand backups without explicit authorization",
+      "keywords": ["OptBMC artifact", "product state artifact", "OptBMC", "产品状态工件", "配置备份"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "explicit_opaque"
+    },
+    {
+      "name": "observed_dump_root_artifact",
+      "paths": ["dump_info/dump_log", "dump_info/dump_app_log"],
+      "component": "bundle collection",
+      "purpose": "root-level collection artifact; report path and size without inferring the producer or payload contract",
+      "keywords": ["collection artifact", "dump artifact", "采集工件", "日志包工件"],
+      "definition_status": "observed_path",
+      "source_type": "validated_bundle_structure",
+      "reliability": "observed_only",
+      "scan_mode": "metadata_only",
+      "coverage_class": "generic_fallback"
+    }
+  ],
+  "rules": [
+    {
+      "match_keywords": ["运行状态", "当前状态", "状态检查", "近期错误", "最近错误", "错误检查", "异常检查", "健康检查", "健康状态", "整体检查"],
+      "include": ["app.log", "framework.log", "journalctl.log"]
+    },
+    {
+      "match_keywords": ["主要故障", "主要异常", "故障概览", "问题概览", "整体分析", "全局分析", "综合诊断"],
+      "include": ["current_event.txt", "sel.txt", "app.log", "framework.log", "journalctl.log", "maintenance.log", "running.log", "alarm.log"],
+      "primary": ["current_event.txt", "sel.txt"]
+    },
+    {
+      "match_keywords": ["operation failed", "operation failure", "操作失败", "执行失败", "配置失败"],
+      "include": ["operation.log", "app.log", "framework.log"],
+      "primary": ["operation.log"]
+    },
+    {
+      "match_keywords": ["login", "auth", "permission", "证书", "签名", "登录失败", "无法登录", "认证失败", "密码错误", "账号锁定", "账户锁定", "ssh登录失败", "web登录失败"],
+      "include": ["security.log", "operation.log", "sshd", "login"]
+    },
+    {
+      "match_keywords": ["startup", "boot", "crash", "respawn", "启动失败", "进程重启", "拉起失败", "反复重启", "组件崩溃", "进程崩溃"],
+      "include": ["framework.log", "journalctl.log"]
+    },
+    {
+      "match_keywords": ["current alarm", "active alarm", "当前告警", "活动告警", "未清除告警"],
+      "include": ["current_event.txt", "alarm.log", "sensor.log"],
+      "primary": ["current_event.txt"]
+    },
+    {
+      "match_keywords": ["sensor", "SEL", "reading", "传感器", "告警"],
+      "include": ["sensor.log", "alarm.log", "current_event.txt", "sel.txt", "eo_sel.csv"]
+    },
+    {
+      "match_keywords": ["event history", "historical event", "历史事件", "历史告警", "系统事件"],
+      "include": ["eo_sel.csv", "sel.txt", "current_event.txt"],
+      "primary": ["eo_sel.csv", "sel.txt"]
+    },
+    {
+      "match_keywords": ["fan", "thermal", "temperature", "风扇", "温控", "过温"],
+      "include": ["cooling_control.log", "Thermal.log", "fan_info.txt", "thermal_info.txt", "app.log"]
+    },
+    {
+      "match_keywords": ["masked event", "event mask", "屏蔽事件", "事件屏蔽", "告警被屏蔽", "告警不显示"],
+      "include": ["mask_event.txt", "current_event.txt", "sel.txt"]
+    },
+    {
+      "match_keywords": ["power", "psu", "电源", "功耗"],
+      "include": ["ps_black_box.log", "app.log", "operation.log"]
+    },
+    {
+      "match_keywords": ["web", "https", "http", "nginx", "网页", "web界面", "https 不通", "web访问失败"],
+      "include": ["nginx_access_log", "nginx_error_log"]
+    },
+    {
+      "match_keywords": ["network", "ncsi", "lan", "链路", "网络", "ssh连不上", "https不通", "连不上", "网络访问失败"],
+      "include": ["network_adapter_net_card_info", "net_stream.log", "app.log", "framework.log", "sshd", "netstat_info", "ifconfig_info", "route_info"]
+    },
+    {
+      "match_keywords": ["raid", "storage", "disk", "阵列", "磁盘"],
+      "include": ["raid_controller_lib.log", "app.log"]
+    },
+    {
+      "match_keywords": ["pcie", "cable", "topology", "线缆", "端口接错", "缺卡", "接错"],
+      "include": ["cable_info", "mdb_info.log", "sync_property_trace.log", "rpc_records.log"],
+      "primary": ["cable_info"]
+    },
+    {
+      "match_keywords": ["dbus", "mdb", "property", "对象", "上树", "不同步", "对象缺失", "对象不更新", "属性不更新", "资源树", "上树失败"],
+      "include": ["mdb_info.log", "sync_property_trace.log", "rpc_records.log"]
+    },
+    {
+      "match_keywords": ["memory", "内存", "高内存", "内存泄漏", "memory leak"],
+      "include": ["cpumem_usage_info_dump.csv", "mem_info_*.csv", "top_info", "free_info", "vmstat", "journalctl.log"],
+      "primary": ["cpumem_usage_info_dump.csv", "mem_info_*.csv", "top_info", "free_info"]
+    },
+    {
+      "match_keywords": ["performance", "cpu", "性能", "资源", "高cpu", "卡顿"],
+      "include": ["bmc_health.log", "cpumem_usage_info_dump.csv", "top_info", "running.log", "journalctl.log"],
+      "primary": ["bmc_health.log", "cpumem_usage_info_dump.csv", "top_info"]
+    }
+  ],
+  "notes": {
+    "rotation": "Many files have rotations: *.log.1.gz, *.log.2.gz",
+    "nested_archives": "Do not recursively unpack CoreDump, factory backups, configuration archives, or other nested archives by default",
+    "unclassified_common_files": "Every observed path is covered by either a file-specific definition or an observed-artifact definition. A covered artifact may still have unknown fields or semantics; do not select or interpret it by filename alone unless a maintained contract exists",
+    "fallback": "If no rule matches or file meaning is unknown, preserve it as an evidence gap and update the catalog only from verified public or user-supplied documentation",
+    "language": "Prefer adding common Chinese user phrases so problem-driven selection works for teammates"
+  }
+}

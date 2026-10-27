@@ -18,7 +18,7 @@ Reuse established task facts instead of asking the user to repeat them. Require:
 
 - a direct publish request or a current-task build handoff that already includes the publish stage;
 - an existing Conan remote alias from the request, handoff, or unambiguous current task context;
-- one or more exact Conan recipe refs, including a recipe revision when needed.
+- full binary references from the verified build, binding recipe revision, package ID and package revision.
 
 The direct request authorizes that named upload; do not ask for a second confirmation. If the
 current task contains one verified package ref and one established remote, use them directly. Stop
@@ -28,46 +28,34 @@ result and local Conan configuration.
 Use an exact ref such as:
 
 ~~~text
-name/version@openubmc/stable#recipe-revision
+name/version@openubmc/stable#recipe-revision:package-id#package-revision
 ~~~
 
-If a base ref resolves to more than one local recipe revision, first match the verified build
-artifact identity. Do not guess a remote or use a wildcard.
+Resolve the full identity from the build output and local listing. A recipe-only
+upload selects other cached binaries; it is not a bounded package publication.
 
 ## Workflow
 
-1. Confirm the package exists locally:
-
-   ~~~bash
-   conan list '<exact-ref>:*' -c --format=json
-   ~~~
-
-2. Upload the existing package:
-
-   ~~~bash
-   conan upload '<exact-ref>' -r <user-named-remote> -c
-   ~~~
-
-3. Confirm the same exact ref is visible remotely:
-
-   ~~~bash
-   conan list '<exact-ref>:*' -r <user-named-remote> --format=json
-   ~~~
+Use `scripts/publish_package.py --ref '<full-binary-ref>' --remote <remote>` to
+verify the local identity and prepare the exact command. Add `--upload` for the
+authorized publication. The helper uploads only that binary revision with
+`--check`, then queries the same full reference on the named remote. For several
+authorized binaries, run it once per verified full reference.
 
 Treat success as upload rc=0 plus the remote listing. Report the exact ref and
 remote, but never report credential values.
 
+Failures return a classified `code`, failed `step`, and `diagnostic_path`. Raw Conan output
+is saved only in a private per-attempt file under `$XDG_STATE_HOME/openubmc/conan-publish`
+(default `~/.local/state/openubmc/conan-publish`). Inspect that file locally before deciding
+whether to retry; keep its raw output out of chat. `diagnostics_saved=false` means saving
+failed. Authentication, permission, TLS and network failures require their own remedies;
+an unknown upload result needs the exact remote listing before any retry.
+
 ## Boundaries
 
-The ordinary Bingo product release package is built from the Manifest root by
-`openubmc-bingo-build` with:
-
-~~~bash
-bingo build -t publish -b <board> -bt release --stage stable
-~~~
-
-That command builds a product release package. This Skill only uploads an already-built Conan
-component with `conan upload`; Conan has no `conan publish` command.
+This Skill uploads an already-built Conan component with `conan upload`;
+Conan has no `conan publish` command.
 
 Do not use bmcgo build -u: it rebuilds before uploading and may force remote
 state. Do not use bmcgo publish as a synonym for this Skill; it is a product

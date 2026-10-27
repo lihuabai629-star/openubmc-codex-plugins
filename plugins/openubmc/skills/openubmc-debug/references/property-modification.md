@@ -48,7 +48,9 @@ Each entry is a complete `PropertyContract` with:
 | `override_interface/property` | Owner-provided Boolean proof that an MDB debug override is active; missing proof is not false |
 | `allowed_ssh_users` | Approved local SSH principals; server-side permissions still apply |
 
-The adapter checks strict SSH host identity, machine/boot/firmware identity,
+The adapter uses the configured BMC SSH host-key policy, including its existing
+internal-development default. A requested strict policy is preserved; no separate
+host-key confirmation is added. The adapter still checks machine/boot/firmware identity,
 unique D-Bus owner, object generation, exact MDB object-to-path binding,
 introspection type/readwrite access, no override, and matching direct-owner/MDB
 values. Generation/override proof properties must already be implemented and

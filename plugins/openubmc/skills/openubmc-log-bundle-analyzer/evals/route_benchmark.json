@@ -1,0 +1,109 @@
+{
+  "default_max_files": 8,
+  "minimum_macro_precision": 0.95,
+  "minimum_macro_recall": 0.95,
+  "minimum_top1_hit_rate": 1.0,
+  "minimum_top3_precision": 0.95,
+  "minimum_negative_cases": 6,
+  "cases": [
+    {
+      "problem": "BMC login failed",
+      "relevant": ["security.log", "operation.log", "sshd", "login"],
+      "expected_first": "security.log"
+    },
+    {
+      "problem": "风扇型号与转速异常",
+      "relevant": ["fan_info.txt", "thermal_info.txt", "cooling_control.log", "Thermal.log", "app.log"]
+    },
+    {
+      "problem": "对象缺失与属性不更新",
+      "relevant": ["mdb_info.log", "sync_property_trace.log", "rpc_records.log"]
+    },
+    {
+      "problem": "Web/HTTPS 访问失败",
+      "relevant": ["nginx_access_log", "nginx_error_log"]
+    },
+    {
+      "problem": "网卡链路状态异常",
+      "relevant": [
+        "network_adapter_net_card_info",
+        "net_stream.log",
+        "app.log",
+        "framework.log",
+        "ifconfig_info",
+        "netstat_info",
+        "route_info",
+        "sshd"
+      ]
+    },
+    {
+      "problem": "高 CPU 高内存性能异常",
+      "relevant": [
+        "bmc_health.log",
+        "cpumem_usage_info_dump.csv",
+        "top_info",
+        "journalctl.log",
+        "running.log"
+      ]
+    },
+    {
+      "problem": "PCIe 线缆缺卡或端口接错",
+      "relevant": ["cable_info", "mdb_info.log", "sync_property_trace.log", "rpc_records.log"],
+      "expected_first": "cable_info"
+    },
+    {
+      "problem": "操作失败并关联组件错误",
+      "relevant": ["operation.log", "app.log", "framework.log"],
+      "expected_first": "operation.log"
+    },
+    {
+      "problem": "整体检查近期错误和主要故障，给出关键证据、时间线、相关性、置信度和下一步建议",
+      "relevant": [
+        "current_event.txt",
+        "sel.txt",
+        "app.log",
+        "framework.log",
+        "journalctl.log",
+        "maintenance.log",
+        "running.log",
+        "alarm.log"
+      ],
+      "expected_first": "current_event.txt"
+    },
+    {
+      "problem": "当前告警、历史告警和系统事件",
+      "relevant": ["sensor.log", "alarm.log", "current_event.txt", "sel.txt", "eo_sel.csv"],
+      "expected_first": "current_event.txt"
+    },
+    {
+      "problem": "The value itself is unchanged",
+      "relevant": [],
+      "forbidden": ["sensor.log", "sel.txt", "eo_sel.csv", "current_event.txt", "alarm.log"]
+    },
+    {
+      "problem": "Explain this plan in detail",
+      "relevant": [],
+      "forbidden": ["net_stream.log", "network_adapter_net_card_info", "route_info", "ifconfig_info"]
+    },
+    {
+      "problem": "This script failed unexpectedly",
+      "relevant": [],
+      "forbidden": ["mdb_info.log", "sync_property_trace.log", "rpc_records.log"]
+    },
+    {
+      "problem": "Multiple errors appeared during scheduling",
+      "relevant": [],
+      "forbidden": ["mdb_info.log", "sync_property_trace.log", "rpc_records.log"]
+    },
+    {
+      "problem": "Please select an output format",
+      "relevant": [],
+      "forbidden": ["sensor.log", "sel.txt", "eo_sel.csv", "current_event.txt", "alarm.log"]
+    },
+    {
+      "problem": "A task failed during scheduling",
+      "relevant": [],
+      "forbidden": ["appdump_chassis", "mdb_info.log", "sync_property_trace.log", "rpc_records.log"]
+    }
+  ]
+}

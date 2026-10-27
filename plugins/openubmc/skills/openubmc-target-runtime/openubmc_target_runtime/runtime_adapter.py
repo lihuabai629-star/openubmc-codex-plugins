@@ -24,6 +24,7 @@ from .observation import (
 )
 from .run_engine import RunTransition
 from .semantic_runtime import (
+    AttachQemuEvidence,
     CancelRun,
     CommandConflict,
     Gate,
@@ -143,6 +144,16 @@ class RuntimeSemanticAdapter:
             "projection": projection,
             "continuation": self.context_runtime.continuation_for(projection),
         }
+
+    def prepare_qemu_evidence(self, command: AttachQemuEvidence, *, operation_id: str) -> Mapping[str, object]:
+        from .qemu_evidence import load_qemu_evidence
+        self.context_runtime.operator_evidence_target(command.run_id, target=command.target, require_open=True)
+        body, summary = load_qemu_evidence(command)
+        prepared = self.context_runtime.prepare_file_evidence(
+            command.run_id, target=command.target, path=command.path,
+            expected_sha256=command.sha256, evidence_type="qemu-workflow-result",
+            operation_id=operation_id, producer="qemu-evidence-attach", body=body)
+        return {**prepared["evidence"], "validation": summary}
 
     def domain_metadata(self, operation: str) -> Mapping[str, object]:
         return self.domain_executor.metadata_for(operation)

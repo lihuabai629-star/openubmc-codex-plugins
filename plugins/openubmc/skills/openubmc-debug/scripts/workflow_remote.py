@@ -1919,6 +1919,13 @@ def _execute_workflow(
         )
         _append_summary_results(summary, freshness_results)
 
+    alarm_snapshot = freshness.get("active_alarms_end", lanes["ssh"]["active_alarms"])
+    capabilities["active_alarm_endpoint_verified"] = (
+        None
+        if alarm_snapshot.get("code") == "skipped"
+        else snapshot_available(alarm_snapshot)
+    )
+
     all_results = [preflight_start, *flatten_results(lanes), source_search_result]
     if freshness:
         all_results.extend(

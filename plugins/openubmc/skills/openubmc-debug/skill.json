@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "name": "openubmc-debug",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "description": "以只读方式组合源码、接口、对象、告警、日志和主机证据，定位或多环境对比 openUBMC 运行态问题并验证现场交付结果。",
   "author": "OpenUBMC Team",
   "license": "MulanPSL-2.0",
@@ -19,7 +19,8 @@
     "python": ">=3.10",
     "jsonschema": ">=4.18",
     "ssh": "required for SSH-backed object, alarm, and OS-host evidence lanes",
-    "sshpass": "conditional: required only for password-based SSH authentication",
+    "sshpass": "conditional: required for password authentication by OpenSSH-backed helpers",
+    "paramiko": "conditional: required for OS observations through BMC SSH and native SOL",
     "rg": "conditional: preferred for local source evidence when CodeGraph is unavailable"
   },
   "relatedSkills": [
@@ -52,6 +53,7 @@
     "references/openubmc-debug-compare-v1.schema.json",
     "references/optional-integrations.md",
     "references/remote-automation.md",
+    "references/os-console.md",
     "references/workflow.md",
     "references/windows-routing.md",
     "scripts/_cli_common.py",
@@ -93,6 +95,7 @@
     "scripts/target_runtime_mcp.py",
     "scripts/workflow_remote.py",
     "scripts/systemd_observation.py",
+    "scripts/os_console_observation.py",
     "scripts/mdb_property_backend.py",
     "references/property-modification.md"
   ],

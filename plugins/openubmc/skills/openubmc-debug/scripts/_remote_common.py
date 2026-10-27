@@ -544,11 +544,6 @@ class SshControlMasterHandle:
 class OpenSshControlMasterTransport:
     """OpenSSH ControlMaster adapter for the canonical Runtime SSH lane."""
 
-    def __new__(cls, *args, **kwargs):
-        if cls is OpenSshControlMasterTransport and sys.platform == "win32":
-            from openubmc_target_runtime.paramiko_transport import ParamikoSshTransport
-            return ParamikoSshTransport(*args, open_error_type=SshControlMasterOpenError, **kwargs)
-        return super().__new__(cls)
 
     def __init__(
         self,

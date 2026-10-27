@@ -6,15 +6,21 @@ Record the launcher path, repository-relative ownership, file identity or revisi
 
 ## Authorization Enforcement Seam
 
-The contract payload records intent and authorization; it does not itself stop a process or network mutation. Before launch, stop, non-loopback exposure, or verification weakening, inspect the selected repository launcher or a reviewed wrapper and prove an enforceable authorization seam exists before the mutation call.
+The contract records intent and authorization already established by the task;
+the agent fills both from that scope without separate user approvals. Inspect
+the repository launcher's actual argv and effects. Ordinary authorized commands
+can use `task_command`: the agent checks scope, runtime and process ownership at
+the command boundary and retains that source/command review as evidence. A
+dedicated launcher authorization API or a new wrapper is not a prerequisite.
 
 Record `qemu_testing_result.launcher.authorization_enforcement` with:
 
-- `mode`: `repository_launcher`, `reviewed_wrapper`, or `read_only_blocked`;
+- `mode`: `task_command`, `repository_launcher`, `reviewed_wrapper`, or `read_only_blocked`;
 - `seam`: the function, command boundary, or wrapper stage that validates normalized intent, same-named authorization, and target scope;
-- `evidence`: a source review or negative test showing an unauthorized mutation is rejected before process/network control.
+- `evidence`: the scoped command/source review, or an existing negative test of the launcher/wrapper.
 
-If no such seam exists, keep the run read-only/blocked. Do not compensate by trusting a true boolean in the handoff or by issuing the launcher command directly.
+Use `read_only_blocked` only when necessary scope/input is unresolved. A true
+handoff boolean alone is not user authorization; the current task supplies it.
 
 ## Image Identity
 
@@ -61,9 +67,15 @@ For each endpoint record protocol, bind address, host port, guest port, configur
 
 ## Verification Strength
 
-Keep protocol verification enabled. For test certificates, prefer a scoped CA bundle or an exact certificate fingerprint bound to the expected endpoint. A request to weaken verification must name the endpoint, isolation boundary, time window, risk, and restoration action, and must carry `qemu_authorization.weaken_verification=true`.
+Use the task's established transport policy. For verified test certificates, use
+a scoped CA bundle or endpoint fingerprint. For already authorized isolated
+tests with verification disabled, fill the corresponding flags and derive the
+endpoint, task-bounded time window and restoration steps yourself. Renew expired
+local plan bookkeeping within that same authorization; preserve prior evidence.
+For targeted checks without Web/Redfish, use `tls_mode=not_applicable`.
 
-Never convert a certificate/identity failure into a pass. If authorization is absent, preserve the failure in `unverified` or `smoke_classification` and suggest the trusted verification path.
+Record authentication/business results separately from certificate/identity
+verification. An unavailable trust check does not block independent probes.
 
 ## Smoke Classification
 
@@ -78,3 +90,17 @@ Never convert a certificate/identity failure into a pass. If authorization is ab
 | stability | bounded observation without restart/coredump | short-term runtime stability |
 
 Report the earliest failed layer and keep later checks blocked or independently evidenced. Avoid attributing resource pressure or a component defect until fresh serial/service evidence supports that classification.
+
+## Persistent x86 Instances
+
+A persistent runtime binds its initialized disk, initial artifact, machine UUID,
+mock state, credentials, host keys and retained reports. A launcher `restart`
+normally reboots that disk; it does not prove that a newly built HPM was installed.
+Use a fresh runtime for a new artifact unless the requested subject is explicitly
+the existing disk state. Compare report time and guest boot ID so a failed retry
+cannot inherit a stale passing report.
+
+For full x86 service acceptance, use the selected repository verifier and the
+checks defined in `x86-development-workflow.md`. Preserve the first failing boot
+when a later bounded recovery succeeds. The recovered result is evidence for the
+new boot and does not erase the initial failure.

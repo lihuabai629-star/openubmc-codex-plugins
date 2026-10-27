@@ -1,0 +1,2 @@
+timestamp,event,severity,state
+2026-08-31T09:59:58+08:00,synthetic temperature threshold,warning,asserted

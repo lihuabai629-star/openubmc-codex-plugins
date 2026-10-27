@@ -18,64 +18,9 @@ import time
 MCP_PROCESS_LIFECYCLE_SCHEMA = "openubmc.mcp-process-lifecycle.v1"
 
 
-def _windows_process_handle(process_id: int, *, terminate: bool = False):
-    import ctypes
-    from ctypes import wintypes
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-    kernel.OpenProcess.restype = wintypes.HANDLE
-    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-    kernel.CloseHandle.restype = wintypes.BOOL
-    # PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE | PROCESS_TERMINATE.
-    access = (1 << 12) | (1 << 20) | (1 if terminate else 0)
-    return kernel, kernel.OpenProcess(access, False, process_id)
-
-
-def _windows_handle_state(kernel, handle) -> tuple[bool, str]:
-    import ctypes
-    from ctypes import wintypes
-
-    # POINTER caches its target type globally; reuse the standard FILETIME so
-    # repeated probes cannot retain a new Structure and pointer type each time.
-    FileTime = wintypes.FILETIME
-
-    kernel.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
-    kernel.GetExitCodeProcess.restype = wintypes.BOOL
-    kernel.GetProcessTimes.argtypes = [wintypes.HANDLE, ctypes.POINTER(FileTime),
-                                       ctypes.POINTER(FileTime), ctypes.POINTER(FileTime),
-                                       ctypes.POINTER(FileTime)]
-    kernel.GetProcessTimes.restype = wintypes.BOOL
-    exit_code = wintypes.DWORD()
-    if not kernel.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
-        return True, "unknown"  # Inaccessible must never authorize cleanup.
-    if exit_code.value != 259:  # STILL_ACTIVE
-        return False, "unknown"
-    created, exited, kernel_time, user_time = (FileTime() for _ in range(4))
-    if not kernel.GetProcessTimes(handle, ctypes.byref(created), ctypes.byref(exited),
-                                  ctypes.byref(kernel_time), ctypes.byref(user_time)):
-        return True, "unknown"
-    identity = (int(created.dwHighDateTime) << 32) | int(created.dwLowDateTime)
-    return True, str(identity)
-
-
-def _windows_process_state(process_id: int) -> tuple[bool, str]:
-    import ctypes
-    if process_id <= 1:
-        return False, "unknown"
-    kernel, handle = _windows_process_handle(process_id)
-    if not handle:
-        return (True, "unknown") if ctypes.get_last_error() == 5 else (False, "unknown")
-    try:
-        return _windows_handle_state(kernel, handle)
-    finally:
-        kernel.CloseHandle(handle)
-
-
 def _default_process_alive(process_id: int) -> bool:
     if process_id <= 1:
         return False
-    if sys.platform == "win32":
-        return _windows_process_state(process_id)[0]
     try:
         os.kill(process_id, 0)
     except ProcessLookupError:
@@ -94,8 +39,6 @@ def _default_process_alive(process_id: int) -> bool:
 
 
 def _default_process_identity(process_id: int) -> str:
-    if sys.platform == "win32":
-        return _windows_process_state(process_id)[1]
     try:
         stat = Path(f"/proc/{process_id}/stat").read_text(encoding="utf-8")
     except (OSError, UnicodeError):
@@ -107,16 +50,11 @@ def _default_process_identity(process_id: int) -> str:
 
 def _atomic_json(path: Path, value: Mapping[str, object]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
-    if sys.platform == "win32":
-        from .windows_private import harden_new_file
-        temporary.touch(exist_ok=True)
-        harden_new_file(temporary)
     temporary.write_text(
         json.dumps(dict(value), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    if sys.platform != "win32":
-        os.chmod(temporary, 0o600)
+    os.chmod(temporary, 0o600)
     os.replace(temporary, path)
 
 
@@ -194,11 +132,7 @@ class McpProcessLifecycle:
         self._requested_exit_reason: str | None = None
         self._lock = threading.RLock()
         self._last_persisted_state = ""
-        if sys.platform == "win32":
-            from .windows_private import ensure_private_directory
-            ensure_private_directory(self.lifecycle_root)
-        else:
-            self.lifecycle_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.lifecycle_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         safe_component = "".join(
             character if character.isalnum() or character in "-." else "-"
             for character in self.component
@@ -384,7 +318,7 @@ class McpProcessLifecycle:
             self._write_record(self.status())
 
     def exit_reason_if_due(self) -> str | None:
-        """Return and persist a safe process-exit reason when ownership expires."""
+        """Retain a live host connection; expire unowned idle processes after draining."""
 
         with self._lock:
             if self._exit_reason is not None:
@@ -409,6 +343,7 @@ class McpProcessLifecycle:
                 reason = "parent-exited"
             elif (
                 lifecycle_state in {"idle", "unknown-owner"}
+                and not status["parent_identity_currently_verified"]
                 and float(status["idle_seconds"]) >= self.idle_timeout_seconds
             ):
                 reason = "idle-timeout"
@@ -638,13 +573,6 @@ def _cleanup_matching_orphans(
             or process_identity(process_id) != status["process_identity"]
         ):
             continue
-        if sys.platform == "win32":
-            if _terminate_windows_orphan(
-                lifecycle_root, status, eligible=eligible,
-                process_alive=process_alive, process_identity=process_identity,
-            ):
-                cleaned.append(process_id)
-            continue
         try:
             process_handle = os.pidfd_open(process_id, 0)
         except (AttributeError, OSError):
@@ -687,41 +615,3 @@ def _cleanup_matching_orphans(
         if exited:
             cleaned.append(process_id)
     return cleaned
-
-
-def _terminate_windows_orphan(
-    lifecycle_root: Path, status: dict[str, object], *,
-    eligible: Callable[[dict[str, object]], bool],
-    process_alive: Callable[[int], bool],
-    process_identity: Callable[[int], str],
-) -> bool:
-    import ctypes
-    from ctypes import wintypes
-
-    process_id = int(status["process_id"])
-    kernel, handle = _windows_process_handle(process_id, terminate=True)
-    if not handle:
-        return False
-    try:
-        running, identity = _windows_handle_state(kernel, handle)
-        if not running or identity != status["process_identity"]:
-            return False
-        latest = next((item for item in inspect_mcp_process_records(
-            lifecycle_root, process_alive=process_alive, process_identity=process_identity,
-        ) if item.get("record_path") == status["record_path"]), None)
-        if (latest is None or not eligible(latest)
-                or latest.get("lifecycle_state") != "orphaned"
-                or latest.get("ownership_identity_bound") is not True
-                or int(latest.get("active_requests", 0)) != 0
-                or int(latest.get("process_id", -1)) != process_id
-                or latest.get("process_identity") != identity):
-            return False
-        kernel.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
-        kernel.TerminateProcess.restype = wintypes.BOOL
-        kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
-        kernel.WaitForSingleObject.restype = wintypes.DWORD
-        if not kernel.TerminateProcess(handle, 1):
-            return False
-        return kernel.WaitForSingleObject(handle, 1000) == 0
-    finally:
-        kernel.CloseHandle(handle)

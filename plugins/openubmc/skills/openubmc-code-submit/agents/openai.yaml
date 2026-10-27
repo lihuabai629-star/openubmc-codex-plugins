@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC 代码提交"
+  short_description: "内部 GitLab 与社区 GitCode 提交、推送和 MR/PR"
+  default_prompt: "Use $openubmc-code-submit to identify the repository platform, verify the source and target branches and validation evidence, then complete the authorized commit, fork push, and MR or PR steps."

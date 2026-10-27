@@ -98,6 +98,10 @@ export function errorResult(error) {
       "Check the upstream service before retrying this read-only request."],
     KB_CANCELLED: ["The knowledge-base request was cancelled.", false,
       "Start a new request only if the task still needs this information."],
+    KB_AUTH_LOCK_UNAVAILABLE: ["Local token coordination is unavailable.", false,
+      "Check the private cache permissions and install the Linux flock utility before retrying."],
+    KB_AUTH_LOCK_TIMEOUT: ["Another local client is refreshing the KB session.", true,
+      "Retry after the active authentication request completes; do not clear the shared cache."],
     KB_TOOL_FAILED: ["The knowledge-base request failed.", false,
       "Inspect local diagnostics before deciding whether to retry."]
   };

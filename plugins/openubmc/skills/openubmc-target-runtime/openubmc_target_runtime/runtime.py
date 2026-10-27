@@ -450,6 +450,35 @@ class CredentialResolver:
             association = device_associations(config).get(normalize_credential_host(bmc_host))
             return association
 
+    def resolve_console_values(self, *, task_id: str, bmc_host: str, ssh_port: int = 22) -> dict[str, str]:
+        """Private BMC SSH/OS serial input; no OS address or account fallback."""
+        from .credentials import CredentialConfigurationError
+        # An association chooses the OS account scope, not the SOL destination.
+        # Without an address, the BMC's OS-purpose override (then OS default)
+        # selects the independent console account from the same task snapshot.
+        os_host = self.associated_os(task_id=task_id, bmc_host=bmc_host) or bmc_host
+        values = {"__runtime_selected__": "1"}
+        for purpose, host, prefix in (("bmc", bmc_host, "OPENUBMC_SSH"),
+                                      ("os", os_host, "OPENUBMC_OS_SSH")):
+            try:
+                record = self.resolve_local(task_id=task_id, host=host,
+                    purpose=purpose, transport="ssh", port=ssh_port if purpose == "bmc" else 22,
+                    required=False).credentials
+            except CredentialConfigurationError as error:
+                if error.code != "credentials_missing":
+                    raise
+                record = None
+            if (record is None or not record.user
+                    or not (record.password or purpose == "bmc" and record.identity_file)):
+                values["__console_gap__"] = ("bmc_ssh_credentials_missing" if purpose == "bmc"
+                                             else "os_password_credentials_missing")
+                break
+            values[prefix + "_USER"] = record.user
+            values[prefix + "_PASSWORD"] = record.password
+            if purpose == "bmc" and record.identity_file:
+                values[prefix + "_IDENTITY_FILE"] = record.identity_file
+        return values
+
     def _selected_local_snapshot(self, task_id: str):
         """Called with the resolver lock held."""
         from .configuration import activated_source

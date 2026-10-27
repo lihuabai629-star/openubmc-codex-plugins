@@ -1,9 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { privateFixtureDirectory, writePrivateFixture } from "../test-support/private-fixture.mjs";
 
 const { loadConfig } = await import(process.env.OPENUBMC_TEST_PLUGIN_ROOT
   ? pathToFileURL(join(process.env.OPENUBMC_TEST_PLUGIN_ROOT, "openubmc-kb-mcp/src/config.js"))
@@ -22,9 +21,9 @@ const valid = {
 };
 
 async function configFile(value) {
-  const dir = await mkdtemp(join(tmpdir(), "openubmc-mcp-"));
+  const dir = await privateFixtureDirectory("openubmc-mcp-");
   const path = join(dir, "config.json");
-  await writeFile(path, JSON.stringify(value));
+  await writePrivateFixture(path, JSON.stringify(value));
   return path;
 }
 
@@ -83,7 +82,7 @@ test("rejects missing credentials without including secret values", async () => 
 });
 
 test("starts with bundled endpoints when credentials are not configured", async () => {
-  const path = join(await mkdtemp(join(tmpdir(), "openubmc-mcp-")), "missing.json");
+  const path = join(await privateFixtureDirectory("openubmc-mcp-"), "missing.json");
   const config = await loadConfig(path, { allowMissingCredentials: true });
   assert.equal(config.credentialsConfigured, false);
   assert.equal(config.lightragUrl, "https://discuss.openubmc.cn/rag");
@@ -93,7 +92,7 @@ test("uses the managed user configuration path by default", async () => {
   const previousConfig = process.env.OPENUBMC_KB_CONFIG;
   const previousLegacyConfig = process.env.OPENUBMC_MCP_CONFIG;
   const previousXdgConfigHome = process.env.XDG_CONFIG_HOME;
-  const root = await mkdtemp(join(tmpdir(), "openubmc-config-home-"));
+  const root = await privateFixtureDirectory("openubmc-config-home-");
   delete process.env.OPENUBMC_KB_CONFIG;
   delete process.env.OPENUBMC_MCP_CONFIG;
   process.env.XDG_CONFIG_HOME = root;

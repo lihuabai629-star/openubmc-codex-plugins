@@ -1,0 +1,35 @@
+{
+  "claim": "local-unpublished",
+  "dependencies": {
+    "inventory": [
+      {
+        "name": "python_validation",
+        "package_path": "requirements.lock",
+        "sha256": "8eb3b8a6fda4512f6cbc4f2f921063f8bad7163786d8e577b075b7e2581abf93",
+        "source_path": "requirements-ci.lock"
+      },
+      {
+        "name": "knowledge_mcp",
+        "package_path": "openubmc-kb-mcp/package-lock.json",
+        "sha256": "acff33474be7a162ad912da7573b790575aa8430a5b4312a5ddad04b38edb7e5",
+        "source_path": "openubmc-kb-mcp/package-lock.json"
+      }
+    ],
+    "sha256": "4ccdc339a660641f66805a532521d7ce6a9842606c1f2bd108a29f4084d404b8"
+  },
+  "package": {
+    "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+    "sha256": "4bc3e82bdb5091d0fd0dbbfc360d496383d9fb195f2136eb35b22945d942e355",
+    "version": "2.2.16"
+  },
+  "qualification": {
+    "schema": "openubmc.codex-plugin.qualification.v1",
+    "sha256": "9e2dc5b3f8bdf9e96aeb1b03c91430773bf550ba3ac51cc933d5c00d5cacace1"
+  },
+  "schema": "openubmc.codex-plugin.provenance.v1",
+  "source": {
+    "clean": true,
+    "commit": "c08d3a13895587d24d98640747d186f3225e746d",
+    "tree": "f42889730a403857d7c1245b8c58f6ae50051317"
+  }
+}

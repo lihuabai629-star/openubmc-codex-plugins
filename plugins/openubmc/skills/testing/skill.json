@@ -8,11 +8,17 @@
   "openubmc": {
     "minVersion": "1.0.0",
     "maxVersion": "2.0.0",
-    "components": ["dt", "luaunit", "ut", "it", "luacov"]
+    "components": [
+      "dt",
+      "luaunit",
+      "ut",
+      "it",
+      "luacov"
+    ]
   },
   "dependencies": {
-    "bingo-cli": ">=1.0.0",
-    "luaunit": ">=3.4"
+    "luaunit": ">=3.4",
+    "bmcgo": ">=0.7.0"
   },
   "relatedSkills": [
     "openubmc-developer",
@@ -48,7 +54,7 @@
       "编写集成测试",
       "运行UT",
       "运行IT",
-      "bingo test",
+      "bmcgo test",
       "测试覆盖率",
       "设计测试用例",
       "LuaUnit断言",

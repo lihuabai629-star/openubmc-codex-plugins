@@ -229,10 +229,6 @@ class TerminalAnswerStore:
         if not self.path.exists():
             return {}
         try:
-            if os.name == "nt":
-                from .windows_private import verify_private_path
-                verify_private_path(self.path.parent)
-                verify_private_path(self.path)
             value = json.loads(self.path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise TerminalAnswerError("terminal answer store is unreadable") from exc
@@ -264,22 +260,15 @@ class TerminalAnswerStore:
         require_secret_free(record.to_public_dict(), boundary="terminal answer persistence")
         values = self._load()
         values[task_id] = record.to_public_dict()
-        if os.name == "nt":
-            from .windows_private import ensure_private_directory, harden_new_file
-            ensure_private_directory(self.path.parent)
-        else:
-            self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         fd, temporary = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent, text=True)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                if os.name == "nt":
-                    harden_new_file(Path(temporary))
                 json.dump(values, stream, ensure_ascii=False, sort_keys=True)
                 stream.write("\n")
                 stream.flush()
                 os.fsync(stream.fileno())
-            if os.name != "nt":
-                os.chmod(temporary, 0o600)
+            os.chmod(temporary, 0o600)
             os.replace(temporary, self.path)
         finally:
             Path(temporary).unlink(missing_ok=True)

@@ -61,16 +61,12 @@ class TestRecordRunner:
         deadline = time.monotonic() + timeout
         try:
             process = subprocess.Popen(argv, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                       start_new_session=os.name != "nt")
+                                       start_new_session=True)
             def stop():
-                if os.name != "nt":
-                    try:
-                        os.killpg(process.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                elif process.poll() is None:
-                    subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
                 if process.poll() is None:
                     process.kill()
             def consume():

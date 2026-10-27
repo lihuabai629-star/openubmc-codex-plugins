@@ -50,9 +50,6 @@ function tokenCachePath(parsed, configPath) {
   if (typeof parsed.tokenCachePath === "string" && parsed.tokenCachePath.trim()) {
     return resolve(dirname(configPath), parsed.tokenCachePath);
   }
-  if (process.platform === "win32") {
-    return join(process.env.LOCALAPPDATA || dirname(configPath), "openubmc-mcp", "token-cache.json");
-  }
   return join(process.env.XDG_CACHE_HOME || join(homedir(), ".cache"), "openubmc-mcp", "token-cache.json");
 }
 
@@ -64,9 +61,7 @@ function credentialValue(parsed, field, environmentName) {
 
 function defaultConfigPath() {
   const configHome = process.env.XDG_CONFIG_HOME?.trim();
-  const fallback = process.platform === "win32"
-    ? process.env.LOCALAPPDATA || join(homedir(), "AppData", "Local")
-    : join(homedir(), ".config");
+  const fallback = join(homedir(), ".config");
   return join(configHome ? resolve(configHome) : fallback, "openubmc", "kb-mcp.json");
 }
 
@@ -77,7 +72,7 @@ export async function loadConfig(
   const absolutePath = resolve(path);
   const active = await activeConfiguration(absolutePath);
   let parsed = await readConfigurationJson(active.path, {
-    privateFile: process.platform === 'win32' || active.revision !== null,
+    privateFile: active.revision !== null,
     missing: allowMissingCredentials && active.revision === null
   }) || {};
 

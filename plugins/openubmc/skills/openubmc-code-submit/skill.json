@@ -1,0 +1,26 @@
+{
+  "manifestVersion": 1,
+  "name": "openubmc-code-submit",
+  "version": "1.0.0",
+  "description": "内部 GitLab 与社区 GitCode 的代码提交、个人 fork 推送和 MR/PR 交付。",
+  "author": "OpenUBMC Team",
+  "license": "MulanPSL-2.0",
+  "relatedSkills": ["openubmc-developer", "openubmc-build", "openubmc-qemu-testing", "openubmc-publish"],
+  "files": [
+    "SKILL.md",
+    "skill.json",
+    "agents/openai.yaml",
+    "LICENSE.marketplace",
+    "references/internal-gitlab.md",
+    "references/community-gitcode.md",
+    "references/gitcode-api.md",
+    "references/pr-state.md",
+    "templates/pr.md",
+    "templates/issue.md",
+    "scripts/check_submission.py",
+    "scripts/submission_route.py",
+    "scripts/gitcode_cli.py"
+  ],
+  "keywords": ["openubmc", "gitlab", "gitcode", "commit", "push", "merge-request", "pull-request"],
+  "categories": ["development", "delivery"]
+}

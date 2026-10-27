@@ -12,6 +12,7 @@ if __name__ == '__main__':
 
 
 from collections.abc import Callable, Mapping
+import argparse
 import hashlib
 import json
 import os
@@ -147,6 +148,8 @@ def _identities(
         ).lower(),
         "backup_dir": _text(arguments, "backup_dir") or "/tmp",
         "staging_path": _text(arguments, "staging_path"),
+        **({"local_path": str(Path(_text(arguments, "local_path")).expanduser().resolve())}
+           if action == "apply" else {}),
         "local_sha256": local_sha256,
         "mode": _text(arguments, "mode") or "644",
         "restart_scope": _text(arguments, "restart_scope") or "none",
@@ -187,6 +190,59 @@ def run_runtime_mutation(
     )
     root = _state_dir(state_dir)
     store = MutationJournalStore(root / "mutations")
+    return _call_runtime_mutation(
+        bounded, store=store, task_id=task_id, operation_id=operation_id,
+        backend_factory=backend_factory,
+    )
+
+
+def reconcile_runtime_mutation(
+    arguments: Mapping[str, object],
+    *,
+    task_id: str,
+    operation_id: str,
+    state_dir: Path | None = None,
+    backend_factory: BackendFactory | None = None,
+) -> dict[str, object]:
+    """Inspect and verify one existing CLI journal without starting a mutation.
+
+    Supply the original mutation arguments and journal identities. The journal's
+    checksum pins the original artifact even if the local file changed or vanished.
+    These CLI identities do not identify a public Runtime Run.
+    """
+    store = MutationJournalStore(_state_dir(state_dir) / "mutations")
+    journal = store.load(task_id, operation_id)
+    if journal is None:
+        raise ValueError("CLI reconciliation found no durable mutation journal; no Apply was started")
+    bounded = dict(arguments)
+    action = _action(bounded)
+    if journal.action != ("rollback" if action == "rollback" else "live_patch"):
+        raise ValueError("CLI reconciliation action differs from the original journal")
+    checksum = (journal.expected_checksum or _local_sha256(bounded, action)) if action == "apply" else ""
+    if _identities(bounded, action=action, local_sha256=checksum) != (task_id, operation_id):
+        raise ValueError("CLI reconciliation arguments differ from the original journal identity")
+    bounded["action"] = action
+    bounded["intent"] = (
+        "rollback" if action == "rollback" else
+        (_text(bounded, "intent").lower().replace("_", "-") or "live-patch")
+    )
+    if action == "apply":
+        bounded["artifact_sha256"] = checksum
+    bounded["_runtime_effect_recovery"] = "reconcile"
+    return _call_runtime_mutation(
+        bounded, store=store, task_id=task_id, operation_id=operation_id,
+        backend_factory=backend_factory,
+    )
+
+
+def _call_runtime_mutation(
+    arguments: Mapping[str, object],
+    *,
+    store: MutationJournalStore,
+    task_id: str,
+    operation_id: str,
+    backend_factory: BackendFactory | None,
+) -> dict[str, object]:
     factory = backend_factory or (
         lambda journal_store: LivePatchMcpBackend(journal_store=journal_store)
     )
@@ -199,7 +255,7 @@ def run_runtime_mutation(
         try:
             return service.call_tool(
                 "live_patch_run",
-                bounded,
+                arguments,
                 task_id=task_id,
                 operation_id=operation_id,
             )
@@ -214,4 +270,36 @@ def run_runtime_mutation(
         service.close()
 
 
-__all__ = ["RuntimeMutationFailed", "run_runtime_mutation"]
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Reconcile an existing direct CLI mutation journal only.")
+    parser.add_argument("command", choices=("reconcile",))
+    parser.add_argument("--task-id", required=True, help="Original CLI journal task_id, not a public run_id")
+    parser.add_argument("--operation-id", required=True, help="Original journal operation_id")
+    parser.add_argument("--arguments-file", type=Path, required=True, help="Private JSON object with the original mutation arguments")
+    parser.add_argument("--state-dir", type=Path, help="Original Runtime state directory")
+    args = parser.parse_args()
+    try:
+        arguments = json.loads(args.arguments_file.read_text(encoding="utf-8"))
+        if not isinstance(arguments, dict):
+            raise ValueError("arguments-file must contain a JSON object")
+        result = reconcile_runtime_mutation(
+            arguments, task_id=args.task_id, operation_id=args.operation_id,
+            state_dir=args.state_dir,
+        )
+    except (ValueError, TypeError, OSError, RuntimeError) as error:
+        print(json.dumps({"ok": False, "error": str(error),
+                          "task_id": args.task_id, "operation_id": args.operation_id,
+                          "identity_kind": "cli-mutation-journal",
+                          **({"journal": error.journal} if isinstance(error, RuntimeMutationFailed) else {})}))
+        return 1
+    journal = result.get("journal", {})
+    verified = isinstance(journal, dict) and journal.get("stage") in {"verified", "rollback_verified"}
+    print(json.dumps({"ok": verified, "identity_kind": "cli-mutation-journal", "result": result}))
+    return 0 if verified else 1
+
+
+__all__ = ["RuntimeMutationFailed", "run_runtime_mutation", "reconcile_runtime_mutation"]
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

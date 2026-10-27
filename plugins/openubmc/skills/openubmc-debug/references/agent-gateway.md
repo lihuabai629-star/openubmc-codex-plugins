@@ -53,10 +53,9 @@ Use the complete `diagnosis-only` start Action in the Debug entrypoint. The publ
 | `delivery_strategy` | For an authorized fix route; omit for diagnosis-only work |
 
 `purpose` describes the question; it does not execute a shell command or add a collection lane.
-The current public `observe` selectors are capability and MDB. The diagnostic collector has no
-systemd-state selector or `systemctl`/`journalctl` command entry. MDB service registration and
-historical logs cannot establish current failed systemd units. Keep those facts unverified when
-the returned evidence does not contain them.
+The public `observe` selectors are `capability`, `mdb`, `systemd`, and `os_console`.
+Use their named facts rather than arbitrary shell commands. BMC service registration and
+historical logs alone cannot establish current service failures or host OS state.
 
 Inspect the returned structured Turn and its `diagnostic_receipt`. When `state=waiting_response`,
 read `gate.input_schema`. Copy the complete returned `next_action` when it is a reusable Action;
@@ -205,8 +204,10 @@ Mutation authority is frozen in the Run and cannot be broadened by continuation.
 
 Unknown mutation outcomes are reconciled read-first with the same durable operation identity. If
 automatic recovery cannot converge, the Turn returns an Incident with bounded allowed commands.
-Use explicit reconcile only as the bounded recovery fallback. Repeated reconcile or cancel
-requests reuse the existing Incident outcome instead of duplicating lifecycle facts.
+Use explicit reconcile only as the bounded recovery fallback. Repeated explicit reconcile
+requests inspect the same unknown Effect again, including after process restart; they never
+redispatch its original mutation. Ordinary resume leaves an unresolved Incident unchanged.
+Repeated recovery and cancel requests reuse existing lifecycle facts.
 
 The restartable TaskContext is secret-free. After a local MCP restart, reuse the task identity and
 `run_id`; the Runtime restores typed intent, target bindings, workflow summaries, and mutation
@@ -240,6 +241,11 @@ internal selector Adapters behind `observe`, not additional Agent-facing tools.
 
 Agent `structuredContent` remains bounded to `ObservationReceipt` or `Turn`. Raw Evidence, Case
 ledgers, Runtime sequencing, incident metrics, and governance projections remain operator-facing.
+
+For an authorized OS task with a BMC IP and no OS IP, use the
+`os_console` selector through BMC SSH and its native SOL command
+for host identity and network observations.
+Its facts describe the host OS rather than the BMC's service manager.
 
 ## Current systemd service evidence
 

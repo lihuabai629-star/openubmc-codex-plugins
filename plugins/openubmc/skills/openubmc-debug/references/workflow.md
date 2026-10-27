@@ -7,7 +7,7 @@ Keep the working directory at the task's openUBMC repository and invoke the
 bundled workflow through the canonical installed Skill path:
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/workflow_remote.py" \
+python "<plugin-root>/skills/openubmc-debug/scripts/workflow_remote.py" \
   --ip <ip> \
   --mdb-query 'lsobj BusinessConnector' \
   --mdb-query 'lsobj PcieAddrInfo' \

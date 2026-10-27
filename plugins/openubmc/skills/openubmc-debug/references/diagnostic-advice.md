@@ -5,7 +5,7 @@ Drive. It examines explicitly selected device facts and returns hypotheses plus 
 that can separate them. Run the helper locally:
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/diagnostic_advice.py" \
+python "<plugin-root>/skills/openubmc-debug/scripts/diagnostic_advice.py" \
   --input /tmp/drive-advice-request.json
 ```
 
@@ -120,7 +120,7 @@ An existing Debug adapter can call the public Python function
 local CLI operation is:
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/diagnostic_advice.py" \
+python "<plugin-root>/skills/openubmc-debug/scripts/diagnostic_advice.py" \
   --input /tmp/drive-advice-request.json \
   --attach-to /tmp/drive-capture.json > /tmp/drive-capture-with-advice.json
 ```

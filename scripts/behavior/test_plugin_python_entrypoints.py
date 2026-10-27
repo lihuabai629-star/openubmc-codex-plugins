@@ -51,7 +51,7 @@ class PythonEntrypointTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.home = Path(temporary.name)
         self.plugin = self.home/'plugin'
-        shutil.copytree(self.original, self.plugin, ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(self.original, self.plugin)
         self.before = inventory(self.plugin)
         self.environment = {key: value for key, value in os.environ.items()
                             if not key.startswith(('PYTHON', 'OPENUBMC_', 'OPENAI_', 'CODEX_', 'XDG_'))}
@@ -137,7 +137,7 @@ class PythonEntrypointTests(unittest.TestCase):
                 'run_bmcgo_checked', 'run_build_attempt', 'update_manifest_conan_ref',
                 'verify_product_artifact', 'write_artifact_metadata'),
             'openubmc-debug': ('active_alarms', 'busctl_remote', 'collect_logs', 'compare_remote',
-                'doctor', 'mdbctl_remote', 'package_skill', 'preflight_checks',
+                'doctor', 'host_continuity', 'mdbctl_remote', 'package_skill', 'preflight_checks',
                 'preflight_recommendations', 'preflight_remote', 'read_remote_file',
                 'target_runtime_cli', 'workflow_remote'),
             'openubmc-environment-setup': ('associate_device', 'install_environment'),
@@ -157,6 +157,41 @@ class PythonEntrypointTests(unittest.TestCase):
                 self.assertEqual(inventory(self.plugin), self.before)
         self.assertFalse(list(self.plugin.rglob('__pycache__')))
 
+    def test_host_hook_uses_verified_snapshot_and_preserves_plugin(self):
+        # Empty lock avoids registry access. The test interpreter supplies the
+        # normal test dependencies; this validates the package execution path,
+        # not a clean dependency installation.
+        (self.plugin/'requirements.lock').write_bytes(b'')
+        lock_path = self.plugin/'plugin-lock.json'
+        lock = json.loads(lock_path.read_bytes())
+        lock['files']['requirements.lock'] = hashlib.sha256(b'').hexdigest()
+        del lock['content_digest']
+        canonical = lambda value: (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False)+'\n').encode()
+        lock['content_digest'] = hashlib.sha256(canonical(lock)).hexdigest()
+        lock_path.write_bytes(canonical(lock))
+        before = inventory(self.plugin)
+        self.environment.update(XDG_CACHE_HOME=str(self.home/'cache'), PIP_NO_INDEX='1',
+                                OPENUBMC_TARGET_RUNTIME_STATE_DIR=str(self.home/'state'))
+        prepared = self.run_python('-I', self.plugin/'scripts/pluginctl.py', 'prepare', '--capability', 'runtime', '--offline')
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        notes = self.home/'notes.json'
+        notes.write_text(json.dumps({'goal': 'packaged continuity fixture'}))
+        saved = self.run_python(self.plugin/'skills/openubmc-debug/scripts/host_continuity.py',
+                                'notes', '--task-id', 'fixture-task', '--notes-file', notes)
+        self.assertEqual(saved.returncode, 0, saved.stderr)
+        event = json.dumps({'session_id': 'fixture-task', 'hook_event_name': 'SessionStart'})
+        hook = self.run_python('-I', self.plugin/'scripts/pluginctl.py', 'host-hook', input_text=event)
+        self.assertEqual(hook.returncode, 0, hook.stderr)
+        self.assertIn('packaged continuity fixture', json.loads(hook.stdout)['hookSpecificOutput']['additionalContext'])
+        self.assertEqual(inventory(self.plugin), before)
+        if shutil.which('node'):
+            result = subprocess.run(['node', str(self.plugin/'scripts/openubmc-continuity-hook.js')],
+                                    env=dict(self.environment, OPENUBMC_PLUGIN_PYTHON=sys.executable),
+                                    input=event, capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('packaged continuity fixture', json.loads(result.stdout)['hookSpecificOutput']['additionalContext'])
+            self.assertEqual(inventory(self.plugin), before)
+
     def test_direct_runtime_mcp_initializes_without_modifying_the_package(self):
         request = {'jsonrpc': '2.0', 'id': 1, 'method': 'initialize',
                    'params': {'protocolVersion': '2024-11-05', 'capabilities': {},
@@ -167,6 +202,33 @@ class PythonEntrypointTests(unittest.TestCase):
         response = next(json.loads(line) for line in result.stdout.splitlines() if json.loads(line).get('id') == 1)
         self.assertIn('serverInfo', response['result'])
         self.assertEqual(inventory(self.plugin), self.before)
+
+    def test_execution_copy_retains_lock_and_helpers_after_installation_is_moved(self):
+        # A prepared execution copy must support subprocess helpers as well as MCP.
+        (self.plugin/'requirements.lock').write_bytes(b'')
+        lock_path = self.plugin/'plugin-lock.json'
+        lock = json.loads(lock_path.read_bytes())
+        lock['files']['requirements.lock'] = hashlib.sha256(b'').hexdigest()
+        del lock['content_digest']
+        canonical = lambda value: (json.dumps(value, sort_keys=True, indent=2, ensure_ascii=False)+'\n').encode()
+        lock['content_digest'] = hashlib.sha256(canonical(lock)).hexdigest()
+        lock_path.write_bytes(canonical(lock))
+        self.environment.update(XDG_CACHE_HOME=str(self.home/'cache'), PIP_NO_INDEX='1')
+        prepared = self.run_python('-I', self.plugin/'scripts/pluginctl.py',
+                                   'prepare', '--capability', 'runtime', '--offline')
+        self.assertEqual(prepared.returncode, 0, prepared.stderr)
+        execution = Path(json.loads(prepared.stdout)['capability_snapshots']['runtime'])
+        self.assertEqual(json.loads((execution/'plugin-lock.json').read_bytes()), lock)
+        self.plugin.rename(self.home/'retained-installation')
+        helper = execution/'skills/openubmc-debug/scripts/preflight_remote.py'
+        result = self.run_python('-I', '-B', helper, '--help')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        (execution/'skills/openubmc-debug/scripts/_cli_common.py').chmod(0o600)
+        with (execution/'skills/openubmc-debug/scripts/_cli_common.py').open('a') as stream:
+            stream.write('\nraise RuntimeError("unverified helper")\n')
+        result = self.run_python('-I', '-B', helper, '--help')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('inventory mismatch', result.stderr)
 
     def test_supported_module_import_initializes_before_the_importer(self):
         result = self.run_python('-c', MODULE_IMPORT, self.plugin)
@@ -180,7 +242,6 @@ class PythonEntrypointTests(unittest.TestCase):
         with source.open('a') as stream:
             stream.write('\nfrom pathlib import Path\nPath(' + repr(str(marker)) + ').touch()\n')
         commands = [(self.plugin/'skills/openubmc-debug/scripts/target_runtime_cli.py', '--help'),
-                    (self.plugin/'skills/openubmc-target-runtime/openubmc_target_runtime/release.py', '--help'),
                     ('-c', MODULE_IMPORT, self.plugin)]
         commands += [('-I', self.plugin/'scripts/pluginctl.py', server) for server in ('runtime', 'kb')]
         for snapshot_receipt in (False, True):

@@ -38,6 +38,25 @@ Map generated database code to its authored input. Common Lua outputs include
 database definitions, local database definitions, ORM classes, and default data;
 the exact paths and names are version-specific.
 
+For branches using `tableLocation`, inspect whether `Local` routes operations
+directly to the component database or an omitted/other value routes updates through
+the persistence service. Confirm `tableType` versus property `usage` precedence
+in the selected schema and generator. A usage entry does not by itself prove
+flash persistence or a universal requirement for table/key fields.
+
+Trace `tableName`, `tableMaxRows`, `primaryKey`, `uniquekey`, `notAllowNull`,
+`sensitive` and `critical` to generated behavior where supported. Check composite
+keys, aliases, defaults and redaction of exported values. Typical Lua output names
+include `db.lua`, `local_db.lua`, `orm_classes.lua` and `datas.lua`; inspect actual
+outputs instead of assigning semantics from filenames alone. Permanent storage
+capacity, local-mode support and device/database paths are product-version facts.
+
+For diagnosis, discover the current backend and query only the bounded rows needed
+through an available read-only capability. Preserve table/view and tombstone
+relationships when interpreting missing defaults. Deleting databases, tombstones
+or Conan packages is not a diagnostic precondition. Keep fault injection or reset
+experiments within their separately authorized owner and recovery plan.
+
 ## Inspect language-specific Retain behavior
 
 Retain is not portable by name alone. Trace the authored usage value through the

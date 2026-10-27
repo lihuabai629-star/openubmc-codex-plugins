@@ -12,10 +12,7 @@
         "XDG_CONFIG_HOME",
         "XDG_DATA_HOME",
         "XDG_CACHE_HOME",
-        "LOCALAPPDATA",
-        "USERPROFILE",
         "CODEX_HOME",
-        "OPENUBMC_WSL_DISTRO",
         "OPENUBMC_TARGET_RUNTIME_STATE_DIR",
         "OPENUBMC_MDB_PROPERTY_CONTRACTS",
         "OPENUBMC_MCP_FORMAL_RUN",
@@ -33,7 +30,7 @@
       ],
       "startup_timeout_sec": 600,
       "tool_timeout_sec": 900,
-      "required": true
+      "required": false
     },
     "openubmc-kb": {
       "type": "stdio",
@@ -47,14 +44,47 @@
         "XDG_CONFIG_HOME",
         "XDG_DATA_HOME",
         "XDG_CACHE_HOME",
-        "LOCALAPPDATA",
-        "USERPROFILE",
-        "CODEX_HOME",
-        "OPENUBMC_WSL_DISTRO"
+        "CODEX_HOME"
       ],
       "startup_timeout_sec": 600,
       "tool_timeout_sec": 900,
-      "required": true
+      "required": false
+    },
+    "openubmc-panel": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "./panel/native.mjs"
+      ],
+      "cwd": "./",
+      "startup_timeout_sec": 30,
+      "tool_timeout_sec": 900,
+      "env_vars": [
+        "XDG_CONFIG_HOME",
+        "XDG_DATA_HOME",
+        "XDG_CACHE_HOME",
+        "XDG_STATE_HOME",
+        "OPENUBMC_TARGET_RUNTIME_STATE_DIR"
+      ]
+    },
+    "openubmc-offline": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "./scripts/openubmc-offline-mcp.js"
+      ],
+      "cwd": "./",
+      "env_vars": [
+        "OPENUBMC_PLUGIN_PYTHON",
+        "OPENUBMC_OFFLINE_OUTPUT_DIR",
+        "OPENUBMC_OFFLINE_TIMEOUT_SECONDS",
+        "OPENUBMC_OFFLINE_MAX_CONCURRENCY",
+        "XDG_STATE_HOME",
+        "LOCALAPPDATA"
+      ],
+      "startup_timeout_sec": 30,
+      "tool_timeout_sec": 3700,
+      "required": false
     }
   }
 }

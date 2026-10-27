@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate a Redfish target and mode-0600 credential file without secrets."""
+"""Validate a Redfish target and its locally selected account without secrets."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import uuid
 from urllib.parse import urlsplit
 
 TARGET_RUNTIME_API_VERSION = "openubmc.target-runtime.v1"
@@ -80,24 +81,36 @@ def load_credentials(path: Path) -> Credentials:
     )
 
 
+def resolve_target_credentials(target: str, credentials_file: str = "") -> Credentials:
+    parsed = urlsplit(target_origin(target))
+    return _runtime.CredentialResolver(
+        config_path=credentials_file or None,
+    ).resolve_local(
+        task_id="upgrade-cli-" + uuid.uuid4().hex,
+        host=str(parsed.hostname),
+        purpose="bmc",
+        transport="redfish",
+        port=int(parsed.port or 443),
+    ).credentials
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--target", required=True)
-    parser.add_argument("--credentials-file", default=os.environ.get("OPENUBMC_CREDENTIALS_FILE", ""))
+    parser.add_argument("--credentials-file", default="")
     args = parser.parse_args()
     try:
-        if not args.credentials_file:
-            raise ValueError("OPENUBMC_CREDENTIALS_FILE is not configured")
         origin = target_origin(args.target)
-        credentials = load_credentials(Path(args.credentials_file))
+        credentials = resolve_target_credentials(origin, args.credentials_file)
         print(
             json.dumps(
                 {
                     "ok": True,
                     "target": origin,
-                    "credentials_file": str(Path(args.credentials_file).absolute()),
+                    "credentials_file": str(Path(args.credentials_file).absolute()) if args.credentials_file else "",
                     "username_present": bool(credentials.username),
                     "password_present": bool(credentials.password),
+                    "remote_authentication": "not_checked",
                 },
                 sort_keys=True,
             )

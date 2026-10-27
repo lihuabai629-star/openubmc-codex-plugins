@@ -1,0 +1,33 @@
+{
+  "assessment": "evidence_found",
+  "structured_observation_count": 3,
+  "summary": {
+    "parser": "pcie_topology_records",
+    "path": "dump_info/AppDump/pcie_device/cable_info",
+    "observation_type": "topology_status_records",
+    "interpretation": "status_codes_require_sourced_profile",
+    "observed_record_count": 3,
+    "complete": true,
+    "truncated": false,
+    "bytes_observed": 257,
+    "time_window_applied": false,
+    "record_kind_counts": {
+      "port": 2,
+      "config": 1
+    },
+    "status_code_counts": {
+      "config": {
+        "255": 1
+      },
+      "port": {
+        "1": 1,
+        "0": 1
+      }
+    },
+    "records_without_unit_identifier": 1,
+    "sensitive_fields_omitted": [
+      "uid",
+      "label"
+    ]
+  }
+}

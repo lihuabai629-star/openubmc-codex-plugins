@@ -14,10 +14,8 @@ if __name__ == '__main__':
 import argparse
 import bz2
 import datetime as dt
-import fnmatch
 import getpass
 import gzip
-import heapq
 import ipaddress
 import json
 import lzma
@@ -77,28 +75,6 @@ DEFAULT_ANALYSIS_MAX_LINES = 3
 DEFAULT_ANALYSIS_MAX_PATHS = 10
 DEFAULT_EXTRACT_MAX_MEMBERS = 10_000
 DEFAULT_EXTRACT_MAX_BYTES = 512 * 1024 * 1024
-LOG_TIMESTAMP_RE = re.compile(
-    r"(?P<timestamp>\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)"
-)
-GENERIC_FILE_KEYWORDS = {"error", "errors", "fail", "failed", "failure", "失败", "异常"}
-PRIORITY_PHRASE_RULES = (
-    (("登录失败", "login"), ("login failed", "login failure", "登录失败"), 16),
-    (("同步失败", "sync"), ("sync failed", "sync failure", "failed to sync", "同步失败"), 14),
-    (("启动失败", "startup", "boot"), ("startup failed", "start failed", "failed to start", "启动失败"), 14),
-)
-LOW_SIGNAL_LINES = {
-    "----------rpc performance statistics----------",
-    "----------mdb performance statistics----------",
-    ".objectidentifier",
-    ".objectname",
-}
-LOW_SIGNAL_PREFIXES = (
-    "类名 对象名 同步属性名:",
-    "表达式参数:",
-)
-LOW_SIGNAL_SUBSTRINGS = (
-    "org.freedesktop.dbus.peer ping",
-)
 RETRYABLE_POLL_TOKENS = (
     "UNEXPECTED_EOF_WHILE_READING",
     "EOF occurred in violation of protocol",
@@ -239,549 +215,130 @@ def decode_json_bytes(body: bytes) -> dict[str, object]:
     return parsed
 
 
-def load_reference_data(reference_path: pathlib.Path | None = None) -> dict[str, object]:
-    path = reference_path or pathlib.Path(__file__).resolve().parents[1] / "references" / "logs.json"
+def _analysis_core():
+    """Resolve the same sibling core in source and immutable plugin layouts."""
+    directory = pathlib.Path(__file__).resolve().parents[2] / "openubmc-log-bundle-analyzer" / "scripts"
+    if not directory.is_dir():
+        directory = pathlib.Path(__file__).resolve().parent / "_vendor/log_bundle_analyzer/scripts"
+    sys.path.insert(0, str(directory))
     try:
-        parsed = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise BundlePullError("reference_load_failed", f"Failed to load log reference {path}: {exc}") from exc
-    if not isinstance(parsed, dict):
-        raise BundlePullError("reference_load_failed", f"Log reference {path} must contain a JSON object.")
-    return parsed
+        import log_bundle_analysis
+        return log_bundle_analysis
+    finally:
+        sys.path.remove(str(directory))
 
 
-def normalize_text(value: str) -> str:
-    return value.casefold()
-
-
-def normalize_timestamp_text(value: str) -> str:
-    normalized = value.strip().replace(" ", "T", 1)
-    if normalized.endswith("Z"):
-        normalized = f"{normalized[:-1]}+00:00"
-    timezone_match = re.search(r"([+-]\d{2})(\d{2})$", normalized)
-    if timezone_match and ":" not in timezone_match.group(0):
-        normalized = f"{normalized[:-5]}{timezone_match.group(1)}:{timezone_match.group(2)}"
-    return normalized
-
-
-def parse_log_datetime(line: str) -> dt.datetime | None:
-    match = LOG_TIMESTAMP_RE.search(line)
-    if not match:
-        return None
-    try:
-        return dt.datetime.fromisoformat(normalize_timestamp_text(match.group("timestamp")))
-    except ValueError:
-        return None
-
-
-def parse_log_timestamp(line: str) -> str:
-    parsed = parse_log_datetime(line)
-    return parsed.isoformat() if parsed else ""
-
-
-def parse_analysis_time_bound(value: str, *, label: str) -> dt.datetime | None:
-    candidate = value.strip()
-    if not candidate:
-        return None
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
-        candidate = f"{candidate}T00:00:00"
-    try:
-        return dt.datetime.fromisoformat(normalize_timestamp_text(candidate))
-    except ValueError as exc:
-        raise BundlePullError("invalid_request", f"{label} 时间格式无效，请使用 YYYY-MM-DDTHH:MM:SS。") from exc
-
-
-def comparable_datetime(value: dt.datetime) -> dt.datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=dt.timezone.utc)
-    return value.astimezone(dt.timezone.utc)
-
-
-def datetime_sort_value(value: dt.datetime | None) -> float:
-    if value is None:
-        return float("-inf")
-    return comparable_datetime(value).timestamp()
-
-
-def evidence_timestamp_sort_value(evidence_line: dict[str, object]) -> float:
-    timestamp = evidence_line.get("timestamp")
-    if not isinstance(timestamp, str) or not timestamp:
-        return float("-inf")
-    try:
-        parsed = dt.datetime.fromisoformat(normalize_timestamp_text(timestamp))
-    except ValueError:
-        return float("-inf")
-    return datetime_sort_value(parsed)
-
-
-def compact_text(value: str) -> str:
-    return re.sub(r"[\s_\-]+", "", normalize_text(value))
-
-
-def is_generic_file_keyword(keyword: str) -> bool:
-    return normalize_text(keyword) in GENERIC_FILE_KEYWORDS
-
-
-def build_component_hint_tokens(value: str) -> set[str]:
-    normalized = normalize_text(value)
-    tokens = {normalized, compact_text(value)}
-    for part in re.split(r"[_\-]+", normalized):
-        if part:
-            tokens.add(part)
-    return {token for token in tokens if token}
-
-
-def score_path_for_problem(path: pathlib.Path, problem: str) -> int:
-    parts = path.parts
-    normalized_problem = normalize_text(problem)
-    compact_problem = compact_text(problem)
-    score = 0
-    if "AppDump" in parts:
-        index = parts.index("AppDump")
-        if index + 1 < len(parts) - 1:
-            for token in build_component_hint_tokens(parts[index + 1]):
-                if token in normalized_problem or token in compact_problem:
-                    score = max(score, max(8, len(token)))
-    return score
-
-
-def rotation_rank(name: str) -> int:
-    match = re.search(r"\.(\d+)(?:\.gz)?$", name)
-    if not match:
-        return 0
-    return int(match.group(1))
-
-
-def is_low_signal_line(line: str) -> bool:
-    stripped_line = line.strip()
-    normalized_line = normalize_text(stripped_line)
-    if not stripped_line or normalized_line in LOW_SIGNAL_LINES:
-        return True
-    if any(normalized_line.startswith(prefix) for prefix in LOW_SIGNAL_PREFIXES):
-        return True
-    return any(substring in normalized_line for substring in LOW_SIGNAL_SUBSTRINGS)
-
-
-def score_evidence_line(evidence_line: dict[str, object], match_terms: list[str], path: pathlib.Path, problem: str) -> int:
-    line = str(evidence_line.get("line", ""))
-    normalized_line = normalize_text(line)
-    normalized_problem = normalize_text(problem)
-    normalized_terms = [normalize_text(term) for term in match_terms if term]
-    fallback_terms = ["error", "failed", "exception", "failure", "失败", "告警", "crash"]
-    score = score_path_for_problem(path, problem)
-    score += sum(10 for term in normalized_terms if term in normalized_line)
-    for signals, phrases, bonus in PRIORITY_PHRASE_RULES:
-        normalized_signals = [normalize_text(signal) for signal in signals if signal]
-        if not (
-            any(signal in normalized_problem for signal in normalized_signals)
-            or any(signal in term for term in normalized_terms for signal in normalized_signals)
-        ):
-            continue
-        normalized_phrases = [normalize_text(phrase) for phrase in phrases if phrase]
-        if any(phrase in normalized_line for phrase in normalized_phrases):
-            score += bonus
-    if any(term in normalized_line for term in fallback_terms):
-        score += 8
-    if re.search(r"\d{4}-\d{2}-\d{2}", line):
-        score += 4
-    if "getmanagedobjects" in normalized_line:
-        score -= 2
-    return score
-
-
-def strip_internal_evidence_fields(evidence_lines: list[dict[str, object]]) -> list[dict[str, object]]:
-    return [{key: value for key, value in evidence_line.items() if not key.startswith("_")} for evidence_line in evidence_lines]
-
-
-def sort_evidence_lines(evidence_lines: list[dict[str, object]]) -> list[dict[str, object]]:
-    return sorted(
-        evidence_lines,
-        key=lambda evidence_line: (
-            float(evidence_line.get("_timestamp_sort", float("-inf"))),
-            int(evidence_line.get("line_number", 0)),
-        ),
-        reverse=True,
-    )
-
-
-def select_logs_for_problem(problem: str, reference_data: dict[str, object], *, max_files: int) -> list[dict[str, object]]:
-    normalized_problem = normalize_text(problem)
-    files = reference_data.get("files", [])
-    rules = reference_data.get("rules", [])
-    if not isinstance(files, list):
-        files = []
-    if not isinstance(rules, list):
-        rules = []
-
-    file_map: dict[str, dict[str, object]] = {}
-    scores: dict[str, int] = {}
-    matched_keywords: dict[str, set[str]] = {}
-    matched_rules: dict[str, list[list[str]]] = {}
-
+def _reference_for_core(reference):
+    # Legacy metadata lacks provenance; keep it explicitly unclassified.
+    files = [
+        dict(item, purpose=item.get("purpose", "Legacy caller log candidate"),
+             component=item.get("component", "unknown"))
+        if isinstance(item, dict) else item for item in reference.get("files", [])]
     for item in files:
-        if not isinstance(item, dict):
-            continue
-        name = item.get("name")
-        if isinstance(name, str) and name:
-            file_map[name] = item
-
-    for rule in rules:
-        if not isinstance(rule, dict):
-            continue
-        rule_keywords = [keyword for keyword in rule.get("match_keywords", []) if isinstance(keyword, str) and keyword]
-        includes = [name for name in rule.get("include", []) if isinstance(name, str) and name]
-        current_matches = [keyword for keyword in rule_keywords if normalize_text(keyword) in normalized_problem]
-        if not current_matches:
-            continue
-        for name in includes:
-            scores[name] = scores.get(name, 0) + 100 + len(current_matches) * 10
-            matched_keywords.setdefault(name, set()).update(current_matches)
-            matched_rules.setdefault(name, []).append(current_matches)
-
-    for name, item in file_map.items():
-        if normalize_text(name) in normalized_problem:
-            scores[name] = scores.get(name, 0) + 200
-        keywords = [keyword for keyword in item.get("keywords", []) if isinstance(keyword, str) and keyword]
-        current_matches = [
-            keyword
-            for keyword in keywords
-            if not is_generic_file_keyword(keyword) and normalize_text(keyword) in normalized_problem
-        ]
-        if current_matches:
-            scores[name] = scores.get(name, 0) + len(current_matches)
-            matched_keywords.setdefault(name, set()).update(current_matches)
-
-    selected: list[dict[str, object]] = []
-    for name, score in sorted(scores.items(), key=lambda entry: (-entry[1], entry[0])):
-        item = file_map.get(name, {"name": name, "paths": [f"**/{name}"], "purpose": "", "keywords": []})
-        selected.append(
-            {
-                "name": name,
-                "score": score,
-                "paths": item.get("paths", []),
-                "purpose": item.get("purpose", ""),
-                "component": item.get("component", ""),
-                "keywords": [keyword for keyword in item.get("keywords", []) if isinstance(keyword, str) and keyword],
-                "matched_keywords": sorted(matched_keywords.get(name, set())),
-                "matched_rules": matched_rules.get(name, []),
-            }
-        )
-        if len(selected) >= max_files:
-            break
-    return selected
+        if isinstance(item, dict) and item.get("paths") and all(
+                str(path).endswith(".log.gz") for path in item["paths"]):
+            item.setdefault("artifact_format", "text")
+    rules = reference.get("rules", [])
+    if not rules:
+        rules = [{"match_keywords": item["keywords"], "include": [item["name"]]}
+                 for item in files if isinstance(item, dict) and item.get("keywords")]
+    return dict(reference, rules=rules, files=files)
 
 
-def iter_rotated_file_candidates(target: pathlib.Path, budget: AnalysisBudget | None = None) -> list[pathlib.Path]:
-    parent = target.parent
-    if not parent.exists():
-        return []
-    candidates: list[tuple[int, str, pathlib.Path]] = []
-    prefix = f"{target.name}."
-    for sibling in iter_directory(parent, budget):
-        if not sibling.is_file():
-            continue
-        name = sibling.name
-        if name == target.name:
-            candidates.append((0, name, sibling))
-            continue
-        if not name.startswith(prefix):
-            continue
-        suffix = name[len(prefix) :]
-        if not re.fullmatch(r"\d+(?:\.gz)?", suffix):
-            continue
-        candidates.append((rotation_rank(name), name, sibling))
-    return [path for _, _, path in sorted(candidates, key=lambda item: (item[0], item[1]))]
+def load_reference_data(reference_path=None):
+    return _analysis_core().load_reference_data(reference_path)
 
 
-def iter_directory(directory: pathlib.Path, budget: AnalysisBudget | None = None):
-    budget = budget or AnalysisBudget()
+def parse_analysis_time_bound(value, *, label):
     try:
-        with os.scandir(directory) as entries:
-            for entry in entries:
-                if budget.discovered_entries >= budget.max_entries:
-                    budget.reasons.add("discovery_entries_exceeded")
-                    return
-                budget.discovered_entries += 1
-                # Local analysis must not traverse links outside the supplied bundle.
-                if not entry.is_symlink():
-                    yield pathlib.Path(entry.path)
-                else:
-                    budget.reasons.add("symlink_skipped")
-    except OSError:
-        budget.reasons.add("path_read_failed")
+        return _analysis_core().parse_analysis_time_bound(value, label=label)
+    except _analysis_core().BundleAnalysisError as error:
+        raise BundlePullError(error.code, str(error)) from None
 
 
-def iter_matching_paths(root: pathlib.Path, parts: tuple[str, ...], budget: AnalysisBudget):
-    pending = [(root, parts)]
-    while pending:
-        directory, remaining = pending.pop()
-        if not remaining:
-            if directory.is_file():
-                yield directory
-            continue
-        part, *tail = remaining
-        if part in ("..", "/"):
-            budget.reasons.add("unsafe_reference_path")
-            continue
-        if part == "**":
-            pending.append((directory, tuple(tail)))
-        for child in iter_directory(directory, budget):
-            if part == "**" and child.is_dir():
-                pending.append((child, remaining))
-            elif fnmatch.fnmatchcase(child.name, part):
-                if not tail or child.is_dir():
-                    pending.append((child, tuple(tail)))
+def comparable_datetime(value):
+    return value.replace(tzinfo=dt.timezone.utc) if value.tzinfo is None else value.astimezone(dt.timezone.utc)
 
 
+def parse_log_timestamp(line):
+    return _analysis_core().parse_log_timestamp(line)
 
-def expand_log_paths(bundle_root: pathlib.Path, path_patterns: list[object],
-                     budget: AnalysisBudget | None = None) -> list[pathlib.Path]:
-    budget = budget or AnalysisBudget()
-    matches: list[pathlib.Path] = []
-    seen: set[pathlib.Path] = set()
-    for raw_pattern in path_patterns:
-        if not isinstance(raw_pattern, str) or not raw_pattern:
-            continue
-        target = bundle_root / raw_pattern
-        try:
-            safe = target.resolve().is_relative_to(bundle_root.resolve())
-        except (OSError, RuntimeError):
-            safe = False
-        if not safe:
-            budget.reasons.add("unsafe_reference_path")
-            continue
-        if not any(char in raw_pattern for char in "*?["):
-            exact_target = bundle_root / raw_pattern
-            for candidate in iter_rotated_file_candidates(exact_target, budget):
-                if candidate not in seen:
-                    matches.append(candidate)
-                    seen.add(candidate)
-            continue
-        for candidate in sorted(iter_matching_paths(bundle_root, pathlib.PurePath(raw_pattern).parts, budget)):
-            if not candidate.is_file():
-                continue
-            for path in iter_rotated_file_candidates(candidate, budget) or [candidate]:
-                if path not in seen:
-                    matches.append(path)
-                    seen.add(path)
-    return matches
+
+def select_logs_for_problem(problem, reference_data, *, max_files):
+    return _analysis_core().select_logs_for_problem(
+        problem, _analysis_core().normalize_reference_data(_reference_for_core(reference_data)),
+        max_files=max_files)
+
+
+def expand_log_paths(bundle_root, path_patterns):
+    return _analysis_core().expand_log_paths(bundle_root, path_patterns)
+
+
+def collect_evidence_lines(file_path, **kwargs):
+    return _analysis_core().collect_evidence_lines(file_path, **kwargs)
 
 
 @dataclass
 class AnalysisBudget:
+    """Compatibility receipt; reading remains owned by the shared analyzer."""
     max_bytes: int = 64 * 1024 * 1024
     max_line_bytes: int = 64 * 1024
-    max_files: int = 512
-    max_entries: int = 20_000
-    discovered_entries: int = 0
     scanned_bytes: int = 0
-    scanned_files: int = 0
     reasons: set[str] = field(default_factory=set)
 
-    def receipt(self) -> dict[str, object]:
+    def receipt(self):
         return {"complete": not self.reasons, "reasons": sorted(self.reasons),
-                "scanned_bytes": self.scanned_bytes, "scanned_files": self.scanned_files,
-                "discovered_entries": self.discovered_entries}
+                "scanned_bytes": self.scanned_bytes}
 
 
-def iter_text_lines(path: pathlib.Path, budget: AnalysisBudget | None = None):
+def _coverage(scan):
+    codes = {str(item.get("code")) for item in [*scan.get("errors", []), *scan.get("warnings", [])]}
+    aliases = {"file_scan_truncated": "scan_bytes_exceeded",
+               "scan_byte_limit_reached": "scan_bytes_exceeded",
+               "total_scan_byte_limit_reached": "scan_bytes_exceeded",
+               "line_too_long": "line_bytes_exceeded",
+               "log_read_failed": "file_read_failed",
+               "scan_file_limit_reached": "scan_files_exceeded",
+               "path_discovery_limit_reached": "discovery_entries_exceeded"}
+    reasons = {aliases.get(code, code) for code in codes}
+    if not scan.get("complete", True) and not reasons:
+        reasons.add("analysis_incomplete")
+    return {"complete": scan.get("complete", False), "reasons": sorted(reasons),
+            "scanned_bytes": scan.get("scanned_bytes", 0),
+            "scanned_files": scan.get("scanned_path_count", 0),
+            "discovered_entries": scan.get("path_discovery", {}).get("entries_examined", 0)}
+
+
+def iter_text_lines(path, budget=None):
     budget = budget or AnalysisBudget()
-    if budget.scanned_files >= budget.max_files:
-        budget.reasons.add("scan_files_exceeded")
-        return
-    opener = gzip.open if path.suffix == ".gz" else open
-    with opener(path, "rb") as handle:
-        budget.scanned_files += 1
-        while True:
-            remaining = budget.max_bytes - budget.scanned_bytes
-            if remaining <= 0:
-                if handle.read(1):
-                    budget.reasons.add("scan_bytes_exceeded")
-                return
-            line = handle.readline(min(remaining, budget.max_line_bytes + 1))
-            budget.scanned_bytes += len(line)
-            if not line:
-                return
-            if len(line) > budget.max_line_bytes:
-                budget.reasons.add("line_bytes_exceeded")
-                return
-            if len(line) == remaining and not line.endswith(b"\n"):
-                if handle.read(1):
-                    budget.reasons.add("scan_bytes_exceeded")
-                    return
-                yield line.decode("utf-8", errors="ignore").rstrip("\r\n")
-                return
-            yield line.decode("utf-8", errors="ignore").rstrip("\r\n")
-
-
-def collect_evidence_lines(
-    file_path: pathlib.Path,
-    *,
-    match_terms: list[str],
-    max_lines: int,
-    since: dt.datetime | None = None,
-    until: dt.datetime | None = None,
-    budget: AnalysisBudget | None = None,
-) -> list[dict[str, object]]:
-    if max_lines <= 0:
-        return []
-    normalized_terms = [normalize_text(term) for term in match_terms if term]
-    fallback_terms = ["error", "failed", "exception", "failure", "失败", "告警", "crash"]
-    strong_matches: list[tuple] = []
-    keyword_matches: list[tuple] = []
-    fallback_matches: list[tuple] = []
-
-    def retain(matches: list[tuple], evidence: dict[str, object]) -> None:
-        candidate = (evidence["_timestamp_sort"], evidence["line_number"], evidence)
-        if len(matches) < max_lines:
-            heapq.heappush(matches, candidate)
-        elif candidate[:2] > matches[0][:2]:
-            heapq.heapreplace(matches, candidate)
+    diagnostics = {}
     try:
-        for line_number, line in enumerate(iter_text_lines(file_path, budget), start=1):
-            if is_low_signal_line(line):
-                continue
-            stripped_line = line.strip()
-            parsed_datetime = parse_log_datetime(stripped_line)
-            if (since or until) and parsed_datetime is None:
-                continue
-            if parsed_datetime is not None:
-                comparable = comparable_datetime(parsed_datetime)
-                if since is not None and comparable < comparable_datetime(since):
-                    continue
-                if until is not None and comparable > comparable_datetime(until):
-                    continue
-            normalized_line = normalize_text(stripped_line)
-            has_keyword_match = any(term in normalized_line for term in normalized_terms)
-            has_fallback_match = any(term in normalized_line for term in fallback_terms)
-            evidence_line = {
-                "path": str(file_path),
-                "line_number": line_number,
-                "line": stripped_line,
-                "_timestamp_sort": datetime_sort_value(parsed_datetime),
-            }
-            if parsed_datetime is not None:
-                evidence_line["timestamp"] = parsed_datetime.isoformat()
-
-            if normalized_terms and has_keyword_match and has_fallback_match:
-                retain(strong_matches, evidence_line)
-                continue
-            if normalized_terms and has_keyword_match:
-                retain(keyword_matches, evidence_line)
-                continue
-            if has_fallback_match:
-                retain(fallback_matches, evidence_line)
-    except (OSError, EOFError, zlib.error):
-        if budget is None:
-            raise
-        budget.reasons.add("file_read_failed")
-    selected = strong_matches or keyword_matches or fallback_matches
-    return strip_internal_evidence_fields(sort_evidence_lines([item[2] for item in selected]))
+        for _number, line in _analysis_core().iter_text_lines(
+            path, max_bytes=max(0, budget.max_bytes - budget.scanned_bytes),
+            max_line_bytes=budget.max_line_bytes, diagnostics=diagnostics):
+            yield line
+    finally:
+        budget.scanned_bytes += diagnostics.get("bytes_read", 0)
+        budget.reasons.update(_coverage(dict(diagnostics, complete=True))["reasons"])
 
 
-def analyze_bundle(
-    bundle_root: pathlib.Path,
-    problem: str,
-    *,
-    reference_data: dict[str, object] | None = None,
-    max_files: int = DEFAULT_ANALYSIS_MAX_FILES,
-    max_lines: int = DEFAULT_ANALYSIS_MAX_LINES,
-    since: dt.datetime | None = None,
-    until: dt.datetime | None = None,
-    scan_max_bytes: int = 64 * 1024 * 1024,
-    max_line_bytes: int = 64 * 1024,
-    scan_max_files: int = 512,
-    discovery_max_entries: int = 20_000,
-) -> dict[str, object]:
-    if min(scan_max_bytes, max_line_bytes, scan_max_files, discovery_max_entries) < 1:
-        raise BundlePullError("invalid_request", "Analysis resource limits must be positive")
-    budget = AnalysisBudget(max_bytes=scan_max_bytes, max_line_bytes=max_line_bytes,
-                            max_files=scan_max_files, max_entries=discovery_max_entries)
-    reference = reference_data or load_reference_data()
-    selected_logs = select_logs_for_problem(problem, reference, max_files=max_files)
-    analyzed_logs: list[dict[str, object]] = []
-    total_existing_paths = 0
-    total_evidence_lines = 0
-
-    for item in selected_logs:
-        existing_paths = expand_log_paths(bundle_root, list(item.get("paths", [])), budget)
-        existing_paths = sorted(
-            existing_paths,
-            key=lambda path: (-score_path_for_problem(path, problem), rotation_rank(path.name), str(path)),
-        )
-        evidence_lines: list[dict[str, object]] = []
-        candidate_terms = list(
-            dict.fromkeys(
-                [
-                    *[term for term in item.get("matched_keywords", []) if isinstance(term, str) and term],
-                    *[term for term in item.get("keywords", []) if isinstance(term, str) and term],
-                ]
-            )
-        )
-        specific_terms = [term for term in candidate_terms if not is_generic_file_keyword(term)]
-        evidence_terms = specific_terms or candidate_terms
-        candidate_evidence: list[dict[str, object]] = []
-        for file_path in existing_paths:
-            for evidence_line in collect_evidence_lines(
-                file_path,
-                match_terms=evidence_terms,
-                max_lines=max_lines,
-                since=since,
-                until=until,
-                budget=budget,
-            ):
-                candidate_evidence.append(
-                    {
-                        **evidence_line,
-                        "_score": score_evidence_line(evidence_line, evidence_terms, file_path, problem),
-                        "_timestamp_sort": evidence_timestamp_sort_value(evidence_line),
-                    }
-                )
-            candidate_evidence.sort(
-                key=lambda evidence_line: (
-                    -int(evidence_line.get("_score", 0)),
-                    -float(evidence_line.get("_timestamp_sort", float("-inf"))),
-                    str(evidence_line.get("path", "")),
-                    -int(evidence_line.get("line_number", 0)),
-                )
-            )
-            del candidate_evidence[max_lines:]
-        evidence_lines = [
-            {key: value for key, value in evidence_line.items() if not key.startswith("_")}
-            for evidence_line in candidate_evidence[:max_lines]
-        ]
-        total_existing_paths += len(existing_paths)
-        total_evidence_lines += len(evidence_lines)
-        analyzed_logs.append(
-            {
-                "name": item["name"],
-                "purpose": item.get("purpose", ""),
-                "component": item.get("component", ""),
-                "matched_keywords": item.get("matched_keywords", []),
-                "existing_paths": [str(path) for path in existing_paths[:DEFAULT_ANALYSIS_MAX_PATHS]],
-                "existing_path_count": len(existing_paths),
-                "existing_paths_truncated": len(existing_paths) > DEFAULT_ANALYSIS_MAX_PATHS,
-                "evidence_lines": evidence_lines,
-            }
-        )
-
-    summary = (
-        f"Selected {len(analyzed_logs)} log types for problem '{problem}', "
-        f"found {total_existing_paths} existing paths and {total_evidence_lines} matching evidence lines."
-    )
-    result = {
-        "problem": problem,
-        "selected_logs": analyzed_logs,
-        "summary": summary,
-        "coverage": budget.receipt(),
-    }
-    if budget.reasons:
-        result["summary"] += " Analysis is incomplete; unscanned content cannot exclude further problems."
-    if since or until:
-        result["time_window"] = {
-            "since": since.isoformat() if since else "",
-            "until": until.isoformat() if until else "",
-        }
+def analyze_bundle(bundle_root, problem, *, reference_data=None,
+                   max_files=DEFAULT_ANALYSIS_MAX_FILES, max_lines=DEFAULT_ANALYSIS_MAX_LINES,
+                   since=None, until=None, scan_max_bytes=64 * 1024 * 1024,
+                   max_line_bytes=64 * 1024, scan_max_files=512, discovery_max_entries=20_000):
+    """Compatibility adapter: one scan, one catalog and one evidence implementation."""
+    core = _analysis_core()
+    try:
+        result = core.analyze_bundle(
+            bundle_root, problem,
+            reference_data=_reference_for_core(reference_data) if reference_data is not None else None,
+            max_files=max_files, max_lines=max_lines, since=since, until=until,
+            max_total_bytes=scan_max_bytes, max_bytes_per_file=scan_max_bytes,
+            max_paths_per_log=4096, max_line_bytes=max_line_bytes,
+            max_scan_files=scan_max_files, max_discovery_entries=discovery_max_entries)
+    except core.BundleAnalysisError as error:
+        raise BundlePullError(error.code, str(error)) from None
+    result["coverage"] = _coverage(result["scan"])
     return result
 
 
@@ -1810,7 +1367,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--redfish-task-timeout", type=int, default=900, help="Redfish 采集任务超时时间，单位秒。")
     parser.add_argument("--redfish-poll-interval", type=int, default=5, help="Redfish 采集任务轮询间隔，单位秒。")
     parser.add_argument("--json", action="store_true", help="输出 JSON 结构化结果。")
-    return parser.parse_args(argv)
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    parsed = parser.parse_args(arguments)
+    for transport in ("ssh", "redfish"):
+        setattr(parsed, f"_{transport}_user_explicit",
+                any(item.split("=", 1)[0] == f"--{transport}-user" for item in arguments))
+    return parsed
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1884,7 +1446,9 @@ def main(argv: list[str] | None = None) -> int:
             "bundle_root": str(extract_result.bundle_root) if extract_result else "",
             "generation_ran": stage_result.generation_ran,
             "transport": stage_result.transport,
-            "next_step": "使用 openubmc-log-analyzer 工作流分析 bundle_root",
+            "next_step": ("复用 result.analysis 中的证据与覆盖缺口，完成日志结论；无需重复扫描。"
+                          if analysis is not None else
+                          "继续 openubmc-log-analyzer 的本地分析阶段，对 bundle_root（未解压时 local_bundle_path）分析。"),
         }
         if analysis is not None:
             result["analysis"] = analysis
@@ -1893,7 +1457,7 @@ def main(argv: list[str] | None = None) -> int:
             json_mode=args.json,
         )
         return 0
-    except BundlePullError as exc:
+    except (BundlePullError, target_runtime_adapter.pull_bundle.BundlePullError) as exc:
         emit_result(
             build_payload(
                 ok=False,

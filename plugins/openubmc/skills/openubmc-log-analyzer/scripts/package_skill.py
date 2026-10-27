@@ -131,6 +131,19 @@ def copy_shareable_tree(
             shutil.copy2(path, destination)
             copied.append((VENDOR_RELATIVE / relative).as_posix())
 
+        # Standalone compatibility packages carry the exact same analysis core,
+        # generated from its owner rather than a second collector implementation.
+        analysis_root = source.parent / "openubmc-log-bundle-analyzer"
+        analysis_manifest = json.loads((analysis_root / "skill.json").read_text())
+        for raw in analysis_manifest["files"]:
+            if not raw.startswith(("scripts/", "references/")):
+                continue
+            relative = Path("scripts/_vendor/log_bundle_analyzer") / raw
+            destination = stage / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(analysis_root / raw, destination)
+            copied.append(relative.as_posix())
+
         manifest_path = stage / "skill.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["targetRuntime"] = contract

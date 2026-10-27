@@ -74,20 +74,21 @@ class FailureGateTests(unittest.TestCase):
         self.assert_conan_preflight("Authentication successful", 0, 0)
 
     def assert_conan_preflight(self, output: str, command_rc: int, expected_rc: int) -> None:
-        document = (BUILD_ROOT / "references/conan-auth.md").read_text()
-        blocks = [part.split("```", 1)[0] for part in document.split("```bash\n")[1:]]
-        preflight = next(block for block in blocks if "for remote in " in block)
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw)
             executable = root / "conan"
-            executable.write_text("#!/bin/sh\nprintf '%s\\n' \"$AUDIT_CONAN_OUTPUT\"\nexit \"$AUDIT_CONAN_RC\"\n")
+            executable.write_text("#!/bin/sh\nprintf '%s\\n' \"$@\" >> \"$AUDIT_ARGS\"\nprintf '%s\\n' \"$AUDIT_CONAN_OUTPUT\"\nexit \"$AUDIT_CONAN_RC\"\n")
             executable.chmod(0o700)
             result = subprocess.run(
-                ["bash", "-c", preflight], capture_output=True, text=True, timeout=10,
+                [sys.executable, str(BUILD_ROOT / "scripts/check_conan_auth.py"), "--remote", "selected"],
+                capture_output=True, text=True, timeout=10,
                 env={**os.environ, "PATH": str(root) + os.pathsep + os.environ["PATH"],
                      "TMPDIR": str(root), "AUDIT_CONAN_OUTPUT": output,
-                     "AUDIT_CONAN_RC": str(command_rc)},
+                     "AUDIT_CONAN_RC": str(command_rc), "AUDIT_ARGS": str(root / "args")},
             )
+            self.assertEqual((root / "args").read_text().splitlines(),
+                             ["remote", "auth", "selected", "-cc", "core:non_interactive=True"])
+            self.assertNotIn(output, result.stdout + result.stderr)
         self.assertEqual(result.returncode, expected_rc, result.stdout + result.stderr)
 
 

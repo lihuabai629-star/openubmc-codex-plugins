@@ -15,9 +15,12 @@ Use `scripts/detect_changed_components.py` only as a candidate scan when the act
 1. Reuse the selected checkout.
 2. Leave component versions, product versions, and Manifest refs unchanged.
 3. Preserve a complete supplied argv exactly. If no command exists, inspect the selected checkout and local help, then form one candidate for the requested validation only.
-4. Before creating the Plan, identify only the command-owned checkout outputs. Add precise `--mutable-path` entries for directories such as `gen/`, build output, or coverage data that the command is expected to rewrite.
-5. Create a `validate` Plan.
-6. Execute an Attempt and report its terminal state and log.
+4. Identify command-owned outputs such as `gen/`, build output and coverage data.
+5. For ordinary local validation, execute the command directly and retain its cwd,
+   argv, log and exit status. Reuse an existing Plan/Attempt when one is already
+   selected or a Runtime build Gate requires it; declare its precise mutable paths.
+6. Report the result and resulting source-tree changes. Release-only metadata,
+   artifact qualification and unrelated environment checks do not gate validation.
 
 Generation can partially rewrite `gen/` before failing. Account for every resulting source-tree change before completion.
 

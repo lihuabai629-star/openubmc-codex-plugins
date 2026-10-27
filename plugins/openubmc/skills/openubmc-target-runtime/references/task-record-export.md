@@ -59,7 +59,7 @@ the snapshot. Synthetic identity remains explicit and cannot qualify a release.
 content-addressed JSON file with mode 0600 inside a private 0700 directory. It
 refuses shared directories, links and changed content at an existing identity.
 Repeated writes keep the original file and timestamp. This store supports
-Linux/WSL; native Windows storage needs the platform's private-path integration.
+Linux/WSL. Windows clients use the selected WSL store through the client bridge.
 
 No expiration or deletion runs implicitly. `prune(before_timestamp=...,
 dry_run=True)` lists verified exports older than an explicit local filesystem

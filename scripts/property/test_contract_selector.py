@@ -8,22 +8,21 @@ PLUGIN = Path(__file__).resolve().parents[2] / "plugins/openubmc"
 
 
 class ContractSelectorTests(unittest.TestCase):
-    def test_operator_selector_reaches_native_backend_without_ambient_secrets(self):
+    def test_operator_selector_reaches_linux_backend(self):
         manifest = json.loads((PLUGIN / ".mcp.json").read_text())
         self.assertIn("OPENUBMC_MDB_PROPERTY_CONTRACTS",
                       manifest["mcpServers"]["openubmc-target-runtime"]["env_vars"])
         script = """const {createHostAdapter}=require(process.argv[1]);
-const a=createHostAdapter({pluginRoot:process.argv[2],hostPlatform:'win32',environment:{
-  USERPROFILE:'C:\\\\operator',LOCALAPPDATA:'C:\\\\operator\\\\AppData\\\\Local',
-  OPENUBMC_MDB_PROPERTY_CONTRACTS:'C:\\\\operator\\\\reviewed-contracts.json',
-  OPENUBMC_CREDENTIALS_FILE:'ambient-secret',OPENUBMC_KB_PASSWORD:'ambient-secret'}});
-process.stdout.write(JSON.stringify(a.childEnvironment));"""
+const a=createHostAdapter({pluginRoot:process.argv[2],hostPlatform:'linux',environment:{
+  OPENUBMC_MDB_PROPERTY_CONTRACTS:'/tmp/operator/reviewed-contracts.json',
+  HOME:process.env.HOME}});
+process.stdout.write(JSON.stringify({environment:a.childEnvironment,execution_host:a.executionHost}));"""
         result = subprocess.run(["node", "-e", script, str(PLUGIN / "scripts/openubmc-bootstrap-host.js"), str(PLUGIN)],
                                 check=True, capture_output=True, text=True, timeout=15)
-        environment = json.loads(result.stdout)
-        self.assertEqual(environment["OPENUBMC_MDB_PROPERTY_CONTRACTS"], r"C:\operator\reviewed-contracts.json")
-        self.assertEqual(environment["OPENUBMC_EXECUTION_HOST"], "windows-native")
-        self.assertNotIn("ambient-secret", environment.values())
+        report = json.loads(result.stdout)
+        environment = report["environment"]
+        self.assertEqual(environment["OPENUBMC_MDB_PROPERTY_CONTRACTS"], "/tmp/operator/reviewed-contracts.json")
+        self.assertEqual(report["execution_host"], "linux")
 
 
 if __name__ == "__main__":

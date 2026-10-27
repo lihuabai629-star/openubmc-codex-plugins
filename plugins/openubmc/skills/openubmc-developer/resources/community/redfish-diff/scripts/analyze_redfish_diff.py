@@ -1,11 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""中文 Redfish 接口差异分析器：支持 zip/目录/本地 git refs/远端 git refs。
+"""中文 Redfish 接口差异分析器：支持 zip/目录/已有本地 git refs，仅离线分析。
 
 增强版：除细分类外，为每个接口输出具体变更明细，包括新增/删除字段的类型和定义、
 同名字段的类型和值变化、请求体变化、响应体变化以及接口行为变化。
 """
 from __future__ import annotations
+
+if __name__ == '__main__':
+    import sys as _openubmc_sys
+    _openubmc_sys.dont_write_bytecode = True
+    import runpy as _openubmc_runpy
+    from pathlib import Path as _openubmc_Path
+    _openubmc_guard = _openubmc_Path(__file__).parent / '../../../../../openubmc-debug/scripts/_plugin_entrypoint.py'
+    _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
+
 
 import argparse
 import csv
@@ -135,14 +144,12 @@ def repo_top(path: Path) -> Path:
     return Path(p.stdout.strip()).resolve()
 
 
-def prepare_git(repo: str, old_ref: str, new_ref: str, work: Path) -> Tuple[Path, Path, Path]:
+def prepare_git(repo: str, old_ref: str, new_ref: str, work: Path, offline: bool = True) -> Tuple[Path, Path, Path]:
     cand = Path(repo).expanduser()
     if cand.exists() and is_git_repo(cand):
         r = repo_top(cand)
     else:
-        r = work / "repo"
-        run(["git", "clone", "--no-checkout", repo, str(r)])
-        run(["git", "fetch", "origin", old_ref, new_ref], cwd=r)
+        raise ValueError("离线模式需要已有本地 git 仓库")
 
     def rev(ref: str) -> str:
         for c in (ref, "origin/" + ref):
@@ -168,16 +175,7 @@ def prepare_git(repo: str, old_ref: str, new_ref: str, work: Path) -> Tuple[Path
 
     old_commit = rev(old_ref)
     new_commit = rev(new_ref)
-    old = work / "old-tree"
-    new = work / "new-tree"
-    try:
-        run(["git", "worktree", "add", "--detach", str(old), old_commit], cwd=r)
-        run(["git", "worktree", "add", "--detach", str(new), new_commit], cwd=r)
-    except RuntimeError as exc:
-        print("Tip: git worktree 不可用，改用 git archive 导出 ref；原因: {}".format(str(exc).splitlines()[-1]))
-        old = export_ref(old_commit, "old")
-        new = export_ref(new_commit, "new")
-    return old, new, r
+    return export_ref(old_commit, "old"), export_ref(new_commit, "new"), r
 
 
 def unwrap(p: Path) -> Path:
@@ -2388,79 +2386,6 @@ def enrich_interface_rows(
         row["issue_links"] = format_issue_links(list(dict.fromkeys(all_issues)))
 
 
-def get_gitcode_token() -> Optional[str]:
-    token = os.environ.get("GITCODE_TOKEN", "").strip()
-    if token:
-        return token
-    creds = Path.home() / ".git-credentials"
-    if creds.exists():
-        for line in creds.read_text(encoding="utf-8", errors="replace").strip().split("\n"):
-            if "gitcode.com" in line:
-                m = re.search(r"://(?:[^:]*:)?([^@]+)@gitcode\.com", line)
-                if m:
-                    return m.group(1).strip()
-    return None
-
-
-def fetch_pr_issues_from_api(token: str, owner: str, repo: str, mr_numbers: List[str]) -> Dict[str, Dict[str, Any]]:
-    import urllib.request
-
-    result = {}
-    base = "https://api.gitcode.com/api/v5"
-    for mr_num in mr_numbers:
-        if not mr_num:
-            continue
-        info = {"author": "", "title": "", "issues": []}
-        try:
-            pr_url = "{}/repos/{}/{}/pulls/{}?access_token={}".format(base, owner, repo, mr_num, token)
-            with urllib.request.urlopen(pr_url, timeout=15) as resp:
-                pr_data = json.loads(resp.read().decode("utf-8"))
-            info["author"] = (pr_data.get("user") or {}).get("login", "")
-            info["title"] = pr_data.get("title", "")
-        except Exception:
-            pass
-        try:
-            issues_url = "{}/repos/{}/{}/pulls/{}/issues?access_token={}".format(base, owner, repo, mr_num, token)
-            with urllib.request.urlopen(issues_url, timeout=15) as resp:
-                issues_data = json.loads(resp.read().decode("utf-8"))
-            if isinstance(issues_data, list):
-                for iss in issues_data:
-                    html_url = iss.get("html_url", "")
-                    if html_url:
-                        info["issues"].append(
-                            {"url": html_url, "title": iss.get("title", ""), "number": iss.get("number", "")}
-                        )
-        except Exception:
-            pass
-        result[mr_num] = info
-    return result
-
-
-def enrich_commit_info_from_api(
-    commit_infos: List[Dict[str, Any]], token: str, owner: str = "openUBMC", repo: str = "rackmount"
-) -> None:
-    mr_numbers = sorted({ci["mr"].lstrip("!") for ci in commit_infos if ci["mr"]})
-    if not mr_numbers:
-        return
-    print("通过 GitCode API 获取 {} 个 MR 的关联信息...".format(len(mr_numbers)))
-    api_data = fetch_pr_issues_from_api(token, owner, repo, mr_numbers)
-    for ci in commit_infos:
-        mr_num = ci["mr"].lstrip("!")
-        if not mr_num or mr_num not in api_data:
-            continue
-        ad = api_data[mr_num]
-        if ad["author"]:
-            ci["author"] = ad["author"]
-        if ad["title"]:
-            ci["title"] = ad["title"]
-        existing_urls = set(ci["issues"])
-        for iss in ad["issues"]:
-            clean = iss["url"].split("?")[0].split("#")[0]
-            if clean not in existing_urls:
-                ci["issues"].append(iss["url"])
-                existing_urls.add(clean)
-
-
 def write_report(
     rows, file_rows, details, report: Path, old_name, new_name, commit_infos: Optional[List[Dict[str, Any]]] = None
 ):
@@ -2732,7 +2657,7 @@ def main():
         description="分析两个分支或源码树之间的 Redfish 接口变化，并按细分类别输出中文精准报告（v4.0）。"
     )
     g = ap.add_mutually_exclusive_group(required=False)
-    g.add_argument("--repo", help="git 仓库 URL 或本地路径；已在 rackmount 仓库内时可省略，默认使用 '.'")
+    g.add_argument("--repo", help="已有本地 git 仓库路径；已在 rackmount 仓库内时可省略，默认使用 '.'")
     g.add_argument("--old", help="旧/基线源码目录或 zip 源码包")
     ap.add_argument("--new", help="新/目标源码目录或 zip 源码包")
     ap.add_argument("--old-ref", help="旧/基线 git ref")
@@ -2740,6 +2665,7 @@ def main():
     ap.add_argument("--old-name", default="old", help="基线显示名称")
     ap.add_argument("--new-name", default="new", help="目标显示名称")
     ap.add_argument("--out-dir", default="redfish_diff_out", help="输出目录")
+    ap.add_argument("--offline", action="store_true", help="仅本地源码，不读凭据、不请求 API、不创建 worktree")
     args = ap.parse_args()
     out = Path(args.out_dir).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -2751,7 +2677,7 @@ def main():
         if use_git:
             if not args.old_ref or not args.new_ref:
                 ap.error("git 模式需要 --old-ref 和 --new-ref")
-            old_root, new_root, repo_dir = prepare_git(args.repo or ".", args.old_ref, args.new_ref, work)
+            old_root, new_root, repo_dir = prepare_git(args.repo or ".", args.old_ref, args.new_ref, work, offline=True)
             old_name = args.old_ref
             new_name = args.new_ref
         else:
@@ -2764,14 +2690,9 @@ def main():
         old_files, new_files = collect_files(old_root), collect_files(new_root)
         files = file_diff(old_files, new_files)
         rows, details = diff_entries(collect_entries(old_root), collect_entries(new_root))
-        # Collect and enrich MR / Issue / author info
+        # Correlate only local commit metadata; credentials and API calls are absent.
         if repo_dir is not None:
             commit_infos = collect_commit_info(repo_dir, args.old_ref, args.new_ref)
-            gc_token = get_gitcode_token()
-            if gc_token:
-                enrich_commit_info_from_api(commit_infos, gc_token)
-            else:
-                print("Tip: GITCODE_TOKEN not set, skipping API enrichment")
             file_map = build_file_to_commits_map(commit_infos)
             entry_map = build_entry_to_commits_map(repo_dir, commit_infos)
             enrich_file_rows(files, file_map)

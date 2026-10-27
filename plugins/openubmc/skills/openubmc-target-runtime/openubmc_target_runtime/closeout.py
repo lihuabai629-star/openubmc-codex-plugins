@@ -859,13 +859,25 @@ def _selected_facts(
                 facts["product_version"] = identity.product_versions[0]
         if stage == "live_patch":
             mutation = _mapping(value.get("mutation"))
+            verified_journal_replay = (
+                value.get("idempotent_replay") is True
+                and value.get("mutation") is None
+                and value.get("verification") is None
+                and journal.get("verification_state") == "verified"
+                and journal.get("root_mount_restored") is True
+            )
             verified_absence = (
                 journal.get("action") == "rollback"
                 and journal.get("stage") in {"verified", "rollback_verified"}
                 and journal.get("expected_missing") is True
-                and mutation.get("remote_removed") is True
-                and verification.get("remote_removed") is True
-                and mutation.get("root_mount_restored") is True
+                and (
+                    verified_journal_replay
+                    or (
+                        mutation.get("remote_removed") is True
+                        and verification.get("remote_removed") is True
+                        and mutation.get("root_mount_restored") is True
+                    )
+                )
                 and not journal.get("expected_checksum")
                 and not journal.get("observed_checksum")
                 and not mutation.get("remote_after_sha256")

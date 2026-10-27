@@ -1,14 +1,16 @@
 {
   "manifestVersion": 1,
   "name": "openubmc-build",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "description": "构建 openUBMC 组件、Conan 包和产品固件制品。",
   "author": "OpenUBMC Team",
   "license": "MulanPSL-2.0",
   "relatedSkills": [
     "openubmc-developer",
     "openubmc-upgrade",
-    "openubmc-publish"
+    "openubmc-publish",
+    "openubmc-qemu-testing",
+    "openubmc-code-submit"
   ],
   "files": [
     "references/dependency-profile-compatibility.md",
@@ -29,6 +31,7 @@
     "references/redfish-upgrade.md",
     "requirements-containment.txt",
     "scripts/check_dependency_delta.py",
+    "scripts/check_conan_auth.py",
     "scripts/component_impact.py",
     "scripts/check_rootfs_access.py",
     "scripts/check_rootfs_lua.py",
@@ -59,16 +62,16 @@
   ],
   "routing": {
     "positive_triggers": {
+      "diagnose": ["构建失败", "依赖报错", "build failure", "dependency error"],
       "validate": ["bmcgo", "compile", "gen", "unit test", "编译", "生成代码"],
       "component-package": ["component package", "conan package", "组件包"],
       "product-artifact": ["bmcgo build --board", "HPM", "rootfs", "产品固件"],
-      "handoff": ["bingo", "安装构建环境"]
+      "unsupported": ["bingo"],
+      "handoff": ["安装构建环境"]
     },
-    "negative_triggers": ["explicit bingo build command", "bingo CLI development", "environment installation", "package publication"],
+    "negative_triggers": ["explicit bingo build command", "bingo CLI development", "build toolchain installation", "package publication"],
     "handoffs": {
-      "bingo-build": "openubmc-bingo-build",
-      "bingo-development": "openubmc-bingo-development",
-      "environment": "openubmc-environment-setup",
+      "environment": "openubmc-env-init",
       "publication": "openubmc-publish"
     }
   },

@@ -2,7 +2,7 @@
 
 Use this card after preflight reports `remote_log_file` capability, or analyze an offline bundle with `openubmc-log-analyzer`.
 
-Keep the task repository as the working directory and invoke helpers from `$HOME/.agents/skills/openubmc-debug`.
+Keep the task repository as the working directory and invoke helpers from `<plugin-root>/skills/openubmc-debug`.
 
 The bundled `collect_logs.py` helper currently uses Telnet. If the capability is unavailable, use
 another validated read-only channel or request a log bundle.
@@ -10,7 +10,7 @@ another validated read-only channel or request a log bundle.
 Common live logs include `app.log`, `framework.log`, and their rotations. Discover actual files on the target instead of assuming every image has the same set.
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/collect_logs.py" \
+python "<plugin-root>/skills/openubmc-debug/scripts/collect_logs.py" \
   --ip <ip> \
   --logs app.log,framework.log \
   --grep '<literal>' \

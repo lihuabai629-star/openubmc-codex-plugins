@@ -29,8 +29,8 @@ Hooks do not prepare dependencies, choose a build host, or grant trust.
 
 ## Explicit local recovery
 
-Run on the host of the same Runtime (native Windows, Linux, or an explicitly
-selected WSL environment), with its existing `OPENUBMC_TARGET_RUNTIME_STATE_DIR`.
+Run on the host of the same Runtime (Linux or an explicitly selected WSL
+environment), with its existing `OPENUBMC_TARGET_RUNTIME_STATE_DIR`.
 Use the packaged script or source script:
 
 ```sh

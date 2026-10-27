@@ -52,6 +52,9 @@ SATA/SAS evidence cannot validate NVMe. A source-only handoff may report
   owns target, artifact verification, authorization, activation, and rollback.
 - `openubmc-publish` consumes an already-built Conan package, then owns the exact
   recipe revision, remote, authorization, upload, and remote verification.
+- `openubmc-code-submit` consumes changed source and actual validation evidence,
+  then selects internal GitLab or community GitCode, verifies branch/fork roles,
+  and completes authorized commit, push and MR/PR operations.
 
 For a requested source-to-upgrade sequence, hand source facts to Build; Build
 produces the HPM identity consumed by Upgrade. Developer never claims that source

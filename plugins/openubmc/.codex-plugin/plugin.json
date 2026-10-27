@@ -9,7 +9,8 @@
       "Runtime",
       "Diagnostics",
       "Build",
-      "Upgrade"
+      "Upgrade",
+      "Code submission"
     ],
     "category": "Developer tools",
     "defaultPrompt": [
@@ -19,7 +20,7 @@
     ],
     "developerName": "lihuabai629-star",
     "displayName": "openUBMC",
-    "longDescription": "Diagnosis, build, upgrade, live patch, and verification with durable Runtime evidence.",
+    "longDescription": "Diagnosis, build, upgrade, live patch and verification with durable Runtime evidence; source submission through internal GitLab or community GitCode.",
     "shortDescription": "OpenUBMC Runtime workflows and evidence tools for Codex."
   },
   "keywords": [
@@ -35,5 +36,5 @@
   "name": "openubmc",
   "repository": "https://github.com/lihuabai629-star/openubmc-codex-plugins",
   "skills": "./skills/",
-  "version": "2.1.9"
+  "version": "2.2.16"
 }

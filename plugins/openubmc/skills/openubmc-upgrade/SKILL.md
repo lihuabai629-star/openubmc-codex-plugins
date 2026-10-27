@@ -29,7 +29,7 @@ final purpose, and authorization from that Case. A continuation is submitted thr
 Agent-facing `execute` operation with the persisted Run identity; the Runtime decides whether
 the next step is a Gate, Incident, reattach point, or terminal Outcome. Do not re-upload an HPM
 or reconstruct the operation from conversation history.
-On native Windows, Linux or WSL, verify the Runtime MCP protocol and prefer this typed path
+On Linux or WSL, verify the Runtime MCP protocol and prefer this typed path
 while it is healthy. If it is unavailable, record the fallback reason, actual
 host, target scope, evidence boundary, and bounded call budget using the
 Debug package's `scripts/execution_router.py`; shell output alone cannot
@@ -116,6 +116,14 @@ filename and, when `<hpm>.metadata.json` exists, requires its SHA-256, size, and
 `product_version` to match the typed Upgrade request. A stale, malformed, or
 symlinked sidecar is a hard preflight failure; do not delete or ignore it to
 continue an upgrade.
+
+Release-only `upgrade_eligible` and `package_binding` labels are reported as
+`provenance_warnings` for an already-built HPM; they do not block an authorized
+direct upgrade whose file identity matches. Keep the original sidecar. A Build
+Gate still requires its own acceptance evidence; these warnings do not qualify
+a failed build or claim release provenance. Discover the path/hash/version from
+the selected artifact and handoff yourself instead of asking the user to retype
+them. Do not add signature trust or certificate qualification unless requested.
 
 Validate the target and credential source without printing secrets:
 

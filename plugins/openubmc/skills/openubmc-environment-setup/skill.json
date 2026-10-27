@@ -1,8 +1,8 @@
 {
   "manifestVersion": 1,
   "name": "openubmc-environment-setup",
-  "version": "2.6.0",
-  "description": "自动安装、检查、修复、更新或卸载统一的 openUBMC Agent 工作流环境。",
+  "version": "2.6.2",
+  "description": "处理明确的 openUBMC 插件安装、配置请求，或已确认且阻塞当前任务的本地配置与启动故障。",
   "author": "OpenUBMC Team",
   "license": "MulanPSL-2.0",
   "relatedSkills": [
@@ -14,7 +14,6 @@
     "openubmc-live-patch",
     "openubmc-dt-testing",
     "openubmc-publish",
-    "openubmc-lua-component",
     "openubmc-qemu-testing"
   ],
   "files": [
@@ -44,8 +43,7 @@
     "target-runtime",
     "mcp",
     "knowledge-base",
-    "wsl",
-    "docker"
+    "wsl"
   ],
   "categories": [
     "setup",

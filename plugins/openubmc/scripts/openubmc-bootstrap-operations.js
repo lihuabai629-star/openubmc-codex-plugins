@@ -3,6 +3,13 @@
 const childProcess = require("child_process");
 
 const recoveryActions = Object.freeze({
+  token_lock_unavailable: "Install the Linux flock utility (util-linux) for KB token coordination, then check openubmc_setup_status.",
+  dependencies_not_prepared: "Use openubmc_setup_prepare to prepare this capability's locked dependencies.",
+  dependency_cache_drift: "Use openubmc_setup_prepare to replace this capability's damaged dependency cache.",
+  package_integrity_failed: "Reinstall the verified plugin archive; dependency preparation cannot repair packaged files.",
+  configuration_repair_required: "Use openubmc_setup_repair_configuration to preview and repair recognized stale configuration.",
+  configuration_repair_conflict: "Inspect the reported local configuration conflict before choosing which entry to keep.",
+  configuration_repair_failed: "Inspect the local configuration repair transaction and its backup before retrying.",
   pip_unavailable: "Install pip for the selected local Python, then retry preparation.",
   npm_unavailable: "Install Node.js 20 or newer and npm on this computer, then retry preparation.",
   registry_unavailable: "Restore package registry or DNS access on this computer, then retry preparation.",
@@ -12,7 +19,6 @@ const recoveryActions = Object.freeze({
   dependency_hash_mismatch: "Use packages matching the release lock hashes, then retry preparation.",
   dependency_prepare_failed: "Review local package-manager connectivity and retry preparation.",
   mcp_protocol_unhealthy: "Restart the task after checking the Runtime MCP initialize and tools/list probe.",
-  windows_private_root_conflict: "Use openubmc_setup_open_configuration to open the local page and repair the listed Windows directory, then retry setup.",
 });
 
 function parseJsonOutput(adapter, buffer) {
@@ -49,6 +55,10 @@ function relaySafeProgress(adapter, buffer) {
 
 function preparationFailure(adapter, prepared) {
   if (prepared.error?.code === "ETIMEDOUT") return "dependency_prepare_timeout";
+  if (adapter.decodeOutput(prepared.stderr).includes("requires flock")) return "token_lock_unavailable";
+  if (/plugin (?:file inventory|lock digest|manifest identity|manifest digest) mismatch/i.test(adapter.decodeOutput(prepared.stderr))) {
+    return "package_integrity_failed";
+  }
   const records = progressRecords(adapter, prepared.stderr);
   const typed = records.map((record) => record.error_code).find((value) => recoveryActions[value]);
   if (typed) return typed;
@@ -65,38 +75,40 @@ function preparationFailure(adapter, prepared) {
 function createSetupOperations(adapter, capability) {
   function prepareBackend(backend) {
     const prepared = adapter.run(backend.command,
-      [...backend.prefix, "prepare", "--capability", capability], { timeout: 600_000 });
+      [...backend.prefix, "prepare", "--repair", "--capability", capability], { timeout: 600_000 });
     relaySafeProgress(adapter, prepared.stderr);
     if (prepared.error || prepared.status !== 0) {
       const reason = preparationFailure(adapter, prepared);
-      const report = reason === "windows_private_root_conflict"
-        ? progressRecords(adapter, prepared.stderr).find((record) => record.error_code === reason)
-        : undefined;
-      return { ok: false, reason, recovery_action: recoveryActions[reason], report };
+      return { ok: false, reason, recovery_action: recoveryActions[reason] };
     }
     return { ok: true };
   }
 
   function preflightBackend(backend) {
     const checked = adapter.run(backend.command,
-      [...backend.prefix, "doctor", "--cleanup-retired", "--capability", capability, ...backend.configurationArgs], { timeout: 45_000 });
+      [...backend.prefix, "doctor", "--cleanup-retired", "--prerequisites-only", "--capability", capability, ...backend.configurationArgs], { timeout: 45_000 });
     const report = parseJsonOutput(adapter, checked.stdout);
     const cleanupReport = report?.cleanup;
     const selected = report?.capabilities?.[capability];
+    if (!checked.error && checked.status === 0 && report?.protocol_check_pending === true
+        && selected?.prerequisites_ready === true && report?.codex_configuration?.ready) {
+      return { ok: true, protocol_pending: true, cleanup: cleanupReport, report };
+    }
     if (!checked.error && selected?.startup_ready && report?.codex_configuration?.ready
         && checked.status === 0 && report?.mcp_health?.[capability]?.ok === true) {
       return { ok: true, cleanup: cleanupReport, report };
     }
     const rawError = String(selected?.error || "").toLowerCase();
     let reason = "dependency_preflight_failed";
-    if (report?.error_code === "windows_private_root_conflict") reason = "windows_private_root_conflict";
-    else if (checked.error?.code === "ETIMEDOUT") reason = "dependency_preflight_timeout";
+    if (checked.error?.code === "ETIMEDOUT") reason = "dependency_preflight_timeout";
     else if (report?.mcp_health?.[capability]?.timed_out) reason = "mcp_protocol_timeout";
     else if (rawError.includes("not prepared")) reason = "dependencies_not_prepared";
     else if (rawError.includes("cache drift")) reason = "dependency_cache_drift";
     else if (rawError.includes("node 20")) reason = "node_unavailable";
+    else if (rawError.includes("requires flock")) reason = "token_lock_unavailable";
     else if (selected?.startup_ready && report?.mcp_health?.[capability]?.ok !== true) reason = "mcp_protocol_unhealthy";
-    else if (adapter.decodeOutput(checked.stderr).includes("plugin file inventory mismatch")) reason = "package_integrity_failed";
+    else if (progressRecords(adapter, checked.stderr).some(record => record.error_code === "package_integrity_failed")
+        || /plugin (?:file inventory|lock digest|manifest identity|manifest digest) mismatch/.test(adapter.decodeOutput(checked.stderr))) reason = "package_integrity_failed";
     else if (report?.codex_configuration && !report.codex_configuration.ready) reason = "configuration_repair_required";
     return { ok: false, reason, cleanup: cleanupReport, report };
   }
@@ -105,31 +117,30 @@ function createSetupOperations(adapter, capability) {
     const report = failure.report || {};
     const packageIdentity = adapter.packageIdentity();
     const configuration = report.codex_configuration || {};
+    const recovery = failure.recovery_action || recoveryActions[failure.reason]
+      || "Inspect openubmc_setup_status and local diagnostics to identify the failed prerequisite.";
     const status = {
       schema: "openubmc.plugin-setup.v1",
       status: "setup_required",
       capability,
-      host: adapter.hostPlatform === "win32" ? "windows" : "linux",
+      host: adapter.clientEnvironment,
       reason: failure.reason,
       affected_roots: (report.roots || []).filter((root) => root.status !== "ready")
         .map((root) => ({ root_id: root.root_id, capabilities: root.capabilities, status: root.status })),
-      recovery_action: failure.recovery_action || recoveryActions[failure.reason]
-        || "Use the openUBMC setup tools to repair the reported local prerequisite.",
+      recovery_action: recovery,
       next_action: adapter.hostPlatform === "win32"
-        ? "Use the openUBMC setup tools in this task, then start a new task."
-        : "Use openubmc_setup_prepare in this task, then start a new task.",
-      execution_host: adapter.hostPlatform === "win32" ? "windows-native" : "linux",
-      native_windows_build_supported: false,
+        ? "Run the plugin inside Linux or WSL, then reconnect this client through WSL."
+        : recovery,
+      execution_host: adapter.executionHost,
       plugin: {
         version: report.version || packageIdentity.version,
         source_commit: report.source_commit || packageIdentity.source_commit,
         integrity: report.package_integrity === true || packageIdentity.integrity,
       },
       backend: {
-        host: adapter.hostPlatform === "win32" ? "windows" : "linux",
-        execution_host: adapter.hostPlatform === "win32" ? "windows-native" : "linux",
-        selected_wsl: null,
-        native_windows_build_supported: false,
+        host: adapter.hostPlatform === "win32" ? "windows" : adapter.hostPlatform,
+        execution_host: adapter.executionHost,
+        selected_wsl: adapter.selectedWsl,
       },
       dependencies: Object.fromEntries(Object.entries(report.capabilities || {}).map(([name, value]) => [name, {
         ready: value.dependencies_ready === true,
@@ -180,7 +191,8 @@ function createSetupOperations(adapter, capability) {
     return new Promise((resolve, reject) => {
       const child = childProcess.spawn(backend.command,
         [...backend.prefix, "configure", "--kind", kind, "--open-browser"],
-        { env: adapter.childEnvironment, stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+        { env: adapter.childEnvironment, cwd: adapter.childCwd,
+          stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
       configurationProcesses.add(child);
       let output = "";
       let settled = false;

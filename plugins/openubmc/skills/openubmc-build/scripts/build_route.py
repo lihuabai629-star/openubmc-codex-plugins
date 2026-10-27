@@ -21,7 +21,6 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import shutil
 import sys
 from typing import Mapping
 
@@ -43,184 +42,71 @@ def _digest(value: Mapping[str, object]) -> str:
     return "sha256:" + hashlib.sha256(body.encode()).hexdigest()
 
 
+def _positive_request(text: str) -> str:
+    """Exclude negated clauses while retaining independent requested outputs."""
+    clauses = re.split(
+        r'[，,;；。!?！？\n]|\.(?:\s+|$)|\b(?:but|instead)\b|但是|但|而是', text,
+    )
+    negation = re.compile(
+        r"\b(?:no|never|without|avoid|skip|don't|not(?!\s+(?:only|just)\b))\b"
+        r'|无需|不需要|不必|不要|不再|不得|禁止|不用'
+        r'|不(?=生成|制作|构建|打包|发布|上传|安装|配置|产出|执行)'
+    )
+    return ' '.join(negation.split(clause, maxsplit=1)[0] for clause in clauses)
+
+
 def classify_request(request: str, argv: list[str] | None = None) -> tuple[str, str, str]:
     """Return (owner, mode, reason) using mutually exclusive positive signals."""
 
-    text = _text(request).lower()
+    text = _positive_request(_text(request).lower())
     arguments = list(argv or [])
     command = " ".join(arguments).lower()
     executable = _executable_name(arguments[0]) if arguments else ""
     combined = f"{text} {command}"
+    if (executable in {"bingo", "bingo.exe"}
+        or re.search(r"(?:^|\s)bingo(?:\.exe)?(?:[\s_-]|$)", combined)):
+        return "openubmc-build", "unsupported", "Bingo is no longer supported; select a verified bmcgo command explicitly"
+    if re.search(r"分析|排查|诊断|报错|失败|\b(?:diagnos\w*|troubleshoot\w*|failed|failure|error)\b", text):
+        return "openubmc-build", "diagnose", "inspect existing build and dependency evidence before selecting a new command"
     if (
-        any(token in combined for token in (
-            "安装构建环境", "配置构建环境", "setup build environment", "install build environment",
-        ))
-        or re.search(r"\b(?:install|setup|configure)\b.*\b(?:build\s+)?environment\b", combined)
-        or re.search(r"(?:安装|配置).{0,20}(?:构建)?环境", combined)
+        re.search(r"(?:安装|配置)\s*(?:openubmc\s*)?(?:构建|开发)环境(?!变量)", text)
+        or re.search(r"\b(?:install|setup|set up|configure)\s+(?:the\s+)?(?:build|development)\s+environment\b(?!\s+variables?\b)", text)
     ):
-        return "openubmc-environment-setup", "handoff", "environment setup owns installation and repair"
+        return "openubmc-env-init", "handoff", "build toolchain setup requires the separate environment specialist; report if unavailable"
     # A raw Conan invocation is the historically observed escape hatch.  Keep
     # ownership visible, but fail closed until the caller supplies an
     # equivalence receipt for the selected build tool.
     if re.search(r"\bconan\s+create\b", combined):
         return "openubmc-build", "validate", "raw conan create requires an equivalence receipt"
-    if re.search(r"bingo[-_ ]?(?:cli|tool|开发|开发工具)", combined) or (
-        "bingo" in combined and "开发" in combined and "工具" in combined
-    ):
-        return "openubmc-bingo-development", "handoff", "Bingo CLI development owns the request"
-    if executable in {"bingo", "bingo.exe"} or re.search(r"(?:^|\s)bingo(?:\.exe)?(?:\s|$)", combined):
-        return "openubmc-bingo-build", "handoff", "explicit Bingo build command owns the request"
-    if any(token in combined for token in ("发布 conan", "上传 conan", "publish package", "upload package")):
+    if executable in {"conan", "conan.exe"} and arguments[1:2] == ["upload"]:
+        return "openubmc-publish", "handoff", "explicit Conan upload belongs to package publication"
+    publication_pattern = r"发布\s*conan|上传\s*conan|\b(?:publish|upload)\s+(?:conan\s+)?package"
+    publication = bool(re.search(publication_pattern, combined))
+    local_build = (executable in {"bmcgo", "bmcgo.exe"}
+                   or bool(re.search(r"构建|编译|生成|打包|\b(?:build|compile|generate|test)\b", text)))
+    if publication and not local_build:
         return "openubmc-publish", "handoff", "package publication is outside local Build ownership"
-    if any(token in combined for token in ("hpm", "固件包", "product image", "rootfs", "产品固件")):
+    build_text = re.split(publication_pattern, text, maxsplit=1)[0] if publication else text
+    if any(token in build_text for token in ("hpm", "固件包", "product image", "rootfs", "产品固件")):
         return "openubmc-build", "product-artifact", "requested output is a product artifact"
-    if "bmcgo build" in combined or "--board" in combined or " -b " in f" {combined} ":
+    if is_product_build_command(arguments) or re.search(r"\bbmcgo\s+build\s+.*(?:--board(?:=|\s)|-b\s)", text):
         return "openubmc-build", "product-artifact", "bmcgo board build produces a product artifact"
-    if any(token in combined for token in ("conan package", "conan 包", "组件包", "component package")):
+    if any(token in build_text for token in ("组件包", "component package", "conan package", "conan 包")):
         return "openubmc-build", "component-package", "explicit component package output"
     if any(token in combined for token in ("compile", "编译", "生成代码", "gen", "unit test", "单元测试", "test")):
         return "openubmc-build", "validate", "local validation has no product artifact signal"
     return "openubmc-build", "validate", "default local build validation"
 
 
-def _argument_values(argv: list[str], *names: str) -> list[str]:
-    result: list[str] = []
-    for index, value in enumerate(argv):
-        if value in names and index + 1 < len(argv):
-            candidate = argv[index + 1]
-            result.append(candidate if candidate and not candidate.startswith("-") else "")
-            continue
-        for name in names:
-            prefix = name + "="
-            if value.startswith(prefix):
-                candidate = value.removeprefix(prefix)
-                result.append(candidate if candidate and not candidate.startswith("-") else "")
-                break
-    return result
-
-
-def _manifest_board_entry(root: Path, board: str) -> Path | None:
-    if board != board.strip() or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", board):
-        return None
-    product_root = root / "build" / "product"
-    if product_root.is_symlink() or not product_root.is_dir():
-        return None
-    resolved_root = product_root.resolve()
-    if not resolved_root.is_relative_to(root.resolve()):
-        return None
-    for entry in product_root.iterdir():
-        if entry.is_symlink():
-            continue
-        if entry.resolve().parent != resolved_root:
-            continue
-        if entry.name == board or (entry.is_file() and entry.stem == board):
-            return entry
-    return None
-
-
-def _bingo_preconditions(
-    owner: str,
-    request: str,
-    argv: list[str] | None,
-    workspace: Path | None,
-) -> tuple[list[dict[str, object]], dict[str, object]]:
-    root = workspace.resolve() if workspace else None
-    if root is None:
-        return ([{
-            "name": "workspace",
-            "status": "required",
-            "detail": "select the Bingo source, component, or Manifest checkout owned by this route",
-        }], {"kind": "", "status": "required"})
-
-    if owner == "openubmc-bingo-development":
-        pyproject = root / "pyproject.toml"
-        project_text = ""
-        if pyproject.is_file():
-            project_text = pyproject.read_text(encoding="utf-8", errors="replace").lower()
-        source_markers = (
-            root / "src" / "bingo",
-            root / "bingo",
-            root / "tests" / "test_cli.py",
-        )
-        valid = "openubmc-bingo" in project_text or any(path.exists() for path in source_markers)
-        precondition = {
-            "name": "bingo_source_repository",
-            "status": "passed" if valid else "failed",
-            "path": str(root),
-            "detail": "recognized Bingo CLI source" if valid else "missing Bingo CLI source markers",
-        }
-        artifact = {
-            "kind": "bingo-source-change",
-            "status": "passed" if valid else "failed",
-        }
-        return [precondition, {"name": "requested_artifact", **artifact}], artifact
-
-    component = (root / "mds" / "service.json").is_file()
-    manifest = any(
-        path.exists()
-        for path in (root / ".bingo" / "config", root / "build" / "frame.py", root / "build" / "product")
-    )
-    workspace_ok = component or manifest
-    preconditions: list[dict[str, object]] = [{
-        "name": "bingo_workspace",
-        "status": "passed" if workspace_ok else "failed",
-        "path": str(root),
-        "detail": (
-            "component workspace" if component else
-            "Manifest workspace" if manifest else
-            "missing component or Manifest markers"
-        ),
-    }]
-    command = list(argv or [])
-    combined = (request + " " + " ".join(command)).lower()
-    board_values = _argument_values(command, "-b", "--board")
-    duplicate_board = len(board_values) > 1
-    board = board_values[0] if len(board_values) == 1 else ""
-    bingo_build = (
-        len(command) > 1
-        and _executable_name(command[0]) in {"bingo", "bingo.exe"}
-        and command[1].lower() == "build"
-    )
-    product = (
-        any(token in combined for token in ("-t publish", "product", "hpm", "固件"))
-        or bool(board_values)
-        or (manifest and bingo_build)
-    )
-    if product:
-        board_entry = _manifest_board_entry(root, board) if board else None
-        status = (
-            "failed" if duplicate_board else
-            "passed" if manifest and board_entry is not None else
-            "required" if manifest and not board else
-            "failed"
-        )
-        detail = (
-            "board option must appear exactly once" if duplicate_board else
-            "Manifest product release target is explicit" if status == "passed" else
-            "select an explicit board with -b or --board" if status == "required" else
-            "product publication requires a Manifest workspace" if not manifest else
-            "board does not resolve to a build/product entry"
-        )
-        artifact: dict[str, object] = {
-            "kind": "product-release",
-            "status": status,
-            "board": board,
-            "detail": detail,
-        }
-        if board_entry is not None:
-            artifact["board_entry"] = str(board_entry)
-    elif component:
-        artifact = {"kind": "component-build", "status": "passed"}
-    elif manifest:
-        artifact = {"kind": "manifest-operation", "status": "passed"}
-    else:
-        artifact = {"kind": "", "status": "failed", "detail": "requested artifact cannot be resolved"}
-    preconditions.append({"name": "requested_artifact", **artifact})
-    return preconditions, artifact
+def is_product_build_command(command: list[str]) -> bool:
+    return (len(command) >= 2 and _executable_name(command[0]) in {"bmcgo", "bmcgo.exe"}
+            and command[1] == "build" and any(
+                argument in {"-b", "--board"} or argument.startswith("--board=")
+                for argument in command[2:]))
 
 
 def _workspace_preconditions(owner: str, mode: str, workspace: Path | None) -> list[dict[str, object]]:
-    if owner != "openubmc-build" or mode == "handoff":
+    if owner != "openubmc-build" or mode in {"handoff", "diagnose"}:
         return []
     root = workspace.resolve() if workspace else None
     if root is None:
@@ -260,18 +146,14 @@ def _tool_substitution_precondition(
     This helper makes the receipt a build-plan input rather than documentation
     that can be forgotten after the route was selected.
     """
-    supported_owners = {"openubmc-build", "openubmc-bingo-build"}
-    if owner not in supported_owners:
+    supported_owners = {"openubmc-build"}
+    if owner not in supported_owners or mode in {"unsupported", "diagnose"}:
         return None, None
     command = list(argv or [])
     if not command:
         return None, None
     executable = _executable_name(command[0])
-    expected_executables = (
-        {"bmcgo", "bmcgo.exe"}
-        if owner == "openubmc-build"
-        else {"bingo", "bingo.exe"}
-    )
+    expected_executables = {"bmcgo", "bmcgo.exe"}
     if executable in expected_executables:
         return {"name": "tool_boundary", "status": "passed", "tool": executable}, None
     if re.search(r"\bconan\s+create\b", " ".join(command).lower()):
@@ -312,8 +194,8 @@ def route_receipt(
 ) -> dict[str, object]:
     owner, mode, reason = classify_request(request, argv)
     artifact: dict[str, object] | None = None
-    if owner in {"openubmc-bingo-build", "openubmc-bingo-development"}:
-        preconditions, artifact = _bingo_preconditions(owner, request, argv, workspace)
+    if mode == "unsupported":
+        preconditions = [{"name": "supported_tool", "status": "failed", "detail": reason}]
     else:
         preconditions = _workspace_preconditions(owner, mode, workspace)
     tool_precondition, normalized_equivalence = _tool_substitution_precondition(
@@ -322,29 +204,18 @@ def route_receipt(
     if tool_precondition is not None:
         preconditions.append(tool_precondition)
     build_blocker: dict[str, object] | None = None
-    if sys.platform == "win32" and owner in {
-        "openubmc-build", "openubmc-bingo-build", "openubmc-publish",
-    }:
-        required_tool = (
-            argv[0] if argv else
-            "bingo" if owner == "openubmc-bingo-build" else
-            "conan" if owner == "openubmc-publish" else "bmcgo"
-        )
-        if shutil.which(required_tool) is None:
-            build_blocker = {
-                "code": "build_environment_unavailable",
-                "execution_host": "windows-native",
-                "missing_tools": [_executable_name(required_tool)],
-            }
-            preconditions.append({
-                "name": "build_environment", "status": "failed", **build_blocker,
-            })
+    if sys.platform == "win32":
+        build_blocker = {
+            "code": "unsupported_platform",
+            "execution_host": "windows-native",
+            "detail": "Run the plugin inside Linux or WSL; native Windows execution is retired.",
+        }
+        preconditions.append({"name": "execution_host", "status": "failed", **build_blocker})
     ready = all(item.get("status") in {"passed", "not_required"} for item in preconditions)
     selected_tool = (
+        "" if mode in {"diagnose", "handoff", "unsupported"} else
         "bmcgo" if owner == "openubmc-build" and not argv else
-        _executable_name(argv[0]) if argv and owner in {
-            "openubmc-build", "openubmc-bingo-build", "openubmc-publish",
-        } else
+        _executable_name(argv[0]) if argv and owner == "openubmc-build" else
         ""
     )
     receipt: dict[str, object] = {

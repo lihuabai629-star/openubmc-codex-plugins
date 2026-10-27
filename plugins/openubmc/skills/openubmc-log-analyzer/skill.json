@@ -1,8 +1,8 @@
 {
   "manifestVersion": 1,
   "name": "openubmc-log-analyzer",
-  "version": "1.0.0",
-  "description": "采集并离线分析 openUBMC 一键日志包。",
+  "version": "1.0.1",
+  "description": "分析本地一键日志包，或从远端采集后使用同一核心分析。",
   "author": "OpenUBMC Team",
   "license": "MulanPSL-2.0",
   "dependencies": {
@@ -11,6 +11,7 @@
     "sshpass": "conditional: password-based SSH fallback"
   },
   "relatedSkills": [
+    "openubmc-log-bundle-analyzer",
     "openubmc-debug",
     "openubmc-upgrade",
     "openubmc-environment-setup"
@@ -20,7 +21,6 @@
     "skill.json",
     "agents/openai.yaml",
     "references/analysis.md",
-    "references/logs.json",
     "references/logs.md",
     "references/remote-collection.md",
     "openubmc_log_analyzer/__init__.py",

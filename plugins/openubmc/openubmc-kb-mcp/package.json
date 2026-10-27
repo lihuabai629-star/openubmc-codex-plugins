@@ -1,6 +1,6 @@
 {
   "name": "openubmc-kb-mcp",
-  "version": "1.3.0",
+  "version": "1.3.4",
   "private": true,
   "type": "module",
   "main": "src/server.js",

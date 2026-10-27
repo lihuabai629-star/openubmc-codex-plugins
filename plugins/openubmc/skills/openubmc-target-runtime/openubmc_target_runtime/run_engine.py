@@ -15,6 +15,7 @@ from .component_validation import assess_components, ComponentValidationError
 from .artifact_store import LocalArtifactStore
 from .effect_activity import active_operation
 from .semantic_runtime import (
+    AttachQemuEvidence,
     AgentPreflightError,
     ArtifactRef,
     AssuranceUnavailable,
@@ -557,6 +558,8 @@ class ObservationDriver(Protocol):
 
 
 class RunDriver(Protocol):
+    def prepare_qemu_evidence(self, command: AttachQemuEvidence, *, operation_id: str) -> Mapping[str, object]: ...
+
     def start_run(
         self,
         command: StartRun,
@@ -842,6 +845,7 @@ class RunEngine:
         tracing: RunTracer | None = None,
         source_checker: SourceChecker | None = None,
         evidence_kind: str = "observed",
+        verification_retry_limit: int = 3,
     ) -> None:
         if run_store is None:
             raise ValueError("RunStore is required")
@@ -856,6 +860,9 @@ class RunEngine:
         if evidence_kind not in {"observed", "synthetic"}:
             raise ValueError("Invalid operation evidence kind")
         self.evidence_kind = evidence_kind
+        if isinstance(verification_retry_limit, bool) or verification_retry_limit < 1:
+            raise ValueError("verification_retry_limit must be positive")
+        self.verification_retry_limit = verification_retry_limit
         self._active_transaction: ContextVar[RunDecisionDraft | None] = (
             ContextVar(f"openubmc_run_decision_{id(self)}", default=None)
         )
@@ -1096,9 +1103,8 @@ class RunEngine:
                         "workflow_step_id": _text(
                             payload.get("workflow_step_id")
                         ),
-                        "next_action": (
-                            "resume the Run to retry fresh target verification"
-                        ),
+                        "next_action": _text(payload.get("next_action")),
+                        "verification_gap": _text(payload.get("verification_gap")),
                     },
                     operation_id,
                 ),
@@ -2233,6 +2239,40 @@ class RunEngine:
             for state in states.values()
         )
 
+    def _verification_failure(
+        self, projection: Mapping[str, object]
+    ) -> tuple[str, Mapping[str, object], str, int, bool] | None:
+        """Classify the last failed verification, including older pending retries."""
+        if not self._mutation_completed_before_verification(projection):
+            return None
+        for step_id, step in _mapping(projection.get("workflow_step_states")).items():
+            if not isinstance(step, Mapping) or not (
+                _text(step.get("name")) == "debug_collect"
+                and _text(step.get("status")) in {"failed", "pending_retry"}
+                and _text(step.get("workflow_cycle_id"))
+                == _text(projection.get("workflow_cycle_id") or "cycle-1")
+            ):
+                continue
+            operation = next((
+                item for item in reversed(list(projection.get("operations", [])))
+                if isinstance(item, Mapping)
+                and _text(item.get("operation_id")) == _text(step.get("operation_id"))
+            ), {})
+            error = _mapping(operation.get("canonical_error"))
+            reason = _text(error.get("message")) or self._step_summary(projection, step)
+            code = _text(error.get("code")).lower()
+            text = reason.lower()
+            permanent = code in {
+                "permissionerror", "authenticationerror", "unsupported_platform",
+                "unsupported_capability", "command_not_supported",
+            } or any(marker in text for marker in (
+                "command not supported", "restricted clp", "restricted shell",
+                "authentication failed", "permission denied",
+            ))
+            attempts = max(1, int(step.get("workflow_attempt", 0)))
+            return str(step_id), step, reason, attempts, permanent
+        return None
+
     def _validate_step_artifact(
         self,
         snapshot: Mapping[str, object],
@@ -2503,25 +2543,41 @@ class RunEngine:
                     )
                     continue
                 return self._turn(snapshot, state="incident")
-            terminal = self._terminal_step(projection)
-            if terminal is not None:
-                terminal_step_id, terminal_step = terminal
-                if (
-                    _text(terminal_step.get("name")) == "debug_collect"
-                    and _text(terminal_step.get("status")) == "failed"
-                    and self._mutation_completed_before_verification(projection)
-                ):
+            verification = self._verification_failure(projection)
+            if verification is not None:
+                step_id, step, reason, attempts, permanent = verification
+                gap = (
+                    f"Fresh target verification is incomplete after {attempts}/"
+                    f"{self.verification_retry_limit} workflow attempts: {reason}. "
+                    "The completed mutation and its journal are retained."
+                )
+                if permanent or attempts >= self.verification_retry_limit:
+                    snapshot = self._record_incident(
+                        snapshot,
+                        code=("verification_capability_unavailable" if permanent
+                              else "verification_retry_exhausted"),
+                        message=gap,
+                        effect_id=_text(step.get("operation_id")),
+                        operation_id=f"{operation_id}-verification-incident",
+                    )
+                    return self._turn(snapshot, state="incident")
+                if _text(step.get("status")) == "failed":
+                    next_action = (
+                        "resume the Run to retry fresh target verification; "
+                        f"{self.verification_retry_limit - attempts} workflow attempts remain; "
+                        f"last failure: {reason}"
+                    )
                     snapshot = self._apply_transition(
                         self._run_id(snapshot),
                         RunTransitionKind.VERIFICATION_DEFERRED,
-                        {"workflow_step_id": terminal_step_id},
+                        {"workflow_step_id": step_id, "next_action": next_action,
+                         "verification_gap": gap},
                         operation_id=f"{operation_id}-verification-deferred",
                     )
-                    return self._turn(
-                        snapshot,
-                        state="running",
-                        next_action="resume the Run to retry fresh target verification",
-                    )
+                    return self._turn(snapshot, state="running", next_action=next_action)
+            terminal = self._terminal_step(projection)
+            if terminal is not None:
+                terminal_step_id, terminal_step = terminal
                 status = _text(terminal_step.get("status"))
                 snapshot = self._apply_transition(
                     self._run_id(snapshot),
@@ -2965,6 +3021,11 @@ class RunEngine:
         task_id: str,
         operation_id: str,
     ) -> RunTurn:
+        if isinstance(command, AttachQemuEvidence):
+            reference = self.driver.prepare_qemu_evidence(command, operation_id=command.command_id)
+            self._stage((RunEvent("EvidenceAttached", {"evidence": dict(reference)}, command.command_id),))
+            return replace(self._turn(self.driver.run_snapshot(command.run_id)),
+                           progress={"status": "evidence_attached", "evidence_id": reference["evidence_id"]})
         if isinstance(command, StartRun):
             snapshot = self.driver.start_run(
                 command,
@@ -3126,6 +3187,7 @@ class RunEngine:
         *,
         task_id: str,
         deadline_at: float,
+        explicit_reconcile: bool = False,
     ) -> RunTurn:
         if self.effect_runner is None:
             return committed.turn
@@ -3137,6 +3199,7 @@ class RunEngine:
         if (
             committed.turn.state == "incident"
             and not self.effect_runner.has_seen(intent)
+            and not explicit_reconcile
             and not (
                 committed.turn.incident is not None
                 and committed.turn.incident.code == "effect_deadline_exceeded"
@@ -3726,11 +3789,14 @@ class RunEngine:
                     self._validate_duplicate_gate(command, prior)
             raise CommandConflict(str(exc)) from exc
         if replayed is not None:
+            if isinstance(command, AttachQemuEvidence):
+                return self._turn(self.driver.run_snapshot(run_id))
             initial_revision = int(replayed.projection.get("revision", -1))
             turn = self._settle_effect(
                 replayed,
                 task_id=task_id,
                 deadline_at=deadline_at,
+                explicit_reconcile=isinstance(command, ReconcileRun),
             )
             if isinstance(
                 command,
@@ -3792,10 +3858,13 @@ class RunEngine:
                 return no_progress_turn
             raise CommandConflict("RunDecision was not built")
 
+        if isinstance(command, AttachQemuEvidence):
+            return committed.turn
         return self._settle_effect(
             committed,
             task_id=task_id,
             deadline_at=deadline_at,
+            explicit_reconcile=isinstance(command, ReconcileRun),
         )
 
 

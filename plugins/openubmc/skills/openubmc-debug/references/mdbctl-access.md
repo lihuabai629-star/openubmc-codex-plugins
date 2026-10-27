@@ -2,7 +2,7 @@
 
 当你已经确定要先用 `mdbctl` 时，读这个文件。
 
-保持任务仓库为当前目录，并从 `$HOME/.agents/skills/openubmc-debug` 调用辅助脚本。
+保持任务仓库为当前目录，并从 `<plugin-root>/skills/openubmc-debug` 调用辅助脚本。
 
 ## 什么时候优先用 mdbctl
 
@@ -39,7 +39,7 @@ sh -lc '. /etc/profile >/dev/null 2>&1; mdbctl lsclass'
 如果仍失败，再切脚本化方式：
 
 ```
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> lsclass
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> lsclass
 ```
 
 只有确实需要 mdbctl 语义、且其他方式都不稳定时，再尝试 direct skynet：
@@ -54,7 +54,7 @@ printf 'lsclass\n' | /opt/bmc/skynet/lua /opt/bmc/apps/mdbctl/service/mdbctl.lua
 |------|----------|----------|
 | `mdbctl: command not found` | 非交互 SSH 未加载 alias 或 profile | 改用 `sh -lc '. /etc/profile >/dev/null 2>&1; mdbctl ...'` |
 | 命令无输出或一直卡住 | 进入了交互模式、stdout 未返回、服务未就绪 | 只用单条命令模式；避免交互会话；必要时切 direct skynet |
-| `ServiceUnknown` | mdb 服务未注册、DBUS 环境异常、服务仍在启动 | 不要盲重试 raw skynet；优先切 `python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" ...` 验证服务和对象树 |
+| `ServiceUnknown` | mdb 服务未注册、DBUS 环境异常、服务仍在启动 | 不要盲重试 raw skynet；优先切 `python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" ...` 验证服务和对象树 |
 | `Failed: Object does not exist.` / `Object not found.` | 当前查询对象不存在 | 对已审查的 `lsprop` / `getprop` / `lsmethod`，仅在 SSH 成功、stdout 明确且完整、无 stderr 错误时返回 `observed_absent` 事实；不重复 fallback。`lsclass` / `lsobj` 或 transport、权限、ServiceUnknown 错误仍为失败 |
 | 同一命令在交互 SSH 成功、非交互失败 | shell 环境差异 | 统一改成 `sh -lc '. /etc/profile >/dev/null 2>&1; mdbctl ...'` 或 direct skynet |
 | 对象或属性查不到，但服务存在 | 路径、class、interface 不确定 | 先 `mdbctl lsclass`、`lsobj` 缩小范围；再切 `busctl introspect` / `get-property` 做交叉验证 |
@@ -71,8 +71,8 @@ mdbctl lsclass
 sh -lc '. /etc/profile >/dev/null 2>&1; mdbctl lsclass'
 
 # 3) 仍失败时，优先切 busctl script
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action list
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action tree --service <service>
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action list
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action tree --service <service>
 
 # 4) 只有确实需要 mdbctl 语义时，再显式试 direct skynet
 printf 'lsclass\n' | /opt/bmc/skynet/lua /opt/bmc/apps/mdbctl/service/mdbctl.lua
@@ -81,22 +81,22 @@ printf 'lsclass\n' | /opt/bmc/skynet/lua /opt/bmc/apps/mdbctl/service/mdbctl.lua
 ## 脚本化 mdbctl（推荐）
 
 ```
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> lsclass
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> lsobj DiscreteSensor
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --mode login-shell lsclass
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --mode direct-skynet lsclass
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --print-classification lsclass
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> lsclass
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> lsobj DiscreteSensor
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --mode login-shell lsclass
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --mode direct-skynet lsclass
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --print-classification lsclass
 
 export OPENUBMC_SSH_USER='<your-ssh-user>'
 export OPENUBMC_SSH_PASSWORD='<your-ssh-password>'
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --ssh-port <ssh-port> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD lsclass
-python "$HOME/.agents/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD --json lsclass
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --ssh-port <ssh-port> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD lsclass
+python "<plugin-root>/skills/openubmc-debug/scripts/mdbctl_remote.py" --ip <ip> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD --json lsclass
 ```
 
 同一个诊断任务需要多条查询时，不要逐条启动上述 CLI。改用组合 workflow：
 
 ```
-python "$HOME/.agents/skills/openubmc-debug/scripts/workflow_remote.py" --ip <ip> \
+python "<plugin-root>/skills/openubmc-debug/scripts/workflow_remote.py" --ip <ip> \
   --mdb-only \
   --mdb-query 'lsobj BusinessConnector' \
   --mdb-query 'lsobj PcieAddrInfo' \

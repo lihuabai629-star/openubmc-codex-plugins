@@ -79,7 +79,10 @@ def _remote_identity(raw: str) -> str | None:
 class SourceCatalog:
     def __init__(self, root: Path, *, timeout: float = 1.0):
         self.root = root.resolve()
-        self.deadline = time.monotonic() + max(0.0, min(timeout, 2.0))
+        # The caller already allocated the provenance portion of its deadline.
+        # A hidden two-second cap made valid multi-repository queries partial
+        # under CPU/I/O contention despite time remaining in the request.
+        self.deadline = time.monotonic() + max(0.0, min(timeout, 30.0))
         self.entries = {}
         self.product = ""
         self.warnings = []
@@ -161,7 +164,10 @@ class SourceCatalog:
                  "-C", str(root), *args], capture_output=True, timeout=remaining, check=False,
             )
             return completed.stdout if completed.returncode == 0 else None
-        except (OSError, subprocess.TimeoutExpired):
+        except subprocess.TimeoutExpired:
+            self._warn("provenance_time_limit")
+            return None
+        except OSError:
             self._warn("repository_metadata_unavailable")
             return None
 

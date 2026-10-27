@@ -297,11 +297,6 @@ class RecordExportStore:
         self.root = Path(root).absolute()
 
     def _private_root(self):
-        if os.name == "nt":
-            from .windows_private import verify_private_path
-            if self.root.exists():
-                verify_private_path(self.root)
-            return
         if any(path.is_symlink() for path in (self.root, *self.root.parents)):
             raise RecordExportError()
         if self.root.exists():
@@ -312,11 +307,7 @@ class RecordExportStore:
     def write(self, document):
         digest = verify_export(document)
         self._private_root()
-        if os.name == "nt":
-            from .windows_private import ensure_private_directory
-            ensure_private_directory(self.root)
-        else:
-            self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._private_root()
         destination = self.root / (digest.removeprefix("sha256:") + ".json")
         encoded = _canonical(document) + b"\n"
@@ -327,9 +318,6 @@ class RecordExportStore:
         descriptor, name = tempfile.mkstemp(prefix=".export-", dir=self.root)
         try:
             with os.fdopen(descriptor, "wb") as stream:
-                if os.name == "nt":
-                    from .windows_private import harden_new_file
-                    harden_new_file(Path(name))
                 stream.write(encoded)
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -345,10 +333,6 @@ class RecordExportStore:
         info = path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or path.is_symlink():
             return False
-        if os.name == "nt":
-            from .windows_private import verify_private_path
-            verify_private_path(path)
-            return True
         return info.st_uid == os.getuid() and not info.st_mode & 0o077
 
     def prune(self, *, before_timestamp, dry_run=True):

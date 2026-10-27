@@ -117,7 +117,7 @@ class PluginSkillEntryTests(unittest.TestCase):
             with self.subTest(windows=windows):
                 result, called = self.invoke({"hook_event_name": "UserPromptSubmit"},
                                              windows=windows, backend="hung_probe")
-                self.assertTrue(called)
+                self.assertEqual(called, not windows)
                 self.assertIn("skill-routing.md", result["hookSpecificOutput"]["additionalContext"])
 
     def test_probe_and_backend_share_deadline(self):
@@ -137,7 +137,7 @@ class PluginSkillEntryTests(unittest.TestCase):
                 guide = self.plugin / "skills/openubmc-debug/references/skill-routing.md"
                 self.assertIn(json.dumps(str(guide)), specific["additionalContext"])
                 self.assertTrue(guide.is_file())
-                self.assertTrue(backend_called)
+                self.assertEqual(backend_called, not windows)
                 self.assertLess(len(specific["additionalContext"].encode()), 2048)
 
     def test_session_start_keeps_local_entry_when_continuity_backend_is_unavailable(self):
@@ -181,18 +181,26 @@ class PluginSkillEntryTests(unittest.TestCase):
             self.assertEqual(result, {})
             self.assertTrue(called)
 
-    def test_packaged_stage_links_resolve_and_keep_existing_invocation_policy(self):
+    def test_packaged_stage_links_resolve_and_retire_the_lua_entry(self):
         guide = self.plugin / "skills/openubmc-debug/references/skill-routing.md"
         workflow = json.loads((self.plugin / "workflow.json").read_text())
+        resources = set(workflow["distribution"]["optional_skills"] + workflow["distribution"]["support_skills"])
         for skill in workflow["skills"]:
-            if skill["name"] not in workflow["profiles"]["full"]:
+            if skill["name"] not in workflow["profiles"]["full"] or skill["name"] in resources:
                 continue
             entry = self.plugin / "skills" / skill["path"] / "SKILL.md"
-            pointers = re.findall(r"\[the phase handoff\]\(<?([^>)]+)>?\)", entry.read_text())
+            content = entry.read_text()
+            if skill["name"] == "openubmc-log-bundle-analyzer":
+                # The offline analyzer also ships independently without other Skills.
+                self.assertIn("select and read the current owner through the Host catalog", content)
+                self.assertNotIn("../openubmc-debug/", content)
+                continue
+            pointers = re.findall(r"\[the phase handoff\]\(<?([^>)]+)>?\)", content)
             self.assertEqual(len(pointers), 1, skill["name"])
             self.assertEqual((entry.parent / pointers[0]).resolve(), guide.resolve())
-        lua_policy = self.plugin / "skills/lua-component/agents/openai.yaml"
-        self.assertIn("allow_implicit_invocation: false", lua_policy.read_text())
+        self.assertFalse((self.plugin / "skills/lua-component").exists())
+        self.assertNotIn("openubmc-lua-component", workflow["profiles"]["full"])
+        self.assertTrue((self.plugin / "skills/openubmc-developer/references/lua-component.md").is_file())
 
 
 @unittest.skipUnless(shutil.which("codex") and shutil.which("node"),
@@ -241,10 +249,22 @@ class NativePluginSkillEntryTests(unittest.TestCase):
             self.assertEqual(len(hooks), 3)
             # Authorize only this verified fixture's exact Hook hashes. Keep
             # normal Host trust enforcement active during the native test.
-            trusted = "{" + ", ".join(
-                json.dumps(hook["key"]) + " = { trusted_hash = " + json.dumps(hook["currentHash"]) + " }"
-                for hook in hooks
-            ) + "}"
+            trusted_entries = []
+            for hook in hooks:
+                # Newer Hosts expose command/content digests joined by '/'.
+                # Bind both fields; older Hosts expose only the command digest.
+                hashes = hook["currentHash"].split("/")
+                self.assertIn(len(hashes), (1, 2))
+                for digest in hashes:
+                    self.assertRegex(digest, r"^sha256:[0-9a-f]{64}$")
+                fields = ", ".join(
+                    name + " = " + json.dumps(digest)
+                    for name, digest in zip(
+                        ("trusted_hash", "trusted_content_hash"), hashes
+                    )
+                )
+                trusted_entries.append(json.dumps(hook["key"]) + " = { " + fields + " }")
+            trusted = "{" + ", ".join(trusted_entries) + "}"
             observed = []
 
             class Handler(http.server.BaseHTTPRequestHandler):

@@ -38,7 +38,11 @@ The scripts load openubmc-debug integration from either:
 1. `OPENUBMC_DEBUG_HELPERS` and `OPENUBMC_DEBUG_SCRIPTS`, when explicitly configured; or
 2. an `openubmc-debug` sibling Skill discovered relative to the running script.
 
-Credential values may come from direct internal-development CLI arguments, the openubmc-debug credential loader, or `OPENUBMC_*` environment variables. The runtime passes SSH passwords to `sshpass` through its child environment when opening the actual transport.
+Agent execution uses the private openubmc-debug credential loader or inherited `OPENUBMC_*`
+environment variables. Pass references, never secret values, in model tool arguments or saved
+workflow inputs. Runtime passes SSH passwords to `sshpass` only in the child environment at
+transport creation. Legacy direct-password CLI flags remain for manual terminal compatibility;
+they are not an Agent credential path.
 
 SSH host-key policies:
 
@@ -65,11 +69,17 @@ No credential loading, SSH, Telnet, remount, copy, or restart is allowed during 
 
 Before any remount, staging, backup, deploy, or rollback mutation, the remote side must resolve the authorized root and every parent directory with `readlink -f`, require the resolved path to remain inside that root, and reject target/staging/backup paths or parent chains containing symlinks. Execute these guards as bounded per-path Telnet commands so a valid multi-path plan cannot exceed the target console's single-line input boundary. Run one bounded BusyBox codec check per apply or rollback, then gzip/base64-wrap longer atomic shell bodies so every framed Telnet command stays within that same input boundary without adding SSH uploads to rollback. Staging uses a fresh owner-only directory. Backup names contain a random operation token and are created exclusively; an existing file or symlink is a hard failure. Backups preserve file attributes. Deploy preserves an existing target's numeric uid/gid and applies the reviewed mode; rollback restores the backup uid/gid and verifies the reviewed mode. Deploy and rollback copy into a fresh same-directory work directory, verify checksum and metadata on the regular non-symlink payload, then rename it over the target so the final write never follows a target symlink.
 
+Rollback validates its complete encoded command against the 700-byte Telnet body limit before changing the root mount or marking effects started. An oversized command fails before any remount, restore, removal, or restart; it does not create an uncertain mutation outcome.
+
+Recovery checksum and metadata reads use the same bounded codec when a target or backup path makes the inspection command exceed the Telnet body limit. These inspections do not remount, replace a file, or restart the framework.
+
 When Apply observes that the target did not exist, return a rollback plan using
 `--remove-created --expected-current-sha256 <deployed-sha256>`. That rollback
 must require the current regular file to match the deployed checksum, remove
 only that exact path, and freshly verify that neither the path nor a symlink
 exists. It must not accept a backup at the same time.
+
+A terminal rollback journal replay omits raw mutation and verification callback payloads. Closeout accepts its persisted absence result only when the journal records a verified rollback, expected absence, restored root mount, verified checks, and no expected or observed checksum. Incomplete or contradictory journal evidence does not establish removal.
 
 ## Apply result
 

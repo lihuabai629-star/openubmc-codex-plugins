@@ -1044,7 +1044,6 @@ class MutationJournal:
             raise MutationJournalCorrupt("invalid mutation journal fields") from exc
 
 
-
 def mutation_journal_operation_status(
     journal: Mapping[str, object] | MutationJournal,
     *,
@@ -1324,15 +1323,11 @@ class MutationJournalStore:
         artifact_roots: tuple[Path, ...] = (),
     ) -> None:
         self.root = Path(root).expanduser().resolve()
-        if os.name == "nt":
-            from .windows_private import ensure_private_directory
-            ensure_private_directory(self.root)
-        else:
-            self.root.mkdir(parents=True, exist_ok=True)
-            try:
-                self.root.chmod(0o700)
-            except OSError:
-                pass
+        self.root.mkdir(parents=True, exist_ok=True)
+        try:
+            self.root.chmod(0o700)
+        except OSError:
+            pass
         self.artifact_roots = tuple(
             Path(path).expanduser().resolve() for path in artifact_roots
         )
@@ -1347,16 +1342,6 @@ class MutationJournalStore:
     def _path(self, task_id: str, operation_id: str) -> Path:
         return self.root / f"{self._key(task_id, operation_id)}.json"
 
-    def _verify_private(self, path: Path | None = None) -> None:
-        if os.name != "nt":
-            return
-        from .windows_private import WindowsPrivateError, verify_private_path
-        try:
-            verify_private_path(self.root)
-            if path is not None:
-                verify_private_path(path)
-        except (OSError, WindowsPrivateError) as exc:
-            raise MutationJournalCorrupt("mutation journal private storage is invalid") from exc
 
     def _validate_artifact(self, reference: str) -> str:
         if not reference:
@@ -1401,7 +1386,6 @@ class MutationJournalStore:
         destination = self._path(journal.task_id, journal.operation_id)
         temporary_name = ""
         with self._lock:
-            self._verify_private()
             try:
                 with tempfile.NamedTemporaryFile(
                     mode="w",
@@ -1412,14 +1396,10 @@ class MutationJournalStore:
                     delete=False,
                 ) as stream:
                     temporary_name = stream.name
-                    if os.name == "nt":
-                        from .windows_private import harden_new_file
-                        harden_new_file(Path(temporary_name))
-                    else:
-                        try:
-                            os.fchmod(stream.fileno(), 0o600)
-                        except OSError:
-                            pass
+                    try:
+                        os.fchmod(stream.fileno(), 0o600)
+                    except OSError:
+                        pass
                     stream.write(payload)
                     stream.flush()
                     os.fsync(stream.fileno())
@@ -1435,7 +1415,6 @@ class MutationJournalStore:
         path = self._path(task_id, operation_id)
         if not path.exists():
             return None
-        self._verify_private(path)
         try:
             value = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -1449,9 +1428,7 @@ class MutationJournalStore:
 
     def load_for_task(self, task_id: str) -> list[MutationJournal]:
         journals: list[MutationJournal] = []
-        self._verify_private()
         for path in sorted(self.root.glob("*.json")):
-            self._verify_private(path)
             try:
                 value = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:

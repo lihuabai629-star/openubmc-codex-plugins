@@ -45,10 +45,12 @@ class OpenSshTimeoutTests(unittest.TestCase):
             executable.chmod(0o700)
 
     def operations(self):
+        # Exercise retained partial output, not cold executable startup. macOS
+        # startup may exceed 0.5s; the fixture still sleeps well past this bound.
         return {
-            "command": lambda: self.transport.run_channel(self.master, "true", timeout=0.5),
-            "download": lambda: self.transport.download_file(self.master, "/dummy", str(self.root / "download"), timeout=0.5),
-            "upload": lambda: self.transport.upload_file(self.master, str(self.payload), "/dummy", timeout=0.5),
+            "command": lambda: self.transport.run_channel(self.master, "true", timeout=2),
+            "download": lambda: self.transport.download_file(self.master, "/dummy", str(self.root / "download"), timeout=2),
+            "upload": lambda: self.transport.upload_file(self.master, str(self.payload), "/dummy", timeout=2),
         }
 
     def test_command_and_transfers_return_text_when_partial_output_times_out(self) -> None:

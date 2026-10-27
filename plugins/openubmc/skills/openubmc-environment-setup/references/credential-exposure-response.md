@@ -4,6 +4,39 @@ Use this runbook when a BMC, OS, Redfish, KB, or Conan credential may have
 appeared in a Codex task transcript, command argument, environment snapshot,
 process inspection, Runtime record, or diagnostic log.
 
+## Credentials supplied for an authorized task
+
+When the user supplies an account for a clear target and purpose and asks the
+agent to use it, continue the authorized task with that account. Carry that
+authorization across turns. An absent saved record alone does not require the
+user to enter the same values again. Ask only for missing information that
+changes which account or target may be used.
+
+Reuse the Runtime resolver when the account is already configured. Otherwise,
+handle the supplied values locally on the execution host, in memory or through
+a private input stream to the authentication adapter. If the input is in a
+retained conversation, a local helper may read only the specifically identified
+user message in the current or user-selected conversation. Keep message IDs and
+target metadata in tool arguments; keep credential values out of tool arguments,
+command text, process arguments, receipts, logs, and output. Do not search other
+conversations for passwords, print raw messages, or copy a value into a heredoc.
+If that private local input is unavailable, explain the specific limitation and
+offer the local page or hidden input instead of claiming that authentication
+requires manual entry.
+
+Use the account only for the authorized purpose, target, and transport. OS
+credentials remain separate from BMC credentials. Saving follows an explicit
+remember-account request or the Runtime's existing verified-connection memory
+policy, using the selected configuration store and preserving unrelated records
+and concurrent edits. A supplied account does not authorize a password reset,
+new target, global default change, or replay of a completed mutation.
+
+Transcript exposure remains a disclosure concern. Handle rotation separately
+when requested or required by the account authority; the presence of a password
+in chat alone does not revoke the user's use authorization or make rotation a
+prerequisite for the current task. The incident response below never authorizes
+an account change by itself.
+
 ## Establish the affected identity
 
 Treat a credential as exposed when a task used its account during the affected

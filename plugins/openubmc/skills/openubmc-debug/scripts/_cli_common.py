@@ -6,6 +6,7 @@ from collections.abc import Mapping
 import argparse
 import os
 import stat
+import uuid
 from pathlib import Path
 
 
@@ -288,6 +289,20 @@ def resolve_int_value(
 
 
 def resolve_ssh_credentials(args) -> dict[str, str | int]:
+    explicit = any(_arg_value(args, name) for name in (
+        "ssh_user", "ssh_password", "ssh_user_env", "ssh_password_env", "ssh_identity_file"
+    ))
+    if _arg_value(args, "ip") and not explicit:
+        from _target_runtime_adapter import _load_runtime_module
+
+        selected = _load_runtime_module().CredentialResolver().resolve_local(
+            task_id="debug-cli-" + uuid.uuid4().hex,
+            host=args.ip,
+            purpose="bmc",
+            transport="ssh",
+            port=_arg_value(args, "ssh_port", 22),
+        ).credentials
+        return selected.to_ssh_mapping()
     credentials = load_credentials_file()
     return {
         "user": resolve_value(

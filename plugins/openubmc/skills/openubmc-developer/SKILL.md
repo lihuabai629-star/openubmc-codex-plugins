@@ -7,8 +7,7 @@ description: "Use only for unresolved openUBMC decisions about source ownership,
 
 At a stage change, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>) and its owner; carry the Run and authorization.
 
-Fit source work and component-local verification into the current repository structure.
-Scale analysis, design and implementation to the task's uncertainty and risk.
+Fit source work and local verification into the repository structure; scale the work to uncertainty and risk.
 
 ## Keep the primary owner clear
 
@@ -55,10 +54,11 @@ merely to route work owned entirely by another Skill.
   the responsible area, expected change surface, material risk, and validation
   approach. An explicit implementation request does not need a second approval
   merely because the change is non-trivial.
-- Pause only when repository evidence leaves alternatives that materially change
-  behavior, compatibility, risk, or scope; a required contract or generator is
-  unavailable; user work overlaps inseparably; or safe validation cannot be
-  established. Explain the concrete decision or blocker. Determine the
+- Choose routine implementation alternatives from repository precedent and task
+  scope. A missing optional check is a reported gap, not a reason to stop source
+  work. Pause only for a necessary user decision that materially changes scope,
+  inseparable concurrent edits, or a missing contract/generator that prevents a
+  correct change. Explain the concrete decision or blocker. Determine the
   behavior-owning module or layer from the repository instead of asking the user
   to name an owner.
 
@@ -91,6 +91,10 @@ evidence conflicts or leaves a material gap; never use them as proof of the
 current implementation. Record source identity and version when an external
 claim affects the change.
 
+Newer documentation does not retire an older or coexisting implementation route.
+Trace registrations and consumers on the selected branch before choosing a route;
+do not transfer device-tree constraints to resource-tree without source evidence.
+
 Follow a stable repository precedent by default. If precedents conflict or none
 can satisfy the requirement correctly, present the material alternatives before
 a deviation or refactor.
@@ -107,6 +111,9 @@ unknown coverage as a gap. Submit actual component checks through the current
 - Put behavior in the layer that already owns it. Keep adapters thin, preserve a
   single authoritative state writer, and reuse existing helpers, interfaces,
   lifecycle hooks, registration mechanisms, and error paths.
+- Prefer a suitable repository mechanism, then the standard library or platform,
+  then an installed dependency, before adding a new implementation. Trace real
+  callers and fix a shared rule once at its responsible layer.
 - Match nearby naming, dependency direction, logging, async/concurrency style,
   cleanup, and test conventions.
 - Make the smallest complete change: update every required layer, but avoid
@@ -150,6 +157,20 @@ confirming the workspace is no longer needed.
 Use the supplied output path and schema, with source-expression fields limited to the source expression.
 Put explanations in summary or evidence fields; check saved required fields, types, enums and expressions.
 
+Review the completed diff before final verification against the selected
+precedent for misplaced logic, duplicate ownership, layer leakage, bypassed
+interfaces, incomplete generation, and missed consumers. Check duplicated
+implementations, forwarding wrappers, unused options, and speculative abstractions
+against real callers and registrations. A thin wrapper or single implementation
+can still own credentials, platform adaptation, lifecycle, or a test seam.
+Preserve authored/generated chains, external and MDB/MDS string registrations,
+compatibility, error handling, trust-boundary validation, and hardware behavior.
+Choose simplifications by responsibility and observable behavior, not line count;
+keep optional cleanup separate from defects in the requested change.
+For a requested source review, use [change review](references/change-review.md)
+for Standards/Spec findings and their evidence. This reference ships with the
+plugin; an external review Skill is optional.
+
 Run the smallest sufficient repository-selected checks that prove the changed
 contract. Repository-local generation, compilation, unit-test builds, tests,
 and validators remain source verification. Prefer executing changed behavior or
@@ -159,10 +180,7 @@ Classify official UT separately from supplementary checks. A dependency-blocked
 test never started, and supplementary success is never promoted to official UT,
 compilation, package, firmware, or hardware-validation success.
 
-Review the completed diff against the selected precedent for misplaced logic,
-duplicate ownership, layer leakage, bypassed interfaces, unnecessary public
-abstractions, incomplete generation, and missed consumers.
-
+Use [community checks](references/community-checks.md) for changed interface, concurrency, Web Backend or Redfish contracts, and [interface coverage](references/interface-coverage.md) for their documentation.
 Hand off source changes with behavior, files, focused checks, workspace state and remaining gaps.
 For read-only work, report ownership, flow, precedent, change surface, alternatives and evidence gaps.
 
@@ -170,9 +188,10 @@ Source completion alone does not authorize dependency resolution, a product or
 package build, a live-target patch, firmware upgrade, or publication. When the
 user asks only for a downstream-ready handoff, read
 [downstream-handoffs.md](references/downstream-handoffs.md), provide the minimal
-source facts, and stop without loading the downstream Skill. Continue with
-`openubmc-build`, `openubmc-live-patch`, `openubmc-upgrade`, or
-`openubmc-publish` only when the user explicitly asks to execute that stage.
+source facts, and stop without loading the downstream Skill. For a task whose
+downstream stages were already authorized, continue directly with
+`openubmc-build`, `openubmc-live-patch`, `openubmc-upgrade`, `openubmc-publish`, or
+`openubmc-code-submit` within that established scope.
 Carry the user's requested sequence forward, but let each owner validate its own
 inputs and authorization.
 
@@ -199,7 +218,7 @@ change requires it.
 - Persistence lifetime, migration, deletion, upgrade, or rollback:
   [persistence-compatibility.md](references/persistence-compatibility.md)
 - Northbound or management-interface translation:
-  [interface-mapping.md](references/interface-mapping.md)
+  [interface-mapping.md](references/interface-mapping.md), [DSL recipes](references/mapping-dsl-recipes.md)
 - User-space device files, sysfs, ioctl, mmap, or driver ABI:
   [native-user-space-and-driver-abi.md](references/native-user-space-and-driver-abi.md)
 - Service startup, dependency ordering, manifests, and product assembly:
@@ -208,9 +227,7 @@ change requires it.
   [hardware-vpd.md](references/hardware-vpd.md)
 - SR/DDS product records and effective product selection: [sr-dds-product-records.md](references/sr-dds-product-records.md)
 - ProfileSchema import/export, adapters, redaction, and compatibility: [profile-schema-import-export.md](references/profile-schema-import-export.md)
-## Local specialist checks
 
-For changed MDB/Redfish JSON, concurrency candidates, Web Backend contracts,
-Redfish revision comparisons or interface documentation coverage, read
-[references/community-checks.md](references/community-checks.md).
-
+Implementation-selection and simplification guidance adapts
+[Ponytail v5.3.2](https://github.com/DietrichGebert/ponytail/tree/09c434ab73ca43761c5d8b0c5d341926c2fba710)
+under its [MIT license](resources/community/ponytail/LICENSE).

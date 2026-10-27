@@ -641,10 +641,9 @@ class LogBundleRuntimeLease:
             default_value: str = "",
         ) -> str:
             if file_credentials.get("__runtime_selected__") == "1":
-                from openubmc_target_runtime.credential_file import selected_credential_value
                 if direct_explicit and direct_value:
                     return direct_value
-                selected = selected_credential_value(file_credentials, (env_name,) if env_name else fallback_env_names)
+                selected = runtime.selected_credential_value(file_credentials, (env_name,) if env_name else fallback_env_names)
                 if selected is not None:
                     return selected
             if env_name:
@@ -658,8 +657,7 @@ class LogBundleRuntimeLease:
                 )
             if direct_explicit and direct_value:
                 return direct_value
-            from openubmc_target_runtime.credential_file import selected_credential_value
-            selected = selected_credential_value(file_credentials, fallback_env_names)
+            selected = runtime.selected_credential_value(file_credentials, fallback_env_names)
             if selected is not None:
                 return selected
             return direct_value or default_value
@@ -972,9 +970,27 @@ def open_log_bundle_runtime_lease(
     ssh_transport=None,
     credential_values: Mapping[str, str] | None = None,
 ) -> LogBundleRuntimeLease:
+    selected_task_id = task_id or f"one-shot-{uuid.uuid4().hex}"
+    if credential_values is None:
+        runtime = _load_runtime_module()
+        resolver = runtime.CredentialResolver()
+        arguments = dict(vars(args))
+        for transport in ("ssh", "redfish"):
+            if not getattr(args, f"_{transport}_user_explicit", False):
+                arguments.pop(transport + "_user", None)
+        transports = ((str(args.transport),) if args.transport in {"ssh", "redfish"}
+                      else ("ssh", "redfish"))
+        credential_error = importlib.import_module(runtime.__name__ + ".credentials").CredentialConfigurationError
+        try:
+            credential_values = resolver.resolve_local_values(task_id=selected_task_id,
+                host=str(args.ip), arguments=arguments, transports=transports)
+        except credential_error as error:
+            raise pull_bundle.BundlePullError(error.code, str(error)) from None
+        finally:
+            resolver.forget_task(selected_task_id)
     return LogBundleRuntimeLease(
         args=args,
-        task_id=task_id or f"one-shot-{uuid.uuid4().hex}",
+        task_id=selected_task_id,
         task_run=task_run,
         redfish_transport=redfish_transport,
         ssh_transport=ssh_transport,

@@ -25,8 +25,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_owned(argv, *, payload=None, env=None, timeout=25):
-    options = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW}
-               if sys.platform == "win32" else {"start_new_session": True})
+    options = (({"start_new_session": True}))
     process = subprocess.Popen(
         argv,
         stdin=subprocess.PIPE,
@@ -42,32 +41,26 @@ def run_owned(argv, *, payload=None, env=None, timeout=25):
         )
         return process.returncode, stdout, stderr
     except BaseException:
-        if sys.platform == "win32":
-            subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
-        else:
-            try:
-                os.killpg(process.pid, signal.SIGTERM)
-            except ProcessLookupError:
-                pass
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
         try:
             process.communicate(timeout=2)
         except subprocess.TimeoutExpired:
-            if sys.platform == "win32":
-                subprocess.run(["taskkill.exe", "/PID", str(process.pid), "/T", "/F"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               creationflags=subprocess.CREATE_NO_WINDOW, timeout=5)
-            else:
-                try:
-                    os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
             process.communicate()
         raise
 
 
 class BoundedConfigurationChecker:
+    def __init__(self, *, strict_transport=False, ssh_host_key_policy=""):
+        self.strict_transport = strict_transport
+        self.ssh_host_key_policy = ssh_host_key_policy
+
     def __call__(self, kind, config, target, *, revision=None, source=None):
         payload = {
             "kind": kind,
@@ -76,6 +69,8 @@ class BoundedConfigurationChecker:
             "revision": revision,
             "source": str(source),
             "python_paths": sys.path,
+            "strict_transport": self.strict_transport,
+            "ssh_host_key_policy": self.ssh_host_key_policy,
         }
         try:
             code, out, _err = run_owned(
@@ -93,7 +88,7 @@ class BoundedConfigurationChecker:
             return {"verified": False, "code": "check_unavailable"}
 
 
-def check_target(config, target):
+def check_target(config, target, *, strict_transport=False, ssh_host_key_policy=""):
     from openubmc_target_runtime import (
         CredentialResolver,
         CredentialSelector,
@@ -122,7 +117,7 @@ def check_target(config, target):
             .credentials
         )
     if target["transport"] == "ssh":
-        from _remote_common import OpenSshControlMasterTransport
+        from _remote_common import OpenSshControlMasterTransport, resolve_ssh_host_key_config
 
         selector = CredentialSelector.for_ssh(
             user=selected.user,
@@ -132,8 +127,17 @@ def check_target(config, target):
             environ={},
         )
         resolver = CredentialResolver(ssh_loader=lambda _selector: selected)
+        host_key = resolve_ssh_host_key_config(
+            "strict" if strict_transport else
+            ssh_host_key_policy or ("strict" if target["purpose"] == "os" else "")
+        )
         transport = OpenSshControlMasterTransport(
-            host_key_policy="strict", known_hosts_file="", allow_insecure_host_key=False
+            host_key_policy=host_key["policy"],
+            known_hosts_file=host_key["_known_hosts_file"],
+            allow_insecure_host_key=host_key["policy"] == "insecure",
+        )
+        transport_verification = (
+            "disabled" if host_key["policy"] == "insecure" else host_key["policy"]
         )
     else:
         from openubmc_upgrade.runtime_backend import RedfishUpgradeTransport
@@ -142,7 +146,8 @@ def check_target(config, target):
             user=selected.user, user_env="", password_env="", environ={}
         )
         resolver = CredentialResolver(redfish_loader=lambda _selector: selected)
-        transport = RedfishUpgradeTransport(verify_tls=True, timeout=8)
+        transport = RedfishUpgradeTransport(verify_tls=strict_transport, timeout=8)
+        transport_verification = "strict" if strict_transport else "disabled"
     spec = TargetSpec(
         host=target["ip"], credential_selector_fingerprint=selector.fingerprint
     )
@@ -188,7 +193,8 @@ def check_target(config, target):
                     "GET", "/redfish/v1/Managers"
                 ),
             )
-        return {"verified": True, "code": "connected"}
+        return {"verified": True, "code": "connected",
+                "transport_verification": transport_verification}
     finally:
         task.close()
 
@@ -315,7 +321,9 @@ def worker():
     sys.path[:0] = data["python_paths"]
     try:
         if data["kind"] == "targets":
-            result = check_target(data["config"], data["target"])
+            result = check_target(data["config"], data["target"],
+                                  strict_transport=data.get("strict_transport", False),
+                                  ssh_host_key_policy=data.get("ssh_host_key_policy", ""))
         elif data["kind"] == "conan":
             result = check_conan(data["config"], data["target"])
         else:

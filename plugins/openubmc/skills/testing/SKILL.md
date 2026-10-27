@@ -1,6 +1,6 @@
 ---
 name: openubmc-dt-testing
-description: 为 openUBMC 组件设计、编写和执行 UT/IT 测试，包括 LuaUnit、Mock、测试数据、bingo test、集成测试配置与覆盖率分析。Use when the user asks to add or run unit tests, integration tests, coverage checks, assertions, mocks, or test fixtures for an openUBMC component. Do not use for OpenBMC test frameworks or unrelated third-party runners.
+description: 为 openUBMC 组件设计、编写和执行 UT/IT 测试，包括 LuaUnit、Mock、测试数据、bmcgo test、集成测试配置与覆盖率分析。Use when the user asks to add or run unit tests, integration tests, coverage checks, assertions, mocks, or test fixtures for an openUBMC component. Do not use for OpenBMC test frameworks or unrelated third-party runners.
 ---
 
 # OpenUBMC DT 测试
@@ -8,17 +8,17 @@ description: 为 openUBMC 组件设计、编写和执行 UT/IT 测试，包括 L
 When the task enters another workflow stage, read [the phase handoff](<../openubmc-debug/references/skill-routing.md>)
 and load its owner before acting; carry the existing Run and authorization.
 
-openUBMC DT 测试框架基于 LuaUnit，通过 `bingo test` 命令驱动。UT 验证组件内函数可靠性，IT 验证组件间 D-Bus 接口可靠性。本 Skill 覆盖从用例编写到执行验证的完整流程。
+openUBMC DT 测试框架基于 LuaUnit，通过组件目录中的 `bmcgo test` 命令驱动。执行前核对当前安装版本的 `bmcgo test -h`，沿用仓库已验证的参数和环境。UT 验证组件内函数可靠性，IT 验证组件间 D-Bus 接口可靠性。本 Skill 覆盖从用例编写到执行验证的完整流程。
 
 ## Step 1: 收集需求
 
-在编写测试之前，向用户收集以下信息：
-
-- **必须**：被测组件名和被测模块
-- **必须**：测试类型（UT 还是 IT）
-- **按需**：当前 `test/` 目录结构（判断是新增还是补充）
-- **按需**：`service.json` 内容（IT 需要确认依赖声明）
-- **按需**：失败日志或 `dt_result.json`（如排查问题）
+先复用当前任务、仓库和交接中的组件、模块、失败证据与授权，读取现有 `test/`
+布局和相邻用例。函数行为使用 UT；跨组件 D-Bus 行为使用 IT，并检查 `service.json`
+依赖。沿用仓库 runner、mock 和清理约定，自行完成常规测试设计。
+只有源码和上下文仍无法确定目标或验收行为时，询问影响结果的必要缺口；
+已明确的组件、UT/IT 类型、目录或授权不重复询问。
+按本次改动选择必要用例。IT 环境、覆盖率或可选依赖不可用时，记录未执行项并继续
+可运行的验证与源码工作；只有实际失败影响交付时才阻止相应交付步骤。
 
 ## Step 2: 编写单元测试（UT）
 
@@ -57,7 +57,7 @@ end
 
 ### 2.3 配置入口文件
 
-`test/unit/test.lua` 是 UT 入口，`bingo test -ut` 自动执行此文件。大部分代码固定，只需用 `require` 导入测试模块：
+`test/unit/test.lua` 是 UT 入口，`bmcgo test -ut` 自动执行此文件。大部分代码固定，只需用 `require` 导入测试模块：
 
 ```lua
 loadfile(os.getenv('CONFIG_FILE'), 't', {package = package, os = os})()
@@ -124,13 +124,13 @@ end
 ### 2.6 运行
 
 ```bash
-bingo test -ut
+bmcgo test -ut
 ```
 
 带过滤器运行特定用例：
 
 ```bash
-bingo test -ut -f "test_calculator"
+bmcgo test -ut -f "test_calculator"
 ```
 
 ## Step 3: 编写集成测试（IT）
@@ -228,18 +228,18 @@ end
 
 ### 3.4 检查 service.json 依赖
 
-IT 依赖的组件必须在 `service.json` 中声明。缺少声明会导致 `bingo test -it` 超时或卡住。
+IT 依赖的组件必须在 `service.json` 中声明。缺少声明会导致 `bmcgo test -it` 超时或卡住。
 
 ### 3.5 运行
 
 ```bash
-bingo test -it
+bmcgo test -it
 ```
 
 ## Step 4: 测试覆盖率
 
 ```bash
-bingo test -ut -cov
+bmcgo test -ut -cov
 ```
 
 覆盖率范围是组件 `src/` 目录下所有 Lua 代码。结果输出：
@@ -268,7 +268,7 @@ bingo test -ut -cov
 ## 关键规则
 
 - CRITICAL: 严格按 openUBMC 官方 DT 体系工作，禁止套用 OpenBMC 或 generic Lua 测试套路
-- CRITICAL: 官方命令为 `bingo test -ut` 和 `bingo test -it`，禁止写成 `bingo test --unit`、`bingo test --integration`、`bingo test --e2e`
+- CRITICAL: 官方命令为 `bmcgo test -ut` 和 `bmcgo test -it`，禁止写成 `bmcgo test --unit`、`bmcgo test --integration`、`bmcgo test --e2e`
 - CRITICAL: 禁止默认引入第三方 runner 替代官方 UT 框架
 - CRITICAL: 禁止只给运行命令，不说明测试对象、目录和入口文件
 - UT 文件结构：`test/unit/test.lua`（入口）+ `test/unit/test_xxx.lua`（用例）
@@ -331,7 +331,7 @@ end
 require 'test_operation'
 ```
 
-运行：`bingo test -ut`
+运行：`bmcgo test -ut`
 
 ### 示例 2：为 new_app 组件编写 IT
 
@@ -378,7 +378,7 @@ skynet.start(function()
 end)
 ```
 
-确认 `service.json` 中声明了 test 依赖后运行：`bingo test -it`
+确认 `service.json` 中声明了 test 依赖后运行：`bmcgo test -it`
 
 ### 示例 3：带 Mock 的 UT
 
@@ -409,13 +409,13 @@ end
 
 ## Troubleshooting
 
-### bingo test -ut 找不到测试文件
+### bmcgo test -ut 找不到测试文件
 
 1. 确认 `test/unit/test.lua` 存在
 2. 确认 `test/unit/test.lua` 中 `require` 了目标测试模块
 3. 确认测试文件命名以 `test_` 开头
 
-### bingo test -it 超时或卡住
+### bmcgo test -it 超时或卡住
 
 1. 检查 `service.json` 中的测试依赖声明
 2. 确认 `test_<app>.conf` 中包含 `config:set_start(...)`
@@ -423,7 +423,7 @@ end
 
 ### 覆盖率报告为空或显示 0%
 
-1. 确认使用 `bingo test -ut -cov` 运行
+1. 确认使用 `bmcgo test -ut -cov` 运行
 2. 检查 `temp/coverage/` 目录是否生成
 3. 确认测试用例覆盖了目标模块的导出函数
 

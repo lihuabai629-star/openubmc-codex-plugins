@@ -1260,12 +1260,16 @@ class UpgradeMcpBackend:
         if content_length <= 0:
             raise ValueError("WebUI upload body must have a positive content length")
         mark_effects_started()
-        uploaded = webui.upload(
-            body=body,
-            boundary=boundary,
-            content_length=content_length,
-            timeout=upload_timeout,
-        )
+        try:
+            uploaded = webui.upload(
+                body=body,
+                boundary=boundary,
+                content_length=content_length,
+                timeout=upload_timeout,
+            )
+        except WebUiHttpError as exc:
+            record_operation_state({"upload_http_diagnostics": exc.diagnostics})
+            raise
         if uploaded.status < 200 or uploaded.status >= 300:
             if 400 <= uploaded.status < 500:
                 raise MutationEffectsRejected(
@@ -1286,9 +1290,10 @@ class UpgradeMcpBackend:
         try:
             started = webui.start(image_uri)
         except WebUiHttpError as exc:
+            record_operation_state({"start_http_diagnostics": exc.diagnostics})
             raise WebUiStartError(
                 exc.status,
-                f"WebUI upgrade start returned HTTP {exc.status} after upload completed",
+                f"WebUI upgrade start returned HTTP {exc.status} after upload completed: {exc}",
             ) from exc
         if started.status < 200 or started.status >= 300:
             raise WebUiStartError(
@@ -2275,7 +2280,7 @@ class UpgradeMcpBackend:
             actual_size = len(artifact_bytes)
         if actual_sha != artifact.sha256:
             raise ValueError("upgrade artifact SHA-256 does not match")
-        validate_artifact_metadata(
+        artifact_metadata = validate_artifact_metadata(
             artifact_path,
             expected_sha256=artifact.sha256,
             product_version=artifact.product_version,
@@ -2408,7 +2413,10 @@ class UpgradeMcpBackend:
                 "activation fallback; the artifact was not uploaded again"
             )
         context.raise_if_stopped()
-        return result.to_public_dict()
+        public_result = result.to_public_dict()
+        if artifact_metadata.get("provenance_warnings"):
+            public_result["artifact_metadata"] = artifact_metadata
+        return public_result
 
     def upgrade_run(
         self,

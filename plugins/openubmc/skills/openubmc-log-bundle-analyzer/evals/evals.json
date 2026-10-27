@@ -1,0 +1,416 @@
+{
+  "skill_name": "openubmc-log-bundle-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "这是一个 openUBMC 一键日志 tar.gz。请先校验包结构，再分析 BMC 登录失败，给出包内相对路径、行号、时间戳、证据强弱和下一步只读验证。",
+      "expected_output": "Validates the archive, routes the symptom to security and operation logs, and reports portable evidence pointers without claiming health from absence.",
+      "files": ["evals/fixtures/login-bundle"],
+      "expectations": [
+        "Computes or reports an archive identity and validates dump_info before analysis.",
+        "Prioritizes security.log and operation.log for login failure.",
+        "Reports bundle-relative paths and line numbers, with confidence and missing evidence."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/login-bundle",
+        "problem": "BMC 登录失败",
+        "options": {"max_files": 5, "max_lines": 3},
+        "checks": [
+          {"op": "equals", "path": "assessment", "value": "evidence_found"},
+          {"op": "ends_with", "path": "evidence.0.path", "value": "security.log"},
+          {"op": "non_empty", "path": "timeline"}
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "prompt": "已解压的一键日志里 cooling 对象停止更新。请不要全包扫描，按问题选择日志并给出证据。",
+      "expected_output": "Uses AppDump object and synchronization evidence before generic runtime logs and keeps the scan bounded.",
+      "files": ["evals/fixtures/object-sync-bundle"],
+      "expectations": [
+        "Selects mdb_info.log, sync_property_trace.log, and rpc_records.log for object synchronization symptoms.",
+        "Ranks cooling component paths ahead of unrelated AppDump paths.",
+        "Does not scan every file by default."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/object-sync-bundle",
+        "problem": "cooling 对象停止更新",
+        "options": {"max_files": 5, "max_lines": 3},
+        "checks": [
+          {
+            "op": "contains_all",
+            "path": "selected_logs.*.name",
+            "values": ["mdb_info.log", "sync_property_trace.log", "rpc_records.log"]
+          },
+          {"op": "all_contains", "path": "selected_logs.*.scanned_paths.*", "value": "AppDump/cooling/"}
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "prompt": "目标只给了 BMC 地址。请分析服务启动失败。",
+      "expected_output": "Explains that this Skill requires a local one-click bundle and does not open a network connection or collect from the BMC.",
+      "files": [],
+      "expectations": [
+        "Does not connect to the supplied BMC address.",
+        "Requests a local .tar/.tar.gz bundle or extracted dump_info tree before analysis.",
+        "Does not substitute live runtime inspection for the missing local artifact."
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "这个 tar 包里有多个 dump_info 目录，而且包含符号链接。帮我分析里面的日志。",
+      "expected_output": "Rejects the artifact before interpretation and reports a structure or extraction validation failure.",
+      "files": ["evals/fixtures/structure-rejection.json"],
+      "expectations": [
+        "Does not select an arbitrary bundle root.",
+        "Does not follow or extract symbolic links.",
+        "Reports the validation blocker instead of producing a root-cause claim."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/structure-rejection.json",
+        "generator": "structure_rejection",
+        "driver": "structure_rejection",
+        "checks": [
+          {"op": "equals", "path": "assessment", "value": "artifact_rejected"},
+          {"op": "equals", "path": "analysis_attempted", "value": false},
+          {
+            "op": "contains_all",
+            "path": "rejections.*.code",
+            "values": ["bundle_layout_ambiguous", "extract_failed"]
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "prompt": "Prometheus 的 BMC 指标没了，请结合 Elasticsearch 日志和 Zipkin Trace 判断是 OTLP 还是 BMC 故障。",
+      "expected_output": "Explains that the request requires evidence from the observability system and is outside one-click bundle analysis.",
+      "files": [],
+      "expectations": [
+        "Does not present one-click bundle analysis as the primary workflow.",
+        "Identifies the required observability evidence without naming or assuming an external Skill dependency."
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "在线检查 skynet 服务为什么启动失败，并用 systemctl、journalctl、MDB 和 D-Bus 验证当前状态。",
+      "expected_output": "Explains that the request requires explicitly authorized live, read-only service and object-state diagnostics rather than bundle analysis.",
+      "files": [],
+      "expectations": [
+        "Does not collect a bundle as a substitute for current runtime state.",
+        "Identifies the required live diagnostics without naming or assuming an external Skill dependency."
+      ]
+    },
+    {
+      "id": 7,
+      "prompt": "完整一键日志包包含 3rdDump、CoreDump、OptBMC、dump_log 和 dump_app_log。请分析 Web/HTTPS 访问失败，但不要展开 core 或 factory backup，也不要扫描 Nginx 配置。",
+      "expected_output": "Recognizes the observed bundle sections, summarizes direct dump_info files, and selects only Nginx text logs plus relevant network evidence for the Web symptom.",
+      "files": ["evals/fixtures/web-bundle"],
+      "expectations": [
+        "Treats 3rdDump, CoreDump, and OptBMC as recognized sections instead of unknown vendor directories.",
+        "Reports dump_info root files by relative path and size without reading their contents.",
+        "Selects 3rdDump access_log and error_log for Web/HTTPS evidence.",
+        "Does not recursively unpack core archives, factory backups, or configuration archives."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/web-bundle",
+        "problem": "Web/HTTPS 访问失败",
+        "options": {"max_files": 4, "max_lines": 4},
+        "checks": [
+          {
+            "op": "contains_all",
+            "path": "bundle_validation.present_sections.*",
+            "values": ["3rdDump", "CoreDump", "OptBMC"]
+          },
+          {
+            "op": "contains_all",
+            "path": "bundle_validation.root_files.*.path",
+            "values": ["dump_info/dump_log", "dump_info/dump_app_log"]
+          },
+          {
+            "op": "contains_all",
+            "path": "selected_logs.*.name",
+            "values": ["nginx_access_log", "nginx_error_log"]
+          },
+          {"op": "all_contains", "path": "selected_logs.*.scanned_paths.*", "value": "dump_info/3rdDump/"},
+          {"op": "contains_text", "path": "evidence", "value": "<redacted>"},
+          {"op": "not_contains_text", "path": "", "value": "community-eval-token-7"},
+          {"op": "not_contains_text", "path": "", "value": "community-eval-password-7"},
+          {"op": "not_contains_text", "path": "selected_logs", "value": "nginx.conf"},
+          {"op": "not_contains_text", "path": "selected_logs", "value": "factory-backup.tar.gz"}
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "prompt": "传感器读值已经达到门限，但 Web 上没有告警。请检查当前告警、历史事件和事件屏蔽证据，不要只看 alarm.log。",
+      "expected_output": "Uses the maintained Event component candidates to distinguish absent generation, historical occurrence, and event masking without presenting their file purposes as a public product contract.",
+      "files": ["evals/fixtures/event-bundle"],
+      "expectations": [
+        "Selects AppDump/event/current_event.txt for current alarms.",
+        "Selects AppDump/event/sel.txt or eo_sel.csv for historical events.",
+        "Selects AppDump/event/mask_event.txt for masked-event evidence."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/event-bundle",
+        "problem": "传感器读值达到门限但 Web 没有告警，检查当前告警、历史事件和事件屏蔽",
+        "options": {"max_files": 10, "max_lines": 3},
+        "checks": [
+          {
+            "op": "contains_all",
+            "path": "selected_logs.*.name",
+            "values": ["current_event.txt", "sel.txt", "eo_sel.csv", "mask_event.txt"]
+          },
+          {"op": "all_contains", "path": "selected_logs.*.scanned_paths.*", "value": "dump_info/AppDump/event/"}
+        ]
+      }
+    },
+    {
+      "id": 9,
+      "prompt": "风扇型号识别和转速都不正常，请结合调速日志与一键日志中的风扇信息快照分析。",
+      "expected_output": "Combines control decisions with the maintained thermal-management fan snapshot candidates without presenting their file purposes as a public product contract.",
+      "files": ["evals/fixtures/thermal-bundle"],
+      "expectations": [
+        "Selects cooling_control.log and Thermal.log for control behavior.",
+        "Selects AppDump/thermal_mgmt/fan_info.txt and thermal_info.txt for fan identity and speed context.",
+        "Keeps component-specific AppDump evidence ahead of unrelated component directories."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/thermal-bundle",
+        "problem": "风扇型号识别和转速异常，结合调速与 thermal_mgmt 快照",
+        "options": {"max_files": 8, "max_lines": 3},
+        "checks": [
+          {
+            "op": "contains_all",
+            "path": "selected_logs.*.name",
+            "values": ["cooling_control.log", "Thermal.log", "fan_info.txt", "thermal_info.txt"]
+          },
+          {"op": "not_contains_text", "path": "selected_logs", "value": "dump_info/AppDump/unrelated/"}
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "prompt": "日志包里有 AppDump/firmware_mgmt，但参考表没有这个组件的专用文件定义。请分析 firmware_mgmt 状态异常，不要凭目录里的其他文件名猜用途。",
+      "expected_output": "Uses the bundle-local component directory only to target the maintained generic AppDump evidence contracts.",
+      "files": ["evals/fixtures/dynamic-component-bundle"],
+      "expectations": [
+        "Selects firmware_mgmt/mdb_info.log, sync_property_trace.log, and rpc_records.log when present.",
+        "Does not scan unrelated AppDump component directories.",
+        "Does not assign semantics to unknown firmware_mgmt files from their names alone."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/dynamic-component-bundle",
+        "problem": "firmware_mgmt 状态异常",
+        "options": {"max_files": 5, "max_lines": 3},
+        "checks": [
+          {
+            "op": "contains_all",
+            "path": "selected_logs.*.name",
+            "values": ["mdb_info.log", "sync_property_trace.log", "rpc_records.log"]
+          },
+          {
+            "op": "contains_all",
+            "path": "selected_logs.*.routing_basis.*",
+            "values": ["bundle_local_component"]
+          },
+          {
+            "op": "all_contains",
+            "path": "selected_logs.*.scanned_paths.*",
+            "value": "dump_info/AppDump/firmware_mgmt/"
+          },
+          {"op": "not_contains_text", "path": "selected_logs", "value": "mystery_status.txt"},
+          {"op": "not_contains_text", "path": "selected_logs", "value": "dump_info/AppDump/cooling/"}
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "prompt": "请把服务启动失败相关证据按时间顺序关联起来，但不要把时间接近直接说成因果关系。",
+      "expected_output": "Builds a cross-log chronological timeline and labels multi-log grouping as temporal proximity only.",
+      "files": ["evals/fixtures/timeline-bundle"],
+      "expectations": [
+        "Reports framework.log before journalctl.log in the chronological timeline.",
+        "Creates a correlation window containing both log types.",
+        "Does not claim that temporal proximity proves causality."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/timeline-bundle",
+        "problem": "service startup failed",
+        "options": {"max_files": 4, "max_lines": 3},
+        "checks": [
+          {"op": "ends_with", "path": "timeline.0.path", "value": "framework.log"},
+          {"op": "ends_with", "path": "timeline.1.path", "value": "journalctl.log"},
+          {
+            "op": "equals",
+            "path": "correlation_windows.0.interpretation",
+            "value": "temporal_proximity_only"
+          }
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "prompt": "分析对象同步失败；如果日志损坏、不是文本或达到扫描上限，要明确报告分析不完整，不能当作没有证据。",
+      "expected_output": "Preserves scan failures and resource-limit gaps in the structured assessment.",
+      "files": ["evals/fixtures/object-sync-bundle"],
+      "expectations": [
+        "Reports the physical paths and bytes actually scanned.",
+        "Distinguishes analysis_incomplete from insufficient_bundle_evidence.",
+        "Reports source type and reliability for selected log definitions."
+      ],
+      "execution": {
+        "generator": "damaged_gzip",
+        "problem": "BMC 登录失败",
+        "options": {"max_files": 2, "max_lines": 2},
+        "checks": [
+          {"op": "equals", "path": "assessment", "value": "analysis_incomplete"},
+          {"op": "non_empty", "path": "scan.errors"}
+        ]
+      }
+    },
+    {
+      "id": 13,
+      "prompt": "以 operation.log 中的失败操作为事件锚点，检查同一时间附近的组件日志；模块一致时标出来，但不要直接断言因果。",
+      "expected_output": "Builds a stable operation-event anchor, ranks nearby component evidence, and separates temporal or module association from causality.",
+      "files": ["evals/fixtures/operation-correlation-bundle"],
+      "expectations": [
+        "Uses operation.log evidence as the event anchor.",
+        "Reports signed time deltas and exact shared component tokens.",
+        "Marks the association as candidate context rather than causal proof."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/operation-correlation-bundle",
+        "problem": "操作失败并关联 app.log",
+        "options": {"max_files": 4, "max_lines": 3},
+        "checks": [
+          {"op": "non_empty", "path": "event_correlations"},
+          {
+            "op": "equals",
+            "path": "event_correlations.0.interpretation",
+            "value": "candidate_context_not_causality"
+          }
+        ],
+        "golden": {
+          "file": "evals/golden/operation-correlation.json",
+          "projection": [
+            {"target": "finding_count", "path": "evidence_findings", "transform": "length"},
+            {"target": "event_correlations", "path": "event_correlations"},
+            {"target": "unmatched_event_anchors", "path": "unmatched_event_anchors"}
+          ]
+        }
+      }
+    },
+    {
+      "id": 14,
+      "prompt": "分析 PCIe 线缆和端口状态，解析 cable_info 的结构，但没有公开状态定义时不要猜测状态码含义，也不要输出设备 UID。",
+      "expected_output": "Parses bounded topology records, aggregates opaque status codes, omits hardware identifiers, and requires a sourced product profile for semantics.",
+      "files": ["evals/fixtures/structured-bundle"],
+      "expectations": [
+        "Selects the exact pcie_device/cable_info artifact.",
+        "Reports record kinds, status-code counts, and portable line samples.",
+        "Does not interpret status codes or expose UID values without a sourced profile."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/structured-bundle",
+        "problem": "PCIe 线缆缺卡或端口接错",
+        "options": {"max_files": 5, "max_lines": 2},
+        "checks": [
+          {"op": "non_empty", "path": "structured_summaries"},
+          {"op": "not_contains_text", "path": "structured_summaries", "value": "111111111111111111"}
+        ],
+        "golden": {
+          "file": "evals/golden/structured-topology.json",
+          "projection": [
+            {"target": "assessment", "path": "assessment"},
+            {"target": "structured_observation_count", "path": "structured_observation_count"},
+            {
+              "target": "summary",
+              "path": "structured_summaries",
+              "transform": "first_where",
+              "where": {"parser": "pcie_topology_records"},
+              "fields": [
+                "parser",
+                "path",
+                "observation_type",
+                "interpretation",
+                "observed_record_count",
+                "complete",
+                "truncated",
+                "bytes_observed",
+                "time_window_applied",
+                "record_kind_counts",
+                "status_code_counts",
+                "records_without_unit_identifier",
+                "sensitive_fields_omitted"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "prompt": "对这个一键日志包做综合故障概览，优先核对当前告警和历史事件，再结合运行日志给出有边界的证据时间线。",
+      "expected_output": "Prioritizes active and historical event artifacts, then uses a bounded runtime-log set for supporting context without scanning the entire bundle.",
+      "files": ["evals/fixtures/general-fault-bundle"],
+      "expectations": [
+        "Ranks current_event.txt and sel.txt before generic runtime logs.",
+        "Selects the maintained eight-artifact overview set and no unrelated log families.",
+        "Produces portable evidence pointers and a timestamped timeline from the bounded fixture."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/general-fault-bundle",
+        "problem": "整体检查近期错误和主要故障，给出关键证据、时间线、相关性、置信度和下一步建议",
+        "options": {"max_files": 8, "max_lines": 2},
+        "checks": [
+          {"op": "equals", "path": "selected_logs.0.name", "value": "current_event.txt"},
+          {
+            "op": "contains_all",
+            "path": "selected_logs.*.name",
+            "values": [
+              "current_event.txt",
+              "sel.txt",
+              "app.log",
+              "framework.log",
+              "journalctl.log",
+              "maintenance.log",
+              "running.log",
+              "alarm.log"
+            ]
+          },
+          {"op": "contains_text", "path": "evidence", "value": "current_event.txt"},
+          {"op": "contains_text", "path": "evidence", "value": "sel.txt"},
+          {"op": "non_empty", "path": "timeline"}
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "prompt": "日志包中存在未维护字段语义的 mystery_status.txt。请只检查这个具体文件，不要附加同目录组件日志，也不要读取或猜测正文。",
+      "expected_output": "Binds the exact physical artifact, inherits the generic opaque fallback, and does not add component companion logs or scan payload bytes.",
+      "files": ["evals/fixtures/dynamic-component-bundle"],
+      "expectations": [
+        "Selects only the exact mystery_status.txt physical path.",
+        "Uses metadata-only handling inherited from the AppDump fallback.",
+        "Does not add mdb_info.log, sync_property_trace.log, or rpc_records.log."
+      ],
+      "execution": {
+        "fixture": "evals/fixtures/dynamic-component-bundle",
+        "problem": "检查 mystery_status.txt",
+        "options": {"max_files": 5, "max_lines": 3},
+        "checks": [
+          {"op": "equals", "path": "selected_logs.0.name", "value": "mystery_status.txt"},
+          {"op": "equals", "path": "selected_logs.0.scan_mode", "value": "metadata_only"},
+          {"op": "equals", "path": "selected_logs.0.routing_basis", "value": ["explicit_bundle_path"]},
+          {"op": "equals", "path": "selected_logs.0.scanned_path_count", "value": 0},
+          {"op": "equals", "path": "scan.scanned_bytes", "value": 0},
+          {"op": "not_contains_text", "path": "selected_logs", "value": "mdb_info.log"},
+          {"op": "not_contains_text", "path": "selected_logs", "value": "sync_property_trace.log"},
+          {"op": "not_contains_text", "path": "selected_logs", "value": "rpc_records.log"}
+        ]
+      }
+    }
+  ]
+}

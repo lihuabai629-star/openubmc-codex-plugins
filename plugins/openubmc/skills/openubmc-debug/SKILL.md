@@ -7,55 +7,54 @@ description: "Diagnose openUBMC/BMC runtime problems: 设备不识别、传感�
 
 At a stage change, read [the phase handoff](<references/skill-routing.md>) and its owner; carry the Run and authorization.
 
+Resolve `<plugin-root>` from the active Skill file's parent `skills` directory.
+Use helpers from that installation.
+
 ## Scope and ownership
+Diagnose live symptoms and verify requested deployed behavior.
 
-Own read-only diagnosis and post-change verification:
-
-- diagnosis: explain and localize a current or reproduced symptom;
-- delivery verification: verify requested behavior on the deployed target.
-
-Route implementation to its owner:
+Route by task:
 - source or design change -> `openubmc-developer` or the matching specialist;
 - component or product build -> `openubmc-build`;
 - firmware upgrade or rollback -> `openubmc-upgrade`;
 - temporary runtime replacement -> `openubmc-live-patch`;
-- offline dump or log-bundle-only analysis -> `openubmc-log-analyzer`.
-- Confirmed BMC/OS address association -> `openubmc-environment-setup`.
+- remote bundle collection -> `openubmc-log-analyzer`;
+- local bundle analysis -> `openubmc-log-bundle-analyzer`.
+- Save an explicitly confirmed BMC/OS address association -> `openubmc-environment-setup`.
 
 ## Choose `observe` or `execute`
 
 Use the default `openubmc-target-runtime` MCP through its semantic Agent Interface:
 
-- For current systemd service failures, use a `systemd` selector with literal `.service` names
-  or `["failed"]` discovery; see the Agent semantic interface reference below.
+- For service failures, use a `systemd` selector with literal `.service` names or `["failed"]`.
+- For an authorized OS task with BMC IP and no OS IP, select `os_console`; see its reference below.
 - Call `observe` for an exact read-only question using only required selectors.
+  Use the established target and credentials. Internal Gate response fields are
+  filled by the Agent from evidence; they are not requests for human approval.
   A narrow MDB or capability query should complete in one call and return an inline
   `ObservationReceipt`.
-- Treat one answer as one observation: combine related capability, MDB and systemd selectors needed for
-  the answer in the same `observe` call. Do not run a separate capability preflight; the internal
-  Observation Adapter performs it.
+- Combine capability, MDB, systemd and OS-console selectors in the same `observe` call.
+  Do not run a separate capability preflight.
 - Call `execute` for diagnosis Runs, source changes, builds, patches, upgrades, verification
   or an authorized MDB assignment. Read its property reference before any assignment.
-- A build-upgrade Run that requires exact Drive convergence may carry a bounded
-  `hardware_acceptance.devices` declaration in its Debug entry arguments. It is validated
-  before mutation but applied only to post-upgrade `debug_collect`: missing, unhealthy,
-  unidentified, protocol-mismatched, or incorrectly attributed Drives keep verification
-  `partial` so the same Runtime step recollects fresh evidence instead of forming an early
-  success Outcome.
+- A build-upgrade Run may declare `hardware_acceptance.devices` for exact Drive convergence.
+  Only post-upgrade `debug_collect` applies it: missing, unhealthy, unidentified or
+  protocol-mismatched Drives keep verification partial and require fresh evidence.
 - An `ObservationRef` proves reusable observation evidence; it does not by itself prove a root
   cause. Every diagnosis workflow reaches the Runtime-owned `diagnosis.acceptance` Gate before
   `developer.change`, including a complete collection receipt.
-- Answer `diagnosis.acceptance` once with the returned `run_id`, `gate_id`, `gate_version`, and
-  `schema_digest`. A completed response supplies `root_cause`, non-empty `evidence_ids` drawn only
-  from the current DiagnosticReceipt, `causal_chain`, `code_owner`, `contradictions`,
-  `remaining_gaps`, and `verification_status=verified` when accepting the diagnosis. Contradictions
-  must be empty for acceptance. The Runtime derives observation time and freshness from its
-  persisted evidence; do not restate or invent them.
-- `execute(kind=resume)` only reattaches the current Run. It does not answer or repair an
-  unanswered diagnosis Gate, so an unchanged Gate is not a reason to retry resume. Mark the Gate
-  failed or cancelled when no defensible diagnosis can be formed; development must remain closed.
-  `response_required=true` with `progress.status=no_progress` means respond using the returned
-  binding instead of issuing another resume.
+- Answer `diagnosis.acceptance` using its returned binding and input schema.
+  Accept only a verified causal chain supported by non-empty evidence IDs from
+  the current DiagnosticReceipt, with an identified owner and no contradictions.
+  The Runtime derives observation time and freshness from persisted evidence.
+- `execute(kind=resume)` reattaches the Run; it cannot answer an unanswered Gate.
+  For `response_required=true` and `progress.status=no_progress`, submit the
+  returned Gate binding. When no defensible diagnosis exists, fail or cancel
+  that Gate and preserve the gap while continuing independent authorized work.
+- For `completed`, `failed`, or `cancelled`, deliver the Outcome and remaining gaps.
+  A terminal Run stays terminal when resumed. Start a new Run for a new target or intent,
+  record its link to the prior Run, and use its returned bindings. An unknown Effect instead
+  retains its original Run, Incident and Effect identities for recovery.
 - Treat one `ObservationReceipt` or `Turn` as the semantic result. Capability is tri-state:
   `available`, `unavailable`, or `not_checked`; never infer an unobserved capability.
 - In an `execute` MCP result, inspect `structured_content.diagnostic_receipt`; `content` is a state
@@ -66,7 +65,7 @@ Use the default `openubmc-target-runtime` MCP through its semantic Agent Interfa
 - Do not use compatibility or operator operations from the default Agent profile.
 Windows/WSL: see `references/windows-routing.md`.
 
-For a read-only diagnosis, replace the target and purpose in this complete `execute` Action:
+For read-only diagnosis, fill the target and purpose in this `execute` Action:
 
 ```json
 {
@@ -133,7 +132,6 @@ observation. For delivery verification, account for every requested item and kee
 identity separate from local source or package evidence.
 
 ## Result contract
-
 Report concisely unless machine-readable output was requested:
 
 1. status and shortest evidence-backed conclusion;
@@ -149,8 +147,9 @@ business acceptance.
 
 ## Read-only invariants
 
-- Keep all remote actions read-only in diagnostic helpers and `observe`. Diagnostic SSH uses
-  `insecure`; the typed property workflow requires strict host verification.
+- Keep all remote actions read-only in diagnostic helpers and `observe`. BMC SSH
+  and the typed property workflow reuse the configured host-key policy; no extra
+  strict-host prerequisite is added for an already authorized property assignment.
 - Bound object trees, logs, files, source searches, deadlines, and output. Preserve timestamps and
   relevant excerpts.
 - Treat current alarm reads as current state and historical event APIs as history.
@@ -162,6 +161,7 @@ Read the relevant one-hop references:
 
 - Run, Gate and recovery: `references/agent-gateway.md`, `references/host-continuity.md`
 - Remote credentials, preflight, helpers, concurrency, and target automation: `references/remote-automation.md`
+- OS identity/network through BMC SOL: `references/os-console.md`
 - Evidence selection and correlation: `references/evidence-workflow.md`
 - Hypothesis-directed Drive diagnosis and fault-chain comparison: `references/diagnostic-advice.md`
 - Combined snapshot details: `references/workflow.md`

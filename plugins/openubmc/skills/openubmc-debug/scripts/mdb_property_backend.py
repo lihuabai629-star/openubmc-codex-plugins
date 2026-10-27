@@ -22,7 +22,7 @@ import shlex
 import xml.etree.ElementTree as ET
 
 from _target_runtime_adapter import _load_runtime_module
-from _remote_common import OpenSshControlMasterTransport
+from _remote_common import OpenSshControlMasterTransport, resolve_ssh_host_key_config
 
 _runtime = _load_runtime_module()
 _state = importlib.import_module(_runtime.__name__ + ".property_state")
@@ -236,13 +236,15 @@ class MdbPropertyBackend:
             if existing.selector.fingerprint != selector.fingerprint:
                 raise PermissionError("property credentials differ from the frozen binding")
             return existing
+        host_key = resolve_ssh_host_key_config()
         target = _runtime.TargetSpec.for_credential_selectors(host=host, ssh_port=port,
-            credential_selectors=(selector,), policy=_runtime.TargetPolicy(read_only=False, ssh_host_key_policy="strict"))
+            credential_selectors=(selector,), policy=_runtime.TargetPolicy(read_only=False, ssh_host_key_policy=host_key["policy"]))
         run = _runtime.OpenUBMCTaskRun(task_id=task.task_id,
             credential_resolver=_runtime.CredentialResolver(ssh_loader=lambda _selector: credentials),
             mutation_journal_store=self.journal_store)
         transport = self.transport_factory() if self.transport_factory else OpenSshControlMasterTransport(
-            host_key_policy="strict", known_hosts_file=os.environ.get("OPENUBMC_SSH_KNOWN_HOSTS_FILE", ""))
+            host_key_policy=host_key["policy"], known_hosts_file=host_key["_known_hosts_file"],
+            allow_insecure_host_key=host_key["policy"] == "insecure")
         lane = run.ssh_lane(target=target, credential_selector=selector, lease_name="mdb-property", transport=transport)
         binding = _Binding(run, target, selector, lane)
         task.bindings[key] = binding

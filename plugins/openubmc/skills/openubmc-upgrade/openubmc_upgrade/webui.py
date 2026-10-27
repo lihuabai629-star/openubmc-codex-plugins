@@ -14,11 +14,14 @@ from urllib import parse as urlparse
 from urllib import request as urlrequest
 import uuid
 
+from .task_diagnostics import safe_task_text
+
 
 LOGIN_PATH = "/UI/Rest/Login"
 UPLOAD_PATH = "/UI/Rest/FirmwareInventory"
 START_PATH = "/UI/Rest/BMCSettings/UpdateService/FirmwareUpdate"
 PROGRESS_PATH = "/UI/Rest/BMCSettings/UpdateService/UpdateProgress"
+HTTP_ERROR_LIMIT = 64 * 1024
 
 
 @dataclass(frozen=True)
@@ -29,9 +32,43 @@ class WebUiResponse:
 
 
 class WebUiHttpError(RuntimeError):
-    def __init__(self, status: int, message: str) -> None:
+    def __init__(self, status: int, message: str, *, diagnostics: Mapping[str, object] | None = None) -> None:
         super().__init__(message)
         self.status = status
+        self.diagnostics = dict(diagnostics or {})
+
+
+def _http_error_diagnostics(raw: bytes, *, method: str, path: str,
+                            secrets: tuple[str, ...]) -> dict[str, object]:
+    truncated = len(raw) > HTTP_ERROR_LIMIT
+    result: dict[str, object] = {
+        "method": method.upper(),
+        "path": safe_task_text(urlparse.urlsplit(path).path, secrets),
+        "response_truncated": truncated,
+        "response_prefix_sha256" if truncated else "response_sha256": hashlib.sha256(raw).hexdigest(),
+    }
+    if truncated:
+        return result
+    try:
+        payload = json.loads(raw)
+    except (ValueError, UnicodeDecodeError):
+        return result
+    error = payload.get("error") if isinstance(payload, Mapping) else None
+    if not isinstance(error, Mapping):
+        return result
+    for source, destination, limit in (("code", "error_code", 160), ("message", "message", 512)):
+        value = error.get(source)
+        if isinstance(value, str):
+            result[destination] = safe_task_text(value, secrets)[:limit]
+    extended = error.get("@Message.ExtendedInfo")
+    if isinstance(extended, list):
+        result["messages"] = [
+            {name: safe_task_text(item[name], secrets)[:limit]
+             for name, limit in (("MessageId", 160), ("Message", 512))
+             if isinstance(item.get(name), str)}
+            for item in extended[:4] if isinstance(item, Mapping)
+        ]
+    return result
 
 
 class WebUiTransportError(ConnectionError):
@@ -417,12 +454,16 @@ class WebUiHttpSession:
                 status = int(response.status)
                 response_headers = dict(response.headers.items())
         except urlerror.HTTPError as exc:
-            raw = exc.read()
-            response_digest = hashlib.sha256(raw).hexdigest() if raw else ""
-            message = f"WebUI request returned HTTP {exc.code}"
-            if response_digest:
-                message += f" (response_sha256={response_digest})"
-            raise WebUiHttpError(exc.code, message) from exc
+            try:
+                raw = exc.read(HTTP_ERROR_LIMIT + 1)
+            finally:
+                exc.close()
+            diagnostics = _http_error_diagnostics(raw, method=method, path=path,
+                secrets=(self._password, self._csrf_token, self._session_id,
+                         *(cookie.value for cookie in self.cookie_jar)))
+            message = f"WebUI {diagnostics['method']} {diagnostics['path']} returned HTTP {exc.code}"
+            message += " " + json.dumps(diagnostics, ensure_ascii=False, sort_keys=True)
+            raise WebUiHttpError(exc.code, message, diagnostics=diagnostics) from exc
         except (OSError, TimeoutError, urlerror.URLError) as exc:
             raise WebUiTransportError(
                 method=method,

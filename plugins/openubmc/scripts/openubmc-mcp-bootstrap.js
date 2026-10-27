@@ -8,6 +8,7 @@ const path = require("path");
 const readline = require("readline");
 const { createHostAdapter } = require("./openubmc-bootstrap-host.js");
 const { createSetupOperations } = require("./openubmc-bootstrap-operations.js");
+const { createProtocolGate } = require("./openubmc-bootstrap-protocol.js");
 const { MAX_MCP_LINE_BYTES, routeRuntimeCall } = require("./openubmc-execution-routing.js");
 
 const capability = process.argv[2];
@@ -30,12 +31,13 @@ function safeWriteError(value) {
 function proxyBackend(backend, preflight) {
   const child = childProcess.spawn(backend.command, [...backend.prefix, capability], {
     env: adapter.childEnvironment,
+    cwd: adapter.childCwd,
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
   let structuredCalls = 0;
   const lineReader = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
-  lineReader.on("line", (line) => {
+  function forwardLine(line) {
     if (capability === "runtime" && Buffer.byteLength(line, "utf8") > MAX_MCP_LINE_BYTES) {
       process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: null,
         error: { code: -32600, message: "routing_request_too_large" } })}\n`);
@@ -89,33 +91,63 @@ function proxyBackend(backend, preflight) {
       lineReader.pause();
       child.stdin.once("drain", () => lineReader.resume());
     }
-  });
-  child.stdout.pipe(process.stdout);
+  }
+  const protocolGate = preflight.protocol_pending ? createProtocolGate({
+    child, capability, expectedVersion: preflight.report.knowledge_mcp_version,
+    forward: forwardLine, output(line) {
+      if (!process.stdout.write(line + "\n")) {
+        child.stdout.pause();
+        process.stdout.once("drain", () => child.stdout.resume());
+      }
+    },
+    onReady(health) {
+      preflight.report.mcp_health[capability] = health;
+      preflight.report.capabilities[capability].startup_ready = true;
+    },
+    onFailure(reason, queued, ended) {
+      preflight.report.mcp_health[capability] = {
+        checked: true, ok: false, tools: [], error: reason,
+        timed_out: reason === "mcp_protocol_timeout", source: "live-mcp-session",
+      };
+      safeWriteError(`openubmc-startup ${JSON.stringify({ capability, reason })}\n`);
+      lineReader.removeListener("line", protocolGate.accept);
+      child.stdout.resume();
+      child.stdin.end();
+      child.kill();
+      const handle = serveSetup({ ...preflight, ok: false, reason }, lineReader);
+      for (const line of queued) handle(line);
+      if (ended) operations.closeConfigurationProcesses();
+    },
+  }) : null;
+  lineReader.on("line", protocolGate ? protocolGate.accept : forwardLine);
+  if (!protocolGate) child.stdout.pipe(process.stdout);
   child.stderr.pipe(process.stderr);
   const stop = () => {
     if (!child.killed) child.kill();
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
-  lineReader.once("close", () => child.stdin.end());
+  lineReader.once("close", () => protocolGate ? protocolGate.end() : child.stdin.end());
   child.once("error", (error) => {
+    if (protocolGate?.failed) return;
     safeWriteError(`openUBMC backend failed to start: ${error.code || "spawn_failed"}\n`);
     lineReader.close();
     process.exitCode = 1;
   });
   child.stdin.on("error", (error) => {
+    if (protocolGate?.failed) return;
     safeWriteError(`openUBMC backend input closed: ${error.code || "write_failed"}\n`);
     process.exitCode = 1;
   });
   child.once("exit", (code) => {
+    if (protocolGate?.failed) return;
     lineReader.close();
     process.exitCode = process.exitCode || (code === null ? 1 : code);
   });
 }
 
-function serveSetup(initialFailure) {
+function serveSetup(initialFailure, lineReader = readline.createInterface({ input: process.stdin, crlfDelay: Infinity })) {
   const initialStatus = operations.publicStatus(initialFailure);
-  const lineReader = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
   const reply = (id, result) => process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, result })}\n`);
   const error = (id, code, message) => process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } })}\n`);
   const toolReply = (id, response, isError = false) => reply(id, {
@@ -125,12 +157,30 @@ function serveSetup(initialFailure) {
   });
   const refreshedStatus = () => {
     const backend = adapter.resolveBackend();
-    if (!backend.ok) return operations.publicStatus(backend);
-    const preflight = operations.preflightBackend(backend);
-    return operations.publicStatus({ ...backend, ...preflight, ok: false });
+    const preflight = backend.ok ? operations.preflightBackend(backend) : backend;
+    const prerequisitesReady = backend.ok && preflight.ok;
+    const protocolPending = prerequisitesReady && preflight.protocol_pending;
+    const ready = prerequisitesReady && !protocolPending;
+    const report = protocolPending && initialFailure.protocol_pending
+      ? { ...preflight.report, mcp_health: initialFailure.report.mcp_health }
+      : preflight.report;
+    return {
+      ...operations.publicStatus({ ...backend, ...preflight, report, ok: false,
+        ...(prerequisitesReady ? {
+          reason: initialFailure.reason || "setup_session_restart_required",
+          recovery_action: protocolPending
+            ? "Local prerequisites now pass. Start a new Codex task to qualify its live backend; this setup session retains its original startup failure."
+            : "Local checks now pass. Start a new Codex task to load the backend; this setup session retains its original startup failure.",
+        } : {}),
+      }),
+      startup_reason: initialStatus.reason,
+      backend_ready_for_new_task: Boolean(ready),
+      prerequisites_ready_for_new_task: Boolean(prerequisitesReady),
+      protocol_check_pending: Boolean(protocolPending),
+    };
   };
 
-  lineReader.on("line", (line) => {
+  const handleLine = (line) => {
     if (!line.trim()) return;
     let request;
     try {
@@ -139,13 +189,17 @@ function serveSetup(initialFailure) {
       error(null, -32700, "Parse error");
       return;
     }
+    if (request === null || typeof request !== "object" || Array.isArray(request)) {
+      error(null, -32600, "Invalid request");
+      return;
+    }
     if (request.id === undefined || request.id === null) return;
     if (request.method === "initialize") {
       reply(request.id, {
         protocolVersion: request.params?.protocolVersion || "2024-11-05",
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: `openubmc-${capability}-setup`, version: "1" },
-        instructions: "The openUBMC backend needs local setup. Call openubmc_setup_status for the structured reason.",
+        instructions: "This openUBMC capability could not start. If required by the current task or explicitly requested for repair, call openubmc_setup_status and recover only the reported cause. Otherwise continue with the task's available capabilities.",
       });
       return;
     }
@@ -159,10 +213,10 @@ function serveSetup(initialFailure) {
           description: "Return separate package, host, dependency, configuration and protocol-health facts without exposing credentials.",
           inputSchema: { type: "object", properties: {}, additionalProperties: false } },
         { name: "openubmc_setup_prepare",
-          description: "Prepare the locked dependencies for this openUBMC capability outside MCP initialization.",
+          description: "Prepare or repair this capability's locked dependencies outside MCP initialization; configuration and packaged files have separate recovery paths.",
           inputSchema: { type: "object", properties: {}, additionalProperties: false } },
         { name: "openubmc_setup_open_configuration",
-          description: "Open the private local openUBMC configuration page and return its loopback URL.",
+          description: "Open the private page for an explicit account change or confirmed required account blocker; return its loopback URL.",
           inputSchema: { type: "object", properties: { kind: { type: "string", enum: ["targets", "kb", "conan"] } }, required: ["kind"], additionalProperties: false } },
         { name: "openubmc_setup_repair_configuration",
           description: "Back up and repair recognized stale openUBMC MCP overrides and exact-name loose Skills.",
@@ -233,8 +287,10 @@ function serveSetup(initialFailure) {
       return;
     }
     error(request.id, -32601, "Method not found");
-  });
+  };
+  lineReader.on("line", handleLine);
   lineReader.once("close", operations.closeConfigurationProcesses);
+  return handleLine;
 }
 
 const backend = adapter.resolveBackend();

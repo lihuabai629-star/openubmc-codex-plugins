@@ -1,6 +1,6 @@
 ---
 name: openubmc-environment-setup
-description: "Configure or repair an installed openUBMC plugin on Windows, Linux or WSL: 账号缺失或认证失败、配置网页、默认 BMC 账号、关联 OS、Conan 登录、KB 知识库配置、MCP 启动失败、插件检查。Use for local credentials, native backend readiness, migration, and installation health; device diagnosis belongs to openubmc-debug."
+description: "Use for explicit openUBMC plugin installation, update, removal, health-check or private-account configuration requests (插件安装、修改账号、保存 BMC/OS 关联), or a confirmed plugin/MCP startup or required local-configuration blocker. Ordinary development, build/Conan failures, device diagnosis and optional KB failures stay with their task owner."
 ---
 
 # openUBMC plugin environment
@@ -10,24 +10,53 @@ and load its owner before acting; carry the existing Run and authorization.
 
 Resolve `<plugin-root>` as the parent of the `skills` directory containing this Skill. Codex manages the plugin's Skills and MCP registration. Keep credentials, dependencies and Runtime history outside the plugin directory.
 
+Runtime identity and recovery are part of plugin management. `doctor` reports package identity
+and startup readiness; `observe` and `execute` own operational workflows. Runtime state and
+MutationJournal records live outside the package and survive updates or removal.
+Explicit documentation reviews can read `<plugin-root>/optional-skills/openubmc-doc-review/SKILL.md`;
+this resource is outside the default Skill catalog. The legacy bootstrap and `target-runtime`
+profile remain migration tools; native marketplace installation is the supported entry.
+
+## Enter only for the affected capability
+
+Apply the Setup entry conditions in the phase handoff. Continue ordinary tasks with their
+existing configuration; Setup is not a prerequisite. A reported blocker must identify the
+capability needed now and its current failure. Tool visibility, an unused account, an optional
+dependency warning or a missing logical credential file alone does not establish that blocker.
+
 ## Inspect and repair
+
+For an explicit plugin check or confirmed local blocker, inspect first:
 
 ```bash
 python3 -I <plugin-root>/scripts/pluginctl.py doctor
-python3 -I <plugin-root>/scripts/pluginctl.py prepare --repair
 ```
 
-The MCP launchers check locked Python and npm dependencies on startup. When they are absent or damaged, both servers still initialize in setup mode. Use the setup tool offered in the task to prepare or repair them, then start a new task. A modified package fails closed to setup mode; reinstall the selected marketplace version. Do not modify the installed package, bypass hashes or create duplicate loose Skill/MCP registrations.
+The MCP launchers check locked dependencies on startup and expose setup tools on failure.
+Runtime and KB are optional Host startup dependencies: an unavailable backend does
+not prevent an ordinary or offline conversation. Device work still requires the
+selected Runtime to return its current protocol state before execution.
+If the affected service is needed now, call `openubmc_setup_status`, then repair only its reported
+cause. Missing or damaged dependencies use `openubmc_setup_prepare` (CLI: `pluginctl.py prepare
+--repair` with `--capability runtime` or `--capability kb`); a modified package requires reinstalling
+the selected marketplace version. Do not modify the package, bypass hashes or duplicate registrations.
+After startup repair, start a new task when needed to reload that service.
 
-Node.js 20+, Git and Codex are required on the Codex host. Linux and native Windows each need Python 3.12 with pip. On Windows, Runtime, KB, credentials, dependency caches and Run history stay in the Windows user profile. WSL is optional for an explicitly selected build environment; device work does not need it. SDKs, compilers, Docker installation and Conan remotes belong to their respective workflows.
+Runtime and KB require Node.js 20+, Git, Codex, Python 3.11+ with pip, and `flock` (util-linux) inside Linux or WSL.
+Their backend, credentials, dependency caches and Run history remain there.
+Windows clients use an explicitly selected WSL distribution and the stdio bridge
+`scripts/openubmc-wsl-bridge.js`; native Windows execution of Runtime and KB is unsupported.
+The independent `openubmc-offline` MCP supports native Windows, Linux and WSL with Python 3.11+ and the Codex Node host. Its local analysis and evidence tools require no third-party Python packages, device accounts or Runtime startup. Pass absolute paths; see [Python entrypoints](../../PYTHON.md) for launch isolation.
+SDKs, compilers, Docker installation and Conan remotes belong to their respective workflows.
 
-If `openubmc_setup_status` is available, the plugin is in recoverable setup mode. Use `openubmc_setup_prepare` for the reported capability and `openubmc_setup_open_configuration` to open the private browser page. Present the returned loopback URL to the user. Do not ask a Windows user to locate or run `pluginctl.py`.
+Use `openubmc_setup_open_configuration` only for an account change identified below, not after
+every dependency repair. Present its loopback URL. For `unsupported_platform`, connect through WSL.
 
 ## Private credentials
 
 ### Reuse existing configuration
 
-Run `pluginctl.py doctor` first. Its `credentials` report includes local capabilities and
+For local credential diagnosis, the `doctor` report includes capabilities and
 `active_revision`; `remote_authentication=not_checked` is a local readiness result. The Runtime
 prefers the selected structured `credentials.json` source, including its activated revision, over
 retained legacy defaults. An absent logical source file does not mean its active snapshot is absent.
@@ -62,27 +91,35 @@ An exact IP override selects a complete record; authentication failure never fal
 
 ### Change or check an account
 
-When local credentials are missing, authentication is rejected, or the user requests an account
-change, explain the specific reason and start the relevant page yourself. Do not make the user
-find the entry point or run the command. Reuse available credentials without opening a page.
-Configuration conflicts require diagnosing the selected source first; TLS, host identity and
-network failures are not reasons to ask for another password.
+If the user has already supplied an account for the authorized target and purpose,
+follow [Credentials supplied for an authorized task](references/credential-exposure-response.md#credentials-supplied-for-an-authorized-task)
+and continue directly. A missing saved record does not require repeated entry or
+rotation. Use the page below when the required input is missing, the user chooses
+it, or private local handling of the supplied account is unavailable.
+
+Open the focused page for an explicit account change, a Runtime-resolved missing required account,
+or a confirmed authentication rejection for the selected target/account that needs replacement.
+Explain the specific reason and start the page yourself. Reuse working accounts without a page.
+Diagnose source conflicts first; TLS, host identity, timeouts, permissions and business errors
+stay with the task owner and are not evidence of a missing password. Conan remote/profile and
+dependency failures stay with Build; only a confirmed account update uses this private entry.
 
 When a task has a target IP and the user wants its account remembered after a successful connection,
 start the targets page with `--focus-target <IP> --purpose bmc|os --transport ssh|redfish --wait-for-save`.
 Show the page URL and direct the user to **连接并记住这台设备**. The user enters the username and password
-there and explicitly starts a strict connection check. Only a verified connection creates an active
+there and starts a connection check using the task's transport policy. Only a successful connection creates an active
 IP-specific credential; a rejected check or concurrent configuration edit leaves the active account
 unchanged. The completion event is secret-free and subsequent Runtime requests use the newly active
 revision. A verified SSH scope does not verify Redfish, and a BMC account does not authorize OS access.
-Do not transfer a chat-pasted password to a tool or command; treat it as exposed and use the rotation
-procedure below before it is saved through the local page.
+Keep credential values in private local input; tool arguments and command text contain only
+non-secret references.
 
 If a credential may already have appeared in a persisted task, treat it as exposed and follow
 [Credential exposure response](references/credential-exposure-response.md). Identify affected
 accounts from non-secret target, purpose, record, revision and time metadata; never ask the user
-to paste the old value into chat or a command. Rotation stays an explicit operator action at the
-account authority, followed by local revision activation and capability verification.
+to paste the old value into chat or a command. This response does not block authorized use as
+described above. Rotation stays an explicit operator action at the account authority, followed
+by local revision activation and capability verification.
 
 ```bash
 python3 -I -B <plugin-root>/scripts/pluginctl.py configure --kind targets --wait-for-save
@@ -144,15 +181,21 @@ association; a task already holding a snapshot needs a request-boundary refresh.
 mapping never verifies credentials
 or authorizes an OS connection.
 
-SSH checks preserve strict host identity verification, Redfish checks verify TLS, and no check retries a rejected IP override with global credentials. Conan authenticates only an existing named remote and uses the native per-user token cache. KB requires the user's authorized OAuth application settings; interactive authentication requirements remain visible as such. The plugin supplies no shared OAuth client secret.
+BMC connection checks use the existing internal Runtime transport defaults:
+Redfish accepts device certificates and SSH uses its configured host-key policy.
+OS SSH retains strict host-key verification. Use `configure --strict-checks`
+only when certificate/host-key qualification is requested. Results record
+`transport_verification` separately from successful authentication; a disabled
+check is not a certificate-verification pass. A strict-check failure affects
+that assurance, not unrelated task work or an already authorized runtime
+connection. No authentication rejection retries another account automatically.
+Conan authenticates only an existing named remote through its native token
+cache. KB uses the user's OAuth settings and exposes required interaction; the
+plugin supplies no shared OAuth client secret.
 
-These strict checks are distinct from historical Runtime transport bindings that may permit
-insecure TLS. A strict-check failure remains unverified. Report the certificate or endpoint trust
-problem; never silently retry the check with TLS verification disabled or reinterpret it as missing
-credentials. If insecure transport is already explicitly authorized, report any connection result
-within that scope with certificate verification disabled: it does not qualify certificate validation
-or replace the strict check. Reuse that authorization without asking again; it does not change the
-check policy.
+For an established SSH policy, including an authorized OS test with verification
+disabled, pass `--ssh-host-key-policy strict|accept-new|insecure` yourself. The
+existing task decision supplies this choice; it needs no repeated confirmation.
 
 For a machine without an accessible browser, the existing `install_environment.py credentials` hidden-input helper remains available. A headless page can be started with `configure --no-browser`; open its session URL in the same machine's browser. Run the helper on the host containing the installed plugin and credentials.
 

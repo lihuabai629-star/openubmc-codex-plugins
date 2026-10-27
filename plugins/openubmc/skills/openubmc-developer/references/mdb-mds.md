@@ -31,6 +31,25 @@ compatibility: current consumers, mixed versions, upgrade, and rollback
 
 ## Evolve the contract
 
+Follow the selected generator's current model and callback seams:
+
+| Seam | Evidence to inspect |
+| --- | --- |
+| Interface and object path | Existing interface JSON plus its registered path definition; some layouts require `<Class>/<Class>.json` |
+| Public versus private state | Interface members belong under the declared interface; component-private members use the class's own `properties` and local type/default constraints |
+| External dependency | `service.json` build/runtime/required declarations, resolved `mdb_interface` package identity, selected interface and subscription |
+| Object creation | Generated `Create<Class>` arguments, path variables and initializer; creation completes at the framework's supported lifecycle point |
+| RPC implementation | Generated `Impl<Class><Interface><Method>` registration, object/context arguments, ordered payload and completion/error convention |
+| Cross-component client | Generated client lookup/iteration, missing-object behavior, subscription value conversion and owner teardown |
+| IPMI | Authored `mds/ipmi.json` request/response, generated registration/message types, completion code and wire encoding |
+
+Treat `Create<Class>`, `(obj, ctx, ...)` and client `Foreach`/`On...PropertiesChanged`
+as patterns to locate, not signatures to invent. Verify permission and sensitivity
+inheritance and alias stability in the current generator. Keep namespaces from
+actual definitions; the `bmc.kepler` examples do not prescribe every product's
+prefix. Resolve a stale dependency by comparing selected package/version and
+generated inputs first, preserving caches and authored work.
+
 Search current definitions before adding a member. Extend the existing owner
 when the concept already exists. Keep private component state out of shared
 interfaces, and keep defaults inside declared validation ranges.

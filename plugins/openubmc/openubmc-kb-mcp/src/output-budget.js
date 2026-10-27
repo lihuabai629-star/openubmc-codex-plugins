@@ -58,7 +58,9 @@ export function boundedReceipt(name, source, render) {
       if (Object.hasOwn(source || {}, key)) result[key] = scalar(source[key], key === "mode" ? 128 : 24000);
     }
     if (typeof source?.response === "string") result.response_chars = source.response.length;
-    if (Object.hasOwn(source, "references")) result.references = rows(source.references, 32, ["reference_id", "file_path"]);
+    // LightRAG emits null when references were not requested. A malformed
+    // object or row remains an error; null denotes the empty optional field.
+    if (Object.hasOwn(source, "references")) result.references = rows(source.references ?? [], 32, ["reference_id", "file_path"]);
   } else if (name === "openubmc_kb_status") {
     result = fields(source, ["configured", "version", "endpoint", "config_path", "detail", "pipeline", "counts"], ["pipeline", "counts"]);
     if (Object.hasOwn(source, "pipeline")) {

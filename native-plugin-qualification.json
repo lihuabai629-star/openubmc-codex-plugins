@@ -1,79 +1,253 @@
 {
-  "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
-  "desktop_gui": false,
-  "distribution_commit": "68bc81254e716f65b4887ca3e68523b100d2f40c",
-  "existing_desktop_resume": false,
-  "external_models": 0,
-  "hosts": [
-    {
-      "host": "0630",
-      "native_os": "linux",
-      "passed": true,
-      "plugins": [
-        {
-          "doctor_passed": true,
-          "enabled": true,
-          "package_integrity": true,
-          "pluginId": "openubmc@openubmc-public",
-          "startup_ready": true,
-          "version": "2.1.9"
-        }
-      ]
-    },
-    {
-      "host": "2603",
-      "native_os": "linux",
-      "passed": true,
-      "plugins": [
-        {
-          "doctor_passed": true,
-          "enabled": true,
-          "package_integrity": true,
-          "pluginId": "openubmc@openubmc-public",
-          "startup_ready": true,
-          "version": "2.1.9"
-        }
-      ]
-    },
-    {
-      "host": "windows",
-      "native_os": "win32",
-      "passed": true,
-      "plugins": [
-        {
-          "doctor_passed": true,
-          "enabled": false,
-          "package_integrity": true,
-          "pluginId": "openubmc@openubmc-public",
-          "startup_ready": true,
-          "version": "2.1.9"
+  "archive_sha256": "4bc3e82bdb5091d0fd0dbbfc360d496383d9fb195f2136eb35b22945d942e355",
+  "bytecode_restart": {
+    "generated_cache_count": 215,
+    "mcp_health": {
+      "kb": {
+        "exit_code": 0,
+        "ok": true,
+        "server": {
+          "name": "openubmc-kb-mcp-server",
+          "version": "1.3.4"
         },
-        {
-          "doctor_passed": true,
-          "enabled": false,
-          "package_integrity": true,
-          "pluginId": "openubmc@openubmc-panel-dev",
-          "startup_ready": true,
-          "version": "2.1.9"
+        "stderr": "",
+        "timed_out": false,
+        "tools": [
+          "openubmc_kb_list",
+          "openubmc_kb_query",
+          "openubmc_kb_status"
+        ],
+        "version_matches_package": true
+      },
+      "runtime": {
+        "exit_code": 0,
+        "ok": true,
+        "server": {
+          "name": "openubmc-target-runtime",
+          "version": "openubmc.target-runtime.v1"
         },
-        {
-          "doctor_passed": true,
-          "enabled": true,
-          "package_integrity": true,
-          "pluginId": "openubmc@openubmc-panel-fast",
-          "startup_ready": true,
-          "version": "2.1.9"
-        }
-      ]
+        "stderr": "",
+        "timed_out": false,
+        "tools": [
+          "execute",
+          "observe"
+        ],
+        "version_matches_package": true
+      }
+    },
+    "verified_after_restart": true
+  },
+  "codex": "codex-cli 0.153.4",
+  "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+  "deterministic_archive": true,
+  "external_state_preserved": true,
+  "files": 487,
+  "mcp_health": {
+    "kb": {
+      "exit_code": 0,
+      "ok": true,
+      "server": {
+        "name": "openubmc-kb-mcp-server",
+        "version": "1.3.4"
+      },
+      "stderr": "",
+      "timed_out": false,
+      "tools": [
+        "openubmc_kb_list",
+        "openubmc_kb_query",
+        "openubmc_kb_status"
+      ],
+      "version_matches_package": true
+    },
+    "runtime": {
+      "exit_code": 0,
+      "ok": true,
+      "server": {
+        "name": "openubmc-target-runtime",
+        "version": "openubmc.target-runtime.v1"
+      },
+      "stderr": "",
+      "timed_out": false,
+      "tools": [
+        "execute",
+        "observe"
+      ],
+      "version_matches_package": true
     }
+  },
+  "native_codex_exec": {
+    "executable_sha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+    "invocations": 2,
+    "kb_failure_injected": false,
+    "network_scope": "loopback",
+    "restart_verified": true,
+    "runs": [
+      {
+        "active_requests": 0,
+        "codex_pid": 797773,
+        "exit_reason": "client-terminated",
+        "ownership_model": "bootstrap-supervised",
+        "runtime_pid": 797943,
+        "session_id": "41bc3a436c5d4d6e9a8f88e4887e045c",
+        "skills_visible_outside_source": [
+          "openubmc-debug",
+          "openubmc-build",
+          "openubmc-upgrade",
+          "openubmc-environment-setup"
+        ],
+        "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+        "supervisor_pid": 797924,
+        "thread_id": "01a17e69-27cb-7ab0-a70c-12cb20f452d4",
+        "tool_names": [
+          "mcp__openubmc_kb__openubmc_kb_list",
+          "mcp__openubmc_kb__openubmc_kb_query",
+          "mcp__openubmc_kb__openubmc_kb_status",
+          "mcp__openubmc_offline__openubmc_analyze_bundle",
+          "mcp__openubmc_offline__openubmc_read_evidence",
+          "mcp__openubmc_panel__openubmc_panel",
+          "mcp__openubmc_target_runtime__execute",
+          "mcp__openubmc_target_runtime__observe"
+        ],
+        "validated_calls": [
+          "observe",
+          "execute"
+        ]
+      },
+      {
+        "active_requests": 0,
+        "codex_pid": 798021,
+        "exit_reason": "client-terminated",
+        "ownership_model": "bootstrap-supervised",
+        "runtime_pid": 798231,
+        "session_id": "41bc3a436c5d4d6e9a8f88e4887e045c",
+        "skills_visible_outside_source": [
+          "openubmc-debug",
+          "openubmc-build",
+          "openubmc-upgrade",
+          "openubmc-environment-setup"
+        ],
+        "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+        "supervisor_pid": 798147,
+        "thread_id": "01a17e69-302f-7293-bd5e-b039a861e2c8",
+        "tool_names": [
+          "mcp__openubmc_kb__openubmc_kb_list",
+          "mcp__openubmc_kb__openubmc_kb_query",
+          "mcp__openubmc_kb__openubmc_kb_status",
+          "mcp__openubmc_offline__openubmc_analyze_bundle",
+          "mcp__openubmc_offline__openubmc_read_evidence",
+          "mcp__openubmc_panel__openubmc_panel",
+          "mcp__openubmc_target_runtime__execute",
+          "mcp__openubmc_target_runtime__observe"
+        ],
+        "validated_calls": [
+          "observe",
+          "execute"
+        ]
+      }
+    ],
+    "transport": "local-hermetic-responses"
+  },
+  "native_install": true,
+  "native_thread_resume": {
+    "baseline_archive_sha256": "715c0bf9eeec4a1b118f0cf70b449179cd2cbed8d8a44a4cce66d2ed283a869c",
+    "configuration_preserved": true,
+    "desktop_ui_verified": false,
+    "from_version": "2.1.9",
+    "native_upgrade": true,
+    "old_cache_absent": true,
+    "old_cache_removed_by": "native-client",
+    "repaired_servers": [
+      "openubmc-kb",
+      "openubmc-target-runtime"
+    ],
+    "resume_error": null,
+    "thread_id": "01a17e69-5efe-7952-b57a-e169e3190e24",
+    "to_version": "2.2.16",
+    "transport": "native-app-server-stdio"
+  },
+  "native_uninstall": true,
+  "ok": true,
+  "optional_kb_failure_isolation": {
+    "executable_sha256": "56ef98ab4032d317ab26e9b5e5a175650717351edb16ed9cde0cb6d1734d62da",
+    "invocations": 2,
+    "kb_failure_injected": true,
+    "network_scope": "loopback",
+    "restart_verified": true,
+    "runs": [
+      {
+        "active_requests": 0,
+        "codex_pid": 798345,
+        "exit_reason": "client-terminated",
+        "ownership_model": "bootstrap-supervised",
+        "runtime_pid": 798508,
+        "session_id": "5ade38e664164a65babeeecf70d915d0",
+        "skills_visible_outside_source": [
+          "openubmc-debug",
+          "openubmc-build",
+          "openubmc-upgrade",
+          "openubmc-environment-setup"
+        ],
+        "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+        "supervisor_pid": 798489,
+        "thread_id": "01a17e69-3b3b-70d3-9672-1f539c6cc721",
+        "tool_names": [
+          "mcp__openubmc_offline__openubmc_analyze_bundle",
+          "mcp__openubmc_offline__openubmc_read_evidence",
+          "mcp__openubmc_panel__openubmc_panel",
+          "mcp__openubmc_target_runtime__execute",
+          "mcp__openubmc_target_runtime__observe"
+        ],
+        "validated_calls": [
+          "observe",
+          "execute"
+        ]
+      },
+      {
+        "active_requests": 0,
+        "codex_pid": 798587,
+        "exit_reason": "client-terminated",
+        "ownership_model": "bootstrap-supervised",
+        "runtime_pid": 798764,
+        "session_id": "5ade38e664164a65babeeecf70d915d0",
+        "skills_visible_outside_source": [
+          "openubmc-debug",
+          "openubmc-build",
+          "openubmc-upgrade",
+          "openubmc-environment-setup"
+        ],
+        "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+        "supervisor_pid": 798743,
+        "thread_id": "01a17e69-43e7-7943-8ed7-fef5b1799d52",
+        "tool_names": [
+          "mcp__openubmc_offline__openubmc_analyze_bundle",
+          "mcp__openubmc_offline__openubmc_read_evidence",
+          "mcp__openubmc_panel__openubmc_panel",
+          "mcp__openubmc_target_runtime__execute",
+          "mcp__openubmc_target_runtime__observe"
+        ],
+        "validated_calls": [
+          "observe",
+          "execute"
+        ]
+      }
+    ],
+    "transport": "local-hermetic-responses"
+  },
+  "reinstall": true,
+  "schema": "openubmc.codex-plugin.qualification.v1",
+  "skills": [
+    "openubmc-build",
+    "openubmc-code-submit",
+    "openubmc-debug",
+    "openubmc-developer",
+    "openubmc-dt-testing",
+    "openubmc-environment-setup",
+    "openubmc-live-patch",
+    "openubmc-log-analyzer",
+    "openubmc-publish",
+    "openubmc-qemu-testing",
+    "openubmc-upgrade"
   ],
-  "live_bmc": false,
-  "passed": true,
-  "receipt": "docs/installed-hosts-2.1.9.json",
-  "schema": "openubmc.multihost-startup.qualification/v1",
-  "scope": "installed package integrity, local configuration and native MCP initialization/tools list",
-  "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
-  "status": "qualified",
-  "upgrade_baseline": "2.1.7",
-  "version": "2.1.9"
+  "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+  "version": "2.2.16"
 }

@@ -57,7 +57,24 @@ Prefer structured process interfaces to shell composition. Keep credentials,
 tokens, sensitive properties, and complete sensitive requests out of logs.
 Include component, object, action, outcome, and correlation data when useful.
 
-## Inspect persistence code generation
+## Implement the generated service seam
+
+Inspect the generated service base before implementing the application subclass.
+Call the supported superclass initialization in its established order, then create
+modeled objects through the generated `Create<Class>` API and register callbacks
+at the lifecycle point used by neighboring components. Resolve path variables and
+initial values before exposing readiness. Keep private state outside closed ORM
+instances, including within a generated creation initializer.
+
+Register RPC callbacks with the generated object/context/payload signature. Return
+the expected completion/error and payload shape rather than assuming that `0`
+is universally the success value. For generated IPMI handlers, use the request and
+response message types associated with the selected `mds/ipmi.json`; preserve
+completion codes, payload lengths and caller context. Cross-component clients and
+property subscriptions require matching declarations and deterministic cleanup.
+Use [MDB/MDS contracts](mdb-mds.md) when those declarations change.
+
+## Verify persistence generation
 
 Read both the authored model and the generated Lua database code when a Lua
 persistence lifetime or Retain behavior matters. Confirm the generator's

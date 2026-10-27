@@ -371,6 +371,21 @@ def startup_status_from_logs(text: str) -> dict[str, Any]:
         "startup_line": "",
         "startup_errors_seen": False,
     }
+    if text.lstrip().startswith(("{", "[")):
+        try:
+            payload = json.loads(text)
+        except (TypeError, json.JSONDecodeError):
+            if text.lstrip().startswith("{"):
+                return status
+        else:
+            result = payload.get("result", payload) if isinstance(payload, dict) else {}
+            entries = result.get("entries", []) if isinstance(result, dict) else []
+            text = "\n".join(
+                line
+                for entry in entries if isinstance(entry, dict) and entry.get("ok") is True
+                for line in (entry.get("lines") if isinstance(entry.get("lines"), list) else [])
+                if isinstance(line, str)
+            ) if isinstance(entries, list) else ""
     if "StartupCheck failed" in text or "init service failed" in text:
         status["startup_errors_seen"] = True
     matches = re.findall(r"check startup status completely[^\n\"]*", text)
@@ -405,6 +420,15 @@ def run_tool(command: list[str], timeout: int) -> dict[str, Any]:
             value = result.get(name)
             if isinstance(value, str) and value:
                 observation[name] = value
+    log_result = payload.get("result", payload) if isinstance(payload, dict) else {}
+    entries = log_result.get("entries") if isinstance(log_result, dict) else None
+    log_collection_ok = isinstance(entries, list) and bool(entries) and all(
+        isinstance(entry, dict) and entry.get("ok") is True
+        and isinstance(entry.get("lines"), list)
+        and entry.get("content_complete") is not False
+        and entry.get("truncated") is not True
+        for entry in entries
+    )
     return {
         "cmd": command,
         "tool": Path(command[1]).name if len(command) > 1 else Path(command[0]).name,
@@ -412,6 +436,8 @@ def run_tool(command: list[str], timeout: int) -> dict[str, Any]:
         "stdout_tail": completed.stdout[-4000:],
         "stderr_tail": completed.stderr[-2000:],
         "observation": observation,
+        "startup_status": startup_status_from_logs(completed.stdout),
+        "log_collection_ok": log_collection_ok,
     }
 
 
@@ -460,7 +486,7 @@ def run_health_check(
     while True:
         preflight = run_tool(preflight_command, timeout=90)
         logs = run_tool(logs_command, timeout=90)
-        startup = startup_status_from_logs(logs["stdout_tail"])
+        startup = logs.get("startup_status") or startup_status_from_logs(logs["stdout_tail"])
         logs_observation = logs.get("observation", {})
         logs_observation = (
             logs_observation if isinstance(logs_observation, dict) else {}
@@ -520,6 +546,7 @@ def run_health_check(
         framework_ready = (
             preflight["returncode"] == 0
             and logs["returncode"] == 0
+            and logs.get("log_collection_ok", True)
             and startup["startup_normal"]
             and not startup["startup_errors_seen"]
             and boot_identity_status == "matched"
@@ -528,7 +555,7 @@ def run_health_check(
         attempt = {
             "elapsed_seconds": max(0, int(timeout_seconds - (deadline - time.monotonic()))),
             "preflight_ok": preflight["returncode"] == 0,
-            "logs_ok": logs["returncode"] == 0,
+            "logs_ok": logs["returncode"] == 0 and logs.get("log_collection_ok", True),
             "startup_status": startup,
             "boot_changed": boot_changed,
             "boot_identity_status": boot_identity_status,

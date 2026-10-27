@@ -42,6 +42,35 @@ When another workflow routes into `openubmc-build`, prefer a structured handoff 
 | `deployment.target_bmc` | Optional target identity retained by the task. Null means build only. Do not store credentials here. |
 | `deployment.rollback_required` | Passed through to Upgrade; Build does not inspect or execute rollback. |
 
+## QEMU verification handoff
+
+QEMU is a separate Build consumer. A standalone product build may continue to
+report `upgrade_eligible: false`; that blocks Upgrade but does not by itself
+forbid running the artifact in a task-owned development VM. Before QEMU launch,
+add a QEMU handoff containing the repository launcher and its complete input
+index:
+
+```json
+{
+  "qemu_verification": {
+    "scenario": "daily-development",
+    "launch_index_path": "/absolute/path/to/build.json",
+    "launch_index_sha256": "<64 lowercase hex characters>",
+    "source_revision": "<frozen source revision>",
+    "product_version": "<verified product version>",
+    "artifact_path": "/absolute/path/to/openubmc.hpm",
+    "artifact_sha256": "<64 lowercase hex characters>",
+    "package_binding": "package_binding_unverified",
+    "known_gaps": ["HPM containment has not been proved by Build"]
+  }
+}
+```
+
+The launch index must identify every boot/rootfs/data/firmware/mock input needed
+by the selected repository launcher. `openubmc-qemu-testing` re-hashes those
+inputs and verifies the guest that actually runs. QEMU evidence does not make an
+artifact Upgrade-eligible and does not complete a `build.artifact` Gate.
+
 If a handoff is missing, reconstruct it from the current conversation and explicit paths first. Use git status only as a fallback candidate list.
 
 ## Build Result
@@ -62,6 +91,12 @@ Return a typed artifact identity after accepted local finalization completes:
 For `build-upgrade`, pass these fields to `openubmc-upgrade` only when `upgrade_eligible` is true. `package_binding_unverified` is a local build result, not an Upgrade authorization. Target coordinates and credential selectors stay in the task-owned TargetRun and are not copied into the Build result.
 
 ## Component impact and acceptance
+
+Keep every requested capability in the acceptance record, including deferred,
+unsupported and unverified items. Bind each accepted item to its source, delivered
+artifact and actual verification evidence. A workaround, quiet logs after a
+stopped collector, or host-agent-supplied data retains that limitation; it does
+not establish an independently delivered target capability.
 
 For changes that cross a model/interface boundary or require several components,
 collect the task's explicit changed paths and an evidence-backed dependency graph:

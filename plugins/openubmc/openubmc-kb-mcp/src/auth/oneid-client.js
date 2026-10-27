@@ -6,6 +6,23 @@ import { waitForRequest } from "../http/request-lifetime.js";
 
 const TOKEN_EXPIRY_MARGIN_MS = 180_000;
 const DEFAULT_TOKEN_LIFETIME_SECONDS = 3600;
+const localStoreLocks = new WeakMap();
+
+async function withTokenLock(store, operation, options = {}) {
+  if (store.withLock) return store.withLock(operation, options);
+  const previous = localStoreLocks.get(store) || Promise.resolve();
+  let release;
+  const current = new Promise(resolve => { release = resolve; });
+  localStoreLocks.set(store, current);
+  try {
+    await previous;
+    options.signal?.throwIfAborted();
+    return await operation();
+  } finally {
+    release();
+    if (localStoreLocks.get(store) === current) localStoreLocks.delete(store);
+  }
+}
 
 export class CaptchaRequiredError extends Error {
   constructor() {
@@ -42,7 +59,16 @@ async function responseJson(response, operation) {
     const error = new Error(`${operation} failed with HTTP ${response.status}${suffix}`);
     error.status = response.status;
     error.operation = operation;
-    error.upstreamCode = typeof value?.error === "string"
+    // OneID has a non-OAuth 400 envelope for an expired refresh token.
+    // Match it only during refresh; configuration errors must retain their code.
+    const errorText = typeof value?.error === "string" ? value.error.trim().toLowerCase() : "";
+    const expiredRefresh = operation === "OAuth token refresh" && response.status === 400
+      && (value?.error == null || typeof value.error === "object"
+        || ["bad request", "token invalid or expired"].includes(errorText))
+      && !value?.error_code
+      && typeof value?.message === "string"
+      && value.message.trim().toLowerCase() === "token invalid or expired";
+    error.upstreamCode = expiredRefresh ? "invalid_token" : typeof value?.error === "string"
       ? value.error
       : typeof value?.error_code === "string" ? value.error_code : undefined;
     throw error;
@@ -94,12 +120,16 @@ export class OneIdClient {
 
   async invalidateAccessToken(accessToken) {
     await this.loadCachedToken();
-    if (!this.token || (accessToken && this.token.accessToken !== accessToken)) return;
-    this.token = this.token.refreshToken
-      ? { refreshToken: this.token.refreshToken, expiresAt: 0 }
-      : undefined;
-    if (this.token) await this.tokenStore.save(this.token);
-    else await this.tokenStore.clear();
+    const rejected = accessToken || this.token?.accessToken;
+    await withTokenLock(this.tokenStore, async () => {
+      this.token = await this.tokenStore.load();
+      if (!this.token || (rejected && this.token.accessToken !== rejected)) return;
+      this.token = this.token.refreshToken
+        ? { refreshToken: this.token.refreshToken, expiresAt: 0 }
+        : undefined;
+      if (this.token) await this.tokenStore.save(this.token);
+      else await this.tokenStore.clear();
+    });
   }
 
   async getAccessToken(options = {}) {
@@ -141,6 +171,17 @@ export class OneIdClient {
   }
 
   async obtainToken({ signal } = {}) {
+    return withTokenLock(this.tokenStore, async () => {
+      signal?.throwIfAborted();
+      this.token = await this.tokenStore.load();
+      if (this.token?.accessToken && this.now() < this.token.expiresAt - TOKEN_EXPIRY_MARGIN_MS) {
+        return this.token.accessToken;
+      }
+      return this.obtainTokenLocked({ signal });
+    }, { signal });
+  }
+
+  async obtainTokenLocked({ signal } = {}) {
     signal?.throwIfAborted();
     const previous = this.token;
     if (previous?.refreshToken) {
@@ -154,15 +195,13 @@ export class OneIdClient {
         if (signal?.aborted) throw signal.reason;
         if (error?.code === "KB_RESPONSE_TOO_LARGE") throw error;
         const invalidRefresh = error?.operation === "OAuth token refresh"
-          && (error.status === 401
-            || (error.status === 400 && ["invalid_grant", "invalid_token", "invalid_refresh_token"]
-              .includes(error.upstreamCode)));
-        if (invalidRefresh) {
-          this.token = undefined;
-          await this.tokenStore.clear();
-          throw new ReLoginRequiredError();
-        }
-        throw error;
+          && ([400, 401].includes(error.status)
+            && (["invalid_grant", "invalid_token", "invalid_refresh_token"].includes(error.upstreamCode)
+              || (error.status === 401 && !error.upstreamCode)));
+        if (!invalidRefresh) throw error;
+        this.token = undefined;
+        await this.tokenStore.clear();
+        // Recover once using the saved account inside the shared auth request.
       }
     }
 

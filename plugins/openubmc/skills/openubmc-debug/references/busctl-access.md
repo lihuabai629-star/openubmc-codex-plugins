@@ -2,7 +2,7 @@
 
 当你已经确定要用 `busctl` 时，读这个文件。
 
-保持任务仓库为当前目录，并从 `$HOME/.agents/skills/openubmc-debug` 调用辅助脚本。
+保持任务仓库为当前目录，并从 `<plugin-root>/skills/openubmc-debug` 调用辅助脚本。
 
 ## 什么时候优先用 busctl
 
@@ -42,23 +42,23 @@ busctl --user monitor <service>
 
 如果 `busctl --user` 仍看不到服务：
 - 先在同一交互会话里再次 `printenv`
-- 再用 `python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --print-env` 检查脚本看到的 DBUS/XDG
+- 再用 `python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --print-env` 检查脚本看到的 DBUS/XDG
 
 ## 脚本化 busctl（推荐）
 
 ```
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action list --head 20
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action tree --service <service> --head 20
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action introspect --service <service> --path <path>
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action get-property --service <service> --path <path> --interface <interface> --property <property>
-python "$HOME/.agents/skills/openubmc-debug/scripts/active_alarms.py" --ip <ip> --json --compact-json
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --dbus '<detected-session-bus-address>' --xdg <detected-xdg-runtime-dir> --action list
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action tree --service <service> --grep <literal> --head 20
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action list --head 20
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action tree --service <service> --head 20
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action introspect --service <service> --path <path>
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action get-property --service <service> --path <path> --interface <interface> --property <property>
+python "<plugin-root>/skills/openubmc-debug/scripts/active_alarms.py" --ip <ip> --json --compact-json
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --dbus '<detected-session-bus-address>' --xdg <detected-xdg-runtime-dir> --action list
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --action tree --service <service> --grep <literal> --head 20
 
 export OPENUBMC_SSH_USER='<your-ssh-user>'
 export OPENUBMC_SSH_PASSWORD='<your-ssh-password>'
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --ssh-port <ssh-port> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD --action tree --service <service>
-python "$HOME/.agents/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD --action tree --service <service> --grep <literal> --head 20 --json
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --ssh-port <ssh-port> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD --action tree --service <service>
+python "<plugin-root>/skills/openubmc-debug/scripts/busctl_remote.py" --ip <ip> --ssh-user-env OPENUBMC_SSH_USER --ssh-password-env OPENUBMC_SSH_PASSWORD --action tree --service <service> --grep <literal> --head 20 --json
 ```
 
 在有远端登录 banner 的环境里，优先用 `busctl_remote.py`，不要先手工拼 `DBUS_SESSION_BUS_ADDRESS` 再跑 `busctl --user`。

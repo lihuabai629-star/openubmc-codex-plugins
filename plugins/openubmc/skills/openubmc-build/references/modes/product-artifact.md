@@ -26,18 +26,6 @@ Use when the requested result or supplied command produces a product rootfs/HPM.
 
 `build_type`, `stage`, `target`, `remote`, and `version` remain independent. Preserve a complete supplied command rather than expanding it from examples.
 
-## Bingo release package
-
-When the user requests the ordinary Bingo product release package, hand the exact command to
-`openubmc-bingo-build` and run it from the selected Manifest root:
-
-```bash
-bingo build -t publish -b <board> -bt release --stage stable
-```
-
-Use the actual board directory name under the Manifest for `<board>`. Do not infer or append
-extra selectors. When the user supplied a complete command, preserve it exactly.
-
 Read [../artifact-verification.md](../artifact-verification.md) for the sole finalization entrypoint and optional diagnostic gates.
 
 ## Completion

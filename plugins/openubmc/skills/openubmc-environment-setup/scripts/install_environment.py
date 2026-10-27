@@ -54,7 +54,7 @@ MUTABLE_REFS = frozenset({"head", "main", "master", "develop", "development", "t
 LEGACY_STUDIO_HTTP_URL = "http://localhost:9876/mcp"
 KNOWLEDGE_MCP_NAME = "openubmc-kb"
 LEGACY_STUDIO_MCP_NAME = "openubmc-studio"
-KNOWLEDGE_MCP_VERSION = "1.3.0"
+KNOWLEDGE_MCP_VERSION = "1.3.4"
 KNOWLEDGE_MCP_INSTALL_SCHEMA = "openubmc-kb.install.v1"
 _KNOWLEDGE_DIGEST_DOMAIN = b"openubmc-kb-content-v1\0"
 TARGET_RUNTIME_API_VERSION = "openubmc.target-runtime.v1"
@@ -148,14 +148,14 @@ SKILL_BUNDLE: SkillBundle = (
     ("openubmc-log-analyzer", "openubmc-log-analyzer"),
     ("openubmc-developer", "openubmc-developer"),
     ("openubmc-build", "openubmc-build"),
-    ("openubmc-bingo-build", "openubmc-bingo-build"),
-    ("openubmc-bingo-development", "openubmc-bingo-development"),
     ("openubmc-upgrade", "openubmc-upgrade"),
     ("openubmc-live-patch", "openubmc-live-patch"),
     ("openubmc-dt-testing", "testing"),
     ("openubmc-publish", "openubmc-publish"),
-    ("openubmc-lua-component", "lua-component"),
     ("openubmc-qemu-testing", "qemu-testing"),
+    ("openubmc-doc-review", "openubmc-doc-review"),
+    ("openubmc-log-bundle-analyzer", "openubmc-log-bundle-analyzer"),
+    ("openubmc-code-submit", "openubmc-code-submit"),
 )
 DEFAULT_SKILL_PROFILE = "full"
 TARGET_RUNTIME_SKILL_PROFILE = "target-runtime"
@@ -168,6 +168,7 @@ TARGET_RUNTIME_SKILL_NAMES = frozenset(
         "openubmc-build",
         "openubmc-upgrade",
         "openubmc-live-patch",
+        "openubmc-log-bundle-analyzer",
     }
 )
 TARGET_RUNTIME_SKILL_BUNDLE: SkillBundle = tuple(
@@ -187,6 +188,9 @@ SKILL_PROFILES: dict[str, SkillProfilePolicy] = {
 # Compatibility wrappers remain in the repository for explicit path-based use,
 # but must not be present in the normal discovery catalog.
 RETIRED_SKILL_LINKS: tuple[tuple[str, str], ...] = (
+    ("openubmc-bingo-build", "openubmc-bingo-build"),
+    ("openubmc-bingo-development", "openubmc-bingo-development"),
+    ("openubmc-lua-component", "lua-component"),
     ("lua-component", "lua-component"),
     ("openubmc-mdb-interface-dev", "mdb-interface-dev"),
     ("mdb-interface-dev", "mdb-interface-dev"),
@@ -319,7 +323,7 @@ def add_install_options(parser: argparse.ArgumentParser) -> None:
         "--skill-profile",
         choices=tuple(SKILL_PROFILES),
         default=None,
-        help="Skill link set to manage; existing installs keep their recorded profile",
+        help="legacy migration profile; new installations should use the native Codex plugin",
     )
     parser.add_argument(
         "--preserve-skills",

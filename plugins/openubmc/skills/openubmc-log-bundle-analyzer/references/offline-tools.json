@@ -1,0 +1,161 @@
+[
+  {
+    "name": "openubmc_analyze_bundle",
+    "description": "Analyze a local openUBMC tar/tar.gz or extracted dump_info directory offline. Pass paths and problem as JSON; no Python or shell command is needed. Saves full redacted JSON, returns bounded evidence pointers, scan errors and coverage limits. Relative paths use the native Session working directory (Codex MCP requires absolute paths).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "problem": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        },
+        "since": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "until": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64
+        },
+        "timezone": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128
+        },
+        "output_dir": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "summary_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 12
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "max_files": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "default": 8
+            },
+            "max_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 3
+            },
+            "max_paths_per_log": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "default": 12
+            },
+            "max_bytes_per_file": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 67108864,
+              "default": 8388608
+            },
+            "max_total_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 268435456,
+              "default": 67108864
+            },
+            "max_line_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576,
+              "default": 65536
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "source",
+        "problem"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": false,
+      "destructiveHint": false,
+      "idempotentHint": false,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "openubmc_read_evidence",
+    "description": "Read redacted original evidence at a bundle-relative dump_info/... path and 1-based line range. Use bundle_dir and pointers returned by openubmc_analyze_bundle. Text and gzip reads are bounded; errors and truncation remain explicit. No shell command is needed.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "bundle_dir": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "start_line": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647,
+          "default": 1
+        },
+        "line_count": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 40
+        },
+        "max_scan_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864,
+          "default": 8388608
+        },
+        "max_line_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "default": 65536
+        },
+        "max_output_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65536,
+          "default": 32768
+        }
+      },
+      "required": [
+        "bundle_dir",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false
+    }
+  }
+]

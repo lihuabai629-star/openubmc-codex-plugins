@@ -1,53 +1,36 @@
-# Windows execution routing
+# Windows client and WSL execution
 
-For diagnosis, build, upgrade, evidence, and rollback requests, first probe the
-installed Windows Runtime MCP with bounded `initialize` and `tools/list` requests.
+The backend runs in Linux or WSL. A Windows Codex client must select an explicit
+WSL distribution and an installed Linux plugin root through
+`scripts/openubmc-wsl-bridge.js`. Native Windows Runtime, Python, SSH and private
+storage adapters are retired. An unsupported Windows backend returns
+`unsupported_platform`; it does not install dependencies or pick a distribution.
+
+Probe the selected backend with bounded `initialize` and `tools/list` requests.
 Require the same backend to answer both and advertise `observe` and `execute`.
-Then continue with the typed Runtime `observe` or `execute` operation. A live
-process, relay, port, or remembered tool list does not prove protocol health.
+Then continue through the typed Runtime operation. A process, port, relay or
+remembered tool list cannot establish current protocol health.
 
-`environment="windows"` identifies the client. The packaged structured
-execution host is `windows-native`. A WSL probe cannot stand in for that
-backend. A separately selected WSL environment may run builds, while device
-Runs, credentials, KB requests and evidence remain on the Windows host.
+The bridge forwards bounded non-secret task identity only. Credentials, KB
+authentication, dependencies and durable Runtime records remain in WSL. The
+MCP bootstrap emits an `openubmc-routing` receipt before each structured Runtime
+call. For this bridge, it records `client_environment="windows"`,
+`execution_host="wsl"` and the selected distribution. Its process-keyed HMAC
+does not expose raw arguments, credentials or a guessable digest. An unhealthy
+probe stays on the setup surface; inconsistent tools block Runtime forwarding.
 
-The installed MCP bootstrap checks `pluginctl doctor` protocol health before
-proxying the Runtime. It emits an `openubmc-routing` receipt on MCP stderr
-before forwarding each `observe`/`execute` call. The receipt includes the
-Windows execution host and a process-keyed HMAC of bounded request
-arguments, not raw target arguments, credentials, or a guessable digest. An
-unhealthy probe stays on the setup surface; an inconsistent tool list blocks
-the Runtime call.
+When MCP cannot serve the requested operation, retain the fallback decision
+from `ExecutionRouter.choose` in `scripts/execution_router.py`, including its
+`reason_code` and total command budget (at most 32). Specify the
+actual shell origin and pass every argument vector through `admit_shell` with
+the adapter-observed host. A PowerShell origin is still `windows-native` for
+transport accounting; that label does not make it a supported Runtime backend.
+PowerShell to WSL to SSH counts as two host transitions and remains bound to the
+requested target. Host mismatch, repeated equivalent commands and an exhausted
+budget reject further calls. Do not put passwords or tokens on command lines.
 
-When MCP is unavailable, unhealthy, on the wrong host, or the requested
-operation is unsupported, call `ExecutionRouter.choose` in
-`scripts/execution_router.py` and retain its receipt. Set `shell_host` to the
-actual command origin (`windows-native` for PowerShell, `wsl` only for an
-explicitly selected build shell). The receipt records `reason_code`, requested scope,
-evidence boundary, and a total call budget of at most 32. A Windows fallback
-without `shell_host` is rejected.
-
-Pass each argument vector through `ExecutionRouter.admit_shell` with the
-adapter-observed `observed_host` before running it. A host mismatch is rejected.
-Preserve the returned receipt, including command digest and host path.
-PowerShell → WSL → SSH counts as two transitions when such a path is explicitly
-used; the final SSH target remains bound to the requested scope. Stop when a repeated equivalent command or an
-exhausted budget returns `convergence_blocker`. Split command chains into
-separately budgeted actions. Do not place passwords or tokens on command lines.
-
-Shell output is observational only. It cannot close any typed Gate, including
-mutation, deployment, runtime verification, or rollback. A fallback stays
-unresolved in metrics until a Runtime-facing adapter verifies an actual Runtime
-evidence reference. The Runtime alone owns Run, Gate, Effect, Outcome,
-verification, and rollback decisions.
-
-The MCP bootstrap does not see Codex Host terminal calls. A trusted plugin
-`PreToolUse` hook can deny supported `Bash` and `exec_command` calls, but the
-hook input alone cannot reliably identify an openUBMC target operation, bind
-it to a fallback receipt, or establish the actual command host. Some specialized
-tool paths can opt out. Native macOS fixtures confirm task correlation through
-`session_id`/MCP `threadId` but expose only the shell command, with no typed
-target, receipt, or execution host. `ExecutionRouter` enforces its budget only where the
-Host or another caller passes every applicable shell action through
-`admit_shell` with its observed host. Do not describe an unobserved terminal
-command as a routed fallback.
+Shell output is observational. It cannot close a typed Gate or prove mutation,
+deployment, verification or rollback success. Runtime alone owns Run, Gate,
+Incident, Effect and Outcome state. An unobserved Host terminal command cannot
+be described as a routed fallback; the MCP bootstrap cannot inspect those
+commands or infer their host from Hook input.

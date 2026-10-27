@@ -97,9 +97,9 @@ def reusable_selector_fragments(
     prior: Mapping[str, object],
 ) -> tuple[tuple[tuple[ObservationQuery, Mapping[str, object]], ...], tuple[ObservationSelector, ...]]:
     """Partition an evidence plan into exact reusable values and missing values."""
-    # A systemd selector owns one boot/invocation window. Value-by-value cache
+    # Service and serial-console selectors own one boot/session window. Cache
     # reconstruction cannot retain that window, so recollect the whole query.
-    if any(item.kind == "systemd" for item in query.selectors):
+    if any(item.kind in {"systemd", "os_console"} for item in query.selectors):
         return (), query.selectors
     prior_selectors = {(item.selector_id, item.kind): item for item in prior_query.selectors}
     lanes = _mapping(_mapping(_mapping(prior.get("result")).get("lanes")).get("ssh"))
@@ -170,8 +170,8 @@ def selected_scope_complete(
     ssh = _mapping(lanes.get("ssh"))
     mdb_index = 0
     for selector in query.selectors:
-        if selector.kind == "systemd":
-            child = _mapping(_mapping(result.get("systemd")).get(selector.selector_id))
+        if selector.kind in {"systemd", "os_console"}:
+            child = _mapping(_mapping(result.get(selector.kind)).get(selector.selector_id))
             if child.get("complete") is not True or child.get("requested") != list(selector.names):
                 return False
             continue
@@ -339,6 +339,7 @@ def aggregate_observation_partitions(
     merged_lanes: dict[str, object] = {}
     merged_ssh: dict[str, object] = {}
     merged_systemd: dict[str, object] = {}
+    merged_os_console: dict[str, object] = {}
     partition_records: list[dict[str, object]] = []
     timing_fragments: dict[
         tuple[str, str], list[Mapping[str, object]]
@@ -370,6 +371,7 @@ def aggregate_observation_partitions(
         result = _mapping(raw.get("result"))
         partition_records.append(_partition_record(partition_query, raw, result))
         merged_systemd.update(copy.deepcopy(dict(_mapping(result.get("systemd")))))
+        merged_os_console.update(copy.deepcopy(dict(_mapping(result.get("os_console")))))
         capabilities = _mapping(result.get("capabilities"))
         partition_selected_capability_keys = {
             CAPABILITY_ALIASES[name]
@@ -442,6 +444,8 @@ def aggregate_observation_partitions(
     merged_result["lanes"] = merged_lanes
     if merged_systemd:
         merged_result["systemd"] = merged_systemd
+    if merged_os_console:
+        merged_result["os_console"] = merged_os_console
     merged_result["collection_partitions"] = partition_records
     aggregate["result"] = merged_result
     aggregate["ok"] = all_ok

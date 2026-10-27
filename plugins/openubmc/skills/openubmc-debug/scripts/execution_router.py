@@ -212,7 +212,7 @@ class ExecutionRouter:
 
     @property
     def expected_host(self) -> str:
-        return "windows-native" if self.environment == "windows" else self.environment
+        return "wsl" if self.environment == "windows" else self.environment
 
     def _checked_receipt(self, record: Mapping[str, object], path: str) -> dict[str, object]:
         if not isinstance(record, Mapping):

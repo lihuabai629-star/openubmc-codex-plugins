@@ -50,8 +50,8 @@ function canonicalArguments(value) {
 function runtimeProtocolHealthy(report) {
   const health = report?.mcp_health?.runtime;
   if (health?.ok !== true) return false;
-  // pluginctl.doctor obtains the names from a bounded MCP initialize/tools/list
-  // probe. A missing list cannot establish this Agent Interface.
+  // Either the live session or the full doctor probe must have completed
+  // initialize/tools/list. Prerequisite checks alone cannot establish this API.
   return Array.isArray(health.tools)
     && health.tools.includes("observe") && health.tools.includes("execute");
 }
@@ -73,6 +73,9 @@ function operationFor(request) {
 function routeRuntimeCall(request, { report, hostPlatform, selectedWsl = null, sequence }) {
   const operation = operationFor(request);
   if (operation === null) return null;
+  if (hostPlatform === "win32") {
+    return { allowed: false, reason_code: "unsupported_platform" };
+  }
   if (!runtimeProtocolHealthy(report)) {
     return { allowed: false, reason_code: "mcp_protocol_unhealthy" };
   }
@@ -91,12 +94,12 @@ function routeRuntimeCall(request, { report, hostPlatform, selectedWsl = null, s
     path: "structured-runtime-mcp",
     operation,
     tool: request.params.name,
-    client_environment: hostPlatform === "win32" ? "windows" : hostPlatform,
-    execution_host: hostPlatform === "win32" ? "windows-native" : hostPlatform,
-    selected_wsl: null,
+    client_environment: selectedWsl ? "windows" : hostPlatform,
+    execution_host: selectedWsl ? "wsl" : hostPlatform,
+    selected_wsl: selectedWsl,
     requested_scope_mac: `hmac-sha256:${scopeMac}`,
     evidence_boundary: "typed_runtime_mcp_result",
-    protocol: { healthy: true, source: "pluginctl.doctor", probe: "initialize/tools/list" },
+    protocol: { healthy: true, source: report.mcp_health.runtime.source || "pluginctl.doctor", probe: "initialize/tools/list" },
     fallback: null,
     structured_call_number: sequence,
   };

@@ -169,13 +169,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         origin = credentials_module.target_origin(args.target)
-        credential_path = args.credentials_file or credentials_module.os.environ.get(
-            "OPENUBMC_CREDENTIALS_FILE",
-            "",
+        credentials = credentials_module.resolve_target_credentials(
+            origin, args.credentials_file
         )
-        if not credential_path:
-            raise ValueError("OPENUBMC_CREDENTIALS_FILE is not configured")
-        credentials = credentials_module.load_credentials(Path(credential_path))
         identity = artifact_identity.stable_sha256(Path(args.artifact_path))
         expected_sha = args.artifact_sha256.strip().lower()
         if identity["sha256"] != expected_sha:

@@ -1,0 +1,115 @@
+{
+  "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+  "checkout_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+  "complete_validation_passed": true,
+  "command": [
+    "python",
+    "-B",
+    "scripts/validate_workflow.py"
+  ],
+  "stdout_stderr_sha256": "d35e343e1195f9080a94e756a84fc3802b136771f11a2c7aeeac0021ddcd6135",
+  "python_groups": [
+    {
+      "group": "openubmc-build/tests",
+      "tests": 143,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-code-submit/tests",
+      "tests": 31,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-debug/tests",
+      "tests": 263,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-developer/tests",
+      "tests": 124,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-doc-review/tests",
+      "tests": 5,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-environment-setup/tests",
+      "tests": 162,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-live-patch/tests",
+      "tests": 95,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-log-analyzer/tests",
+      "tests": 92,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-log-bundle-analyzer/tests",
+      "tests": 184,
+      "skipped": 1,
+      "passed": true
+    },
+    {
+      "group": "openubmc-publish/tests",
+      "tests": 8,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "openubmc-target-runtime/tests",
+      "tests": 1002,
+      "skipped": 3,
+      "passed": true
+    },
+    {
+      "group": "openubmc-upgrade/tests",
+      "tests": 111,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "qemu-testing/tests",
+      "tests": 26,
+      "skipped": 0,
+      "passed": true
+    },
+    {
+      "group": "scripts/tests",
+      "tests": 642,
+      "skipped": 27,
+      "passed": true
+    }
+  ],
+  "python_tests": 2888,
+  "python_skipped": 31,
+  "node_groups": [
+    {
+      "group": "Node tests: openubmc-kb-mcp",
+      "tests": 111,
+      "passed": true
+    },
+    {
+      "group": "Codex panel: tests",
+      "tests": 12,
+      "passed": true
+    }
+  ],
+  "node_tests": 123,
+  "hosted_ci": {
+    "status": "not_run"
+  }
+}

@@ -594,10 +594,7 @@ def _default_index_path(root: Path) -> Path:
 def _index_connection(root: Path, index_path: Path) -> sqlite3.Connection:
     if index_path.is_symlink():
         raise SourceIndexUnavailable("index_path_symlink")
-    if os.name == "nt":
-        _windows_private_storage().ensure_private_directory(index_path.parent)
-    else:
-        index_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    index_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     created = not index_path.exists()
     if not index_path.exists():
         try:
@@ -610,14 +607,7 @@ def _index_connection(root: Path, index_path: Path) -> sqlite3.Connection:
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             raise SourceIndexUnavailable("index_not_regular")
-        if os.name == "nt":
-            private = _windows_private_storage()
-            if created:
-                private.harden_new_file(index_path)
-            else:
-                private.verify_private_path(index_path)
-        else:
-            os.fchmod(fd, 0o600)
+        os.fchmod(fd, 0o600)
     finally:
         os.close(fd)
     connection = sqlite3.connect(index_path, timeout=0.5)

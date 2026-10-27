@@ -1,0 +1,14 @@
+{
+  "codex-panel/package-lock.json": "89dea7e7134bbbd2a71b068aa34510d27a30c768e1d8004938746b4d91919ec2",
+  "codex-panel/package.json": "c1a070c87dce2544dd82e89dc0213a06feb6e6677c9f3d52e325566b957ad274",
+  "codex-panel/scripts/build.mjs": "c91ee43f5891239177b78a68bdea8ffdf29332a5b1a5646fc01cf81ea6868896",
+  "codex-panel/src/backend.js": "0e846fe97be32271f76a29c382b9b8300acb2ba0d28010a46708544f14e31cbc",
+  "codex-panel/src/local-preview.js": "6af5f14b52949ac0e553bd08e4299652935f3376d815b0441a8fffc2188f20f9",
+  "codex-panel/src/mcp.js": "618a5bb28652fd5de03425714eeb3f1bcfcc762630c1448a8a0f3c233f6a29a2",
+  "codex-panel/src/native.js": "623ef01e12355b1d266781d1da80a257d37692bb62fa714c903655a67793539a",
+  "codex-panel/src/panel.js": "8b36419b58d659bee16a025b56811b1f7c58082271ef677378055c0bffee8e72",
+  "codex-panel/src/server.js": "be47a69d78e1be4e384388ab595f1a36832c7f6f71da723b1b1529ead437f144",
+  "codex-panel/web/app.js": "0442fa9373c01618d60f3bac48dae15ab9c39097b63bafe944bcd04fb9f2f2d9",
+  "codex-panel/web/panel.css": "6ff82ff8c4d14ccfb7b440e87d05aae50f898b92fd10f5a9e1e218a487921d85",
+  "codex-panel/web/panel.html": "f323ed8483afde6efa9eca2c2dbb77f0adb5d43c514b13bfb96b9bf930f4c160"
+}

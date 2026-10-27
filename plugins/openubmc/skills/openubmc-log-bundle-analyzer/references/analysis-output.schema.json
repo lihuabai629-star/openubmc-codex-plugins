@@ -1,0 +1,1791 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:openubmc:log-bundle-analyzer:output:1.0",
+  "title": "openUBMC log bundle analyzer result",
+  "description": "Version 1.0 JSON output produced by scripts/analyze_bundle.py --json.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tool",
+    "output_policy",
+    "ok",
+    "code",
+    "error",
+    "request",
+    "result"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "tool": {
+      "const": "openubmc_log_bundle_analyzer"
+    },
+    "output_policy": {
+      "$ref": "#/$defs/outputPolicy"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "error": {
+      "type": "string"
+    },
+    "request": {
+      "$ref": "#/$defs/request"
+    },
+    "result": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ok": {
+            "const": true
+          }
+        },
+        "required": ["ok"]
+      },
+      "then": {
+        "properties": {
+          "code": {
+            "const": "ok"
+          },
+          "error": {
+            "const": ""
+          },
+          "result": {
+            "$ref": "#/$defs/successResult"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "code": {
+            "not": {
+              "const": "ok"
+            }
+          },
+          "error": {
+            "type": "string",
+            "minLength": 1
+          },
+          "result": {
+            "$ref": "#/$defs/errorResult"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {"const": true},
+          "request": {
+            "properties": {"validate_only": {"const": false}},
+            "required": ["validate_only"]
+          }
+        },
+        "required": ["ok", "request"]
+      },
+      "then": {
+        "properties": {
+          "result": {"required": ["analysis"]}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "ok": {"const": true},
+          "request": {
+            "properties": {"validate_only": {"const": true}},
+            "required": ["validate_only"]
+          }
+        },
+        "required": ["ok", "request"]
+      },
+      "then": {
+        "properties": {
+          "result": {"not": {"required": ["analysis"]}}
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "request": {
+            "properties": {"include_sensitive_context": {"const": true}},
+            "required": ["include_sensitive_context"]
+          }
+        },
+        "required": ["request"]
+      },
+      "then": {
+        "properties": {
+          "output_policy": {
+            "properties": {"profile": {"const": "sensitive_context"}}
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "output_policy": {
+            "properties": {"profile": {"const": "shareable"}}
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "positiveInteger": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "stringArray": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sourceRevision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "publicSourceReference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^https://(?!(?:[a-z0-9-]+\\.)*(?:localhost|local|internal|lan|invalid|test|example)(?::|/))[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\\.[a-z]{2,63}(?::(?:[1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?/[^?\\s#]+(?:#[A-Za-z0-9._:-]{1,128})?$"
+    },
+    "provenanceProfile": {
+      "type": "object",
+      "required": ["definition_status", "source_type", "source_reference", "reliability"],
+      "oneOf": [
+        {
+          "properties": {
+            "source_type": {"const": "component_documentation"},
+            "definition_status": {"const": "documented"},
+            "reliability": {"const": "documented"},
+            "source_reference": {"$ref": "#/$defs/publicSourceReference"},
+            "source_revision": {"$ref": "#/$defs/sourceRevision"}
+          },
+          "required": ["source_revision"]
+        },
+        {
+          "properties": {
+            "source_type": {"const": "community_discussion"},
+            "definition_status": {"const": "community_supported"},
+            "reliability": {"const": "heuristic"},
+            "source_reference": {"$ref": "#/$defs/publicSourceReference"},
+            "source_revision": {"$ref": "#/$defs/sourceRevision"}
+          },
+          "required": ["source_revision"]
+        },
+        {
+          "properties": {
+            "source_type": {"const": "public_repository"},
+            "definition_status": {"const": "documented"},
+            "reliability": {"const": "documented"},
+            "source_reference": {"$ref": "#/$defs/publicSourceReference"},
+            "source_revision": {"$ref": "#/$defs/sourceRevision"}
+          },
+          "required": ["source_revision"]
+        },
+        {
+          "properties": {
+            "source_type": {"const": "validated_bundle_structure"},
+            "definition_status": {"const": "observed_path"},
+            "reliability": {"const": "observed_only"},
+            "source_reference": {"const": "bundle structure observation"}
+          },
+          "not": {"required": ["source_revision"]}
+        },
+        {
+          "properties": {
+            "source_type": {"const": "repository_maintained"},
+            "definition_status": {"const": "maintained_heuristic"},
+            "reliability": {"const": "heuristic"},
+            "source_reference": {"const": "repository-maintained heuristic"}
+          },
+          "not": {"required": ["source_revision"]}
+        },
+        {
+          "properties": {
+            "source_type": {"const": "bundle_local"},
+            "definition_status": {"const": "bundle_local_routing"},
+            "reliability": {"const": "local_only"},
+            "source_reference": {"const": "bundle-local observed directory"}
+          },
+          "not": {"required": ["source_revision"]}
+        }
+      ]
+    },
+    "outputPolicy": {
+      "type": "object",
+      "required": [
+        "profile",
+        "credential_redaction",
+        "common_identifier_redaction",
+        "location_redaction"
+      ],
+      "properties": {
+        "profile": {
+          "enum": ["shareable", "sensitive_context"]
+        },
+        "credential_redaction": {
+          "const": true
+        },
+        "common_identifier_redaction": {
+          "type": "boolean"
+        },
+        "location_redaction": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"profile": {"const": "shareable"}},
+            "required": ["profile"]
+          },
+          "then": {
+            "properties": {
+              "common_identifier_redaction": {"const": true},
+              "location_redaction": {"const": true}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {"profile": {"const": "sensitive_context"}},
+            "required": ["profile"]
+          },
+          "then": {
+            "properties": {
+              "common_identifier_redaction": {"const": false},
+              "location_redaction": {"const": false}
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "allOf": [
+        {
+          "not": {
+            "pattern": "^(?:/|[A-Za-z]:[\\\\/])"
+          }
+        },
+        {
+          "not": {
+            "pattern": "(?:^|/)\\.\\.?(?:/|$)|[\\\\\\u0000-\\u001F\\u007F]"
+          }
+        },
+        {
+          "not": {
+            "pattern": "//"
+          }
+        }
+      ]
+    },
+    "request": {
+      "type": "object",
+      "required": [
+        "bundle",
+        "bundle_dir",
+        "problem",
+        "validate_only",
+        "analysis_since",
+        "analysis_until",
+        "analysis_timezone",
+        "include_sensitive_context",
+        "analysis_limits"
+      ],
+      "properties": {
+        "bundle": {
+          "type": "string"
+        },
+        "bundle_dir": {
+          "type": "string"
+        },
+        "problem": {
+          "type": "string"
+        },
+        "validate_only": {
+          "type": "boolean"
+        },
+        "analysis_since": {
+          "type": "string"
+        },
+        "analysis_until": {
+          "type": "string"
+        },
+        "analysis_timezone": {
+          "type": "string"
+        },
+        "include_sensitive_context": {
+          "type": "boolean"
+        },
+        "analysis_limits": {
+          "type": "object",
+          "required": [
+            "max_files",
+            "max_lines",
+            "max_paths_per_log",
+            "max_bytes_per_file",
+            "max_total_bytes",
+            "max_line_bytes"
+          ],
+          "properties": {
+            "max_files": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "max_lines": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "max_paths_per_log": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64
+            },
+            "max_bytes_per_file": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 67108864
+            },
+            "max_total_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 268435456
+            },
+            "max_line_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576
+            }
+          },
+          "additionalProperties": false
+        },
+        "extract_dir": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "successResult": {
+      "type": "object",
+      "required": [
+        "source_kind",
+        "bundle",
+        "validation"
+      ],
+      "properties": {
+        "source_kind": {
+          "enum": ["local_archive", "extracted_directory"]
+        },
+        "bundle": {
+          "$ref": "#/$defs/bundle"
+        },
+        "validation": {
+          "$ref": "#/$defs/validation"
+        },
+        "analysis": {
+          "$ref": "#/$defs/analysis"
+        }
+      },
+      "additionalProperties": false
+    },
+    "errorResult": {
+      "type": "object",
+      "required": [
+        "source_kind",
+        "bundle",
+        "validation"
+      ],
+      "properties": {
+        "source_kind": {
+          "type": "string"
+        },
+        "bundle": {
+          "type": "object"
+        },
+        "validation": {
+          "type": "object"
+        },
+        "analysis": {
+          "$ref": "#/$defs/analysis"
+        }
+      },
+      "additionalProperties": false
+    },
+    "bundle": {
+      "type": "object",
+      "required": ["archive_path", "sha256", "extract_dir", "bundle_root"],
+      "properties": {
+        "archive_path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^(?:|[0-9a-f]{64})$"
+        },
+        "extract_dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bundle_root": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "validation": {
+      "type": "object",
+      "required": [
+        "valid",
+        "layout",
+        "bundle_root",
+        "present_sections",
+        "sections",
+        "total_file_count",
+        "total_files_in_known_sections",
+        "root_files",
+        "unknown_sections",
+        "warnings"
+      ],
+      "properties": {
+        "valid": {
+          "const": true
+        },
+        "layout": {
+          "const": "openubmc-one-click-log-bundle"
+        },
+        "bundle_root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "present_sections": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "sections": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/sectionSummary"
+          }
+        },
+        "total_files_in_known_sections": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "total_file_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "root_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "size_bytes"],
+            "properties": {
+              "path": {
+                "$ref": "#/$defs/relativePath"
+              },
+              "size_bytes": {
+                "$ref": "#/$defs/nonNegativeInteger"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "unknown_sections": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "warnings": {
+          "$ref": "#/$defs/stringArray"
+        }
+      },
+      "additionalProperties": true
+    },
+    "sectionSummary": {
+      "type": "object",
+      "required": [
+        "present",
+        "file_count",
+        "subdirectory_count",
+        "subdirectories",
+        "subdirectories_truncated"
+      ],
+      "properties": {
+        "present": {
+          "type": "boolean"
+        },
+        "file_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "subdirectory_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "subdirectories": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "file_count"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "file_count": {
+                "$ref": "#/$defs/nonNegativeInteger"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "subdirectories_truncated": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "analysis": {
+      "type": "object",
+      "required": [
+        "problem",
+        "selected_logs",
+        "evidence",
+        "evidence_count",
+        "context_evidence",
+        "context_evidence_count",
+        "timeline",
+        "timeline_count",
+        "correlation_windows",
+        "event_correlations",
+        "unmatched_event_anchors",
+        "correlation_scan",
+        "evidence_findings",
+        "structured_summaries",
+        "structured_observation_count",
+        "assessment",
+        "scan",
+        "summary"
+      ],
+      "properties": {
+        "problem": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selected_logs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/selectedLog"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "evidence_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "context_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "context_evidence_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/timelineItem"
+          }
+        },
+        "timeline_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "correlation_windows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/correlationWindow"
+          }
+        },
+        "event_correlations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/eventCorrelation"
+          }
+        },
+        "unmatched_event_anchors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unmatchedAnchor"
+          }
+        },
+        "correlation_scan": {
+          "$ref": "#/$defs/correlationScan"
+        },
+        "evidence_findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/finding"
+          }
+        },
+        "structured_summaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/structuredSummary"
+          }
+        },
+        "structured_observation_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "assessment": {
+          "enum": [
+            "evidence_found",
+            "evidence_found_with_gaps",
+            "analysis_incomplete",
+            "insufficient_bundle_evidence"
+          ]
+        },
+        "scan": {
+          "$ref": "#/$defs/scan"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "time_window": {
+          "type": "object",
+          "required": ["since", "until"],
+          "properties": {
+            "since": {
+              "type": "string"
+            },
+            "until": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "selectedLog": {
+      "type": "object",
+      "required": [
+        "name",
+        "purpose",
+        "component",
+        "definition_status",
+        "source_type",
+        "source_reference",
+        "reliability",
+        "matched_keywords",
+        "routing_basis",
+        "routing_reliability",
+        "structured_parser",
+        "scan_mode",
+        "semantic_level",
+        "artifact_format",
+        "route_mode",
+        "sensitivity",
+        "existing_paths",
+        "existing_path_count",
+        "existing_path_count_is_lower_bound",
+        "path_discovery_complete",
+        "path_discovery_entries_examined",
+        "path_discovery_entry_limit",
+        "existing_paths_truncated",
+        "scanned_paths",
+        "scanned_path_count",
+        "scan_truncated",
+        "scan_errors",
+        "scan_warnings",
+        "evidence_lines",
+        "context_lines"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "definition_status": {
+          "enum": [
+            "documented",
+            "community_supported",
+            "observed_path",
+            "maintained_heuristic",
+            "bundle_local_routing"
+          ]
+        },
+        "source_type": {
+          "enum": [
+            "component_documentation",
+            "community_discussion",
+            "public_repository",
+            "validated_bundle_structure",
+            "repository_maintained",
+            "bundle_local"
+          ]
+        },
+        "source_reference": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_revision": {
+          "$ref": "#/$defs/sourceRevision"
+        },
+        "reliability": {
+          "enum": ["documented", "heuristic", "observed_only", "local_only"]
+        },
+        "matched_keywords": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "routing_basis": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "routing_reliability": {
+          "type": "string"
+        },
+        "structured_parser": {
+          "enum": ["", "delimited_records", "pcie_topology_records", "mdb_properties"]
+        },
+        "scan_mode": {
+          "enum": ["text", "metadata_only"]
+        },
+        "semantic_level": {
+          "enum": ["path_only", "purpose", "structure", "diagnostic"]
+        },
+        "artifact_format": {
+          "enum": ["text", "csv", "json", "sqlite", "binary", "archive", "image", "video", "mixed", "unknown"]
+        },
+        "route_mode": {
+          "enum": ["automatic", "explicit_only", "never"]
+        },
+        "sensitivity": {
+          "enum": ["ordinary", "identifier_sensitive", "configuration_sensitive", "highly_sensitive"]
+        },
+        "existing_paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
+        },
+        "existing_path_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "existing_path_count_is_lower_bound": {
+          "type": "boolean"
+        },
+        "path_discovery_complete": {
+          "type": "boolean"
+        },
+        "path_discovery_entries_examined": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "path_discovery_entry_limit": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "existing_paths_truncated": {
+          "type": "boolean"
+        },
+        "scanned_paths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
+        },
+        "scanned_path_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "scan_truncated": {
+          "type": "boolean"
+        },
+        "scan_errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scanIssue"
+          }
+        },
+        "scan_warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scanIssue"
+          }
+        },
+        "evidence_lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceLine"
+          }
+        },
+        "context_lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidenceLine"
+          }
+        }
+      },
+      "allOf": [{"$ref": "#/$defs/provenanceProfile"}],
+      "additionalProperties": false
+    },
+    "evidenceLine": {
+      "type": "object",
+      "required": ["path", "line_number", "line", "match_class"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "line_number": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "line": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "match_class": {
+          "type": "string",
+          "minLength": 1
+        },
+        "redacted": {
+          "type": "boolean"
+        },
+        "sampled_from_larger_set": {
+          "type": "boolean"
+        },
+        "source_revision": {
+          "$ref": "#/$defs/sourceRevision"
+        }
+      },
+      "additionalProperties": true
+    },
+    "evidence": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/evidenceLine"
+        },
+        {
+          "type": "object",
+          "required": [
+            "log",
+            "purpose",
+            "component",
+            "definition_status",
+            "source_type",
+            "source_reference",
+            "reliability",
+            "semantic_level",
+            "artifact_format",
+            "route_mode",
+            "sensitivity",
+            "routing_basis",
+            "routing_reliability"
+          ],
+          "properties": {
+            "log": {
+              "type": "string",
+              "minLength": 1
+            },
+            "purpose": {
+              "type": "string",
+              "minLength": 1
+            },
+            "component": {
+              "type": "string",
+              "minLength": 1
+            },
+            "definition_status": {
+              "enum": [
+                "documented",
+                "community_supported",
+                "observed_path",
+                "maintained_heuristic",
+                "bundle_local_routing"
+              ]
+            },
+            "source_type": {
+              "enum": [
+                "component_documentation",
+                "community_discussion",
+                "public_repository",
+                "validated_bundle_structure",
+                "repository_maintained",
+                "bundle_local"
+              ]
+            },
+            "source_reference": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source_revision": {
+              "$ref": "#/$defs/sourceRevision"
+            },
+            "reliability": {
+              "enum": ["documented", "heuristic", "observed_only", "local_only"]
+            },
+            "semantic_level": {
+              "enum": ["path_only", "purpose", "structure", "diagnostic"]
+            },
+            "artifact_format": {
+              "enum": ["text", "csv", "json", "sqlite", "binary", "archive", "image", "video", "mixed", "unknown"]
+            },
+            "route_mode": {
+              "enum": ["automatic", "explicit_only", "never"]
+            },
+            "sensitivity": {
+              "enum": ["ordinary", "identifier_sensitive", "configuration_sensitive", "highly_sensitive"]
+            },
+            "routing_basis": {
+              "$ref": "#/$defs/stringArray"
+            },
+            "routing_reliability": {
+              "enum": ["heuristic", "local_only"]
+            }
+          },
+          "allOf": [{"$ref": "#/$defs/provenanceProfile"}]
+        }
+      ]
+    },
+    "pointer": {
+      "type": "object",
+      "required": ["path", "line_number", "timestamp"],
+      "properties": {
+        "log": {
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "line_number": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "source_revision": {
+          "$ref": "#/$defs/sourceRevision"
+        }
+      },
+      "additionalProperties": true
+    },
+    "timelineItem": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/evidence"
+        },
+        {
+          "type": "object",
+          "required": [
+            "sequence",
+            "sequence_scope",
+            "domain_sequence",
+            "timestamp",
+            "time_domain"
+          ],
+          "properties": {
+            "sequence": {
+              "$ref": "#/$defs/positiveInteger"
+            },
+            "sequence_scope": {
+              "enum": ["global", "time_domain"]
+            },
+            "domain_sequence": {
+              "$ref": "#/$defs/positiveInteger"
+            },
+            "timestamp": {
+              "type": "string",
+              "minLength": 1
+            },
+            "time_domain": {
+              "enum": ["timezone_aware", "timezone_unspecified", "unknown"]
+            }
+          }
+        }
+      ]
+    },
+    "correlationWindow": {
+      "type": "object",
+      "required": [
+        "start_timestamp",
+        "end_timestamp",
+        "logs",
+        "evidence",
+        "interpretation",
+        "candidate_scan_complete"
+      ],
+      "properties": {
+        "start_timestamp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "end_timestamp": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logs": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pointer"
+          }
+        },
+        "interpretation": {
+          "const": "temporal_proximity_only"
+        },
+        "time_domain": {
+          "type": "string"
+        },
+        "candidate_scan_complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "eventCorrelation": {
+      "type": "object",
+      "required": [
+        "anchor_id",
+        "anchor",
+        "basis",
+        "candidates",
+        "interpretation",
+        "candidate_scan_complete"
+      ],
+      "properties": {
+        "anchor_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "$ref": "#/$defs/pointer"
+        },
+        "basis": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/pointer"
+              },
+              {
+                "type": "object",
+                "required": ["delta_seconds", "shared_components"],
+                "properties": {
+                  "delta_seconds": {
+                    "type": "integer"
+                  },
+                  "shared_components": {
+                    "$ref": "#/$defs/stringArray"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "interpretation": {
+          "const": "candidate_context_not_causality"
+        },
+        "candidate_scan_complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "unmatchedAnchor": {
+      "type": "object",
+      "required": ["anchor_id", "anchor", "reason", "candidate_scan_complete"],
+      "properties": {
+        "anchor_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "$ref": "#/$defs/pointer"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidate_scan_complete": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": true
+    },
+    "correlationScan": {
+      "type": "object",
+      "required": [
+        "attempted",
+        "complete",
+        "candidate_scan_complete",
+        "operation_log_selected",
+        "anchor_discovery_complete",
+        "anchor_count_observed",
+        "anchor_count_retained",
+        "unparseable_anchor_count",
+        "anchors_truncated",
+        "window_seconds",
+        "available_path_count",
+        "bounded_path_record_count",
+        "eligible_path_count",
+        "primary_scanned_candidate_path_count",
+        "scanned_path_count",
+        "primary_scanned_bytes",
+        "scanned_bytes",
+        "remaining_bytes_before_scan",
+        "remaining_bytes_after_scan",
+        "candidate_count_observed",
+        "candidate_count_retained",
+        "max_candidates_per_anchor",
+        "max_paths_per_log",
+        "max_total_bytes",
+        "max_bytes_per_file",
+        "max_line_bytes",
+        "truncated",
+        "errors",
+        "warnings"
+      ],
+      "properties": {
+        "attempted": {
+          "type": "boolean"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "candidate_scan_complete": {
+          "type": "boolean"
+        },
+        "operation_log_selected": {
+          "type": "boolean"
+        },
+        "anchor_discovery_complete": {
+          "type": "boolean"
+        },
+        "anchor_count_observed": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "anchor_count_retained": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "unparseable_anchor_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "anchors_truncated": {
+          "type": "boolean"
+        },
+        "window_seconds": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "available_path_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "bounded_path_record_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "eligible_path_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "primary_scanned_candidate_path_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "scanned_path_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "primary_scanned_bytes": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "scanned_bytes": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "remaining_bytes_before_scan": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "remaining_bytes_after_scan": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "candidate_count_observed": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "candidate_count_retained": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "max_candidates_per_anchor": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_paths_per_log": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_total_bytes": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_bytes_per_file": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_line_bytes": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "observed_by_anchor": {
+          "$ref": "#/$defs/countMap"
+        },
+        "retained_by_anchor": {
+          "$ref": "#/$defs/countMap"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/correlationScanIssue"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/correlationScanIssue"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "correlationScanIssue": {
+      "type": "object",
+      "required": ["code", "message", "phase"],
+      "properties": {
+        "log": {
+          "type": "string"
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "phase": {
+          "enum": ["operation_anchor_discovery", "correlation_candidate_scan"]
+        },
+        "line_number": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      },
+      "additionalProperties": true
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "finding_id",
+        "revision",
+        "kind",
+        "reported_severity",
+        "evidence_strength",
+        "sampled_occurrence_count",
+        "count_is_lower_bound",
+        "count_complete",
+        "logs",
+        "components",
+        "sampled_first_timestamp",
+        "sampled_last_timestamp",
+        "representative",
+        "evidence"
+      ],
+      "properties": {
+        "finding_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "kind": {
+          "const": "log_signal"
+        },
+        "reported_severity": {
+          "enum": ["critical", "error", "warning", "unclassified"]
+        },
+        "evidence_strength": {
+          "enum": ["direct_signal", "problem_context", "generic_signal"]
+        },
+        "sampled_occurrence_count": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "count_is_lower_bound": {
+          "type": "boolean"
+        },
+        "count_complete": {
+          "type": "boolean"
+        },
+        "logs": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "components": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "sampled_first_timestamp": {
+          "type": "string"
+        },
+        "sampled_last_timestamp": {
+          "type": "string"
+        },
+        "representative": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/pointer"
+            },
+            {
+              "type": "object",
+              "required": ["line"],
+              "properties": {
+                "line": {
+                  "type": "string"
+                }
+              }
+            }
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pointer"
+          }
+        }
+      },
+      "not": {
+        "anyOf": [
+          {"required": ["occurrence_count"]},
+          {"required": ["first_timestamp"]},
+          {"required": ["last_timestamp"]}
+        ]
+      },
+      "additionalProperties": true
+    },
+    "structuredSummary": {
+      "type": "object",
+      "required": [
+        "log",
+        "component",
+        "parser",
+        "path",
+        "observation_type",
+        "interpretation",
+        "observed_record_count",
+        "complete",
+        "truncated",
+        "bytes_observed",
+        "time_window_applied"
+      ],
+      "properties": {
+        "log": {
+          "type": "string",
+          "minLength": 1
+        },
+        "component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_revision": {
+          "$ref": "#/$defs/sourceRevision"
+        },
+        "parser": {
+          "enum": ["delimited_records", "pcie_topology_records", "mdb_properties"]
+        },
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "observation_type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "interpretation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observed_record_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "bytes_observed": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "time_window_applied": {
+          "type": "boolean"
+        },
+        "delimiter": {
+          "enum": ["comma", "semicolon", "tab", "pipe"]
+        },
+        "header_present": {
+          "type": "boolean"
+        },
+        "columns": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "column_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "malformed_record_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "record_kind_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "status_code_counts": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/countMap"
+          }
+        },
+        "records_without_unit_identifier": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "sample_records": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{16}$"
+              }
+            },
+            "not": {
+              "required": ["label"]
+            },
+            "additionalProperties": true
+          }
+        },
+        "sensitive_fields_omitted": {
+          "$ref": "#/$defs/stringArray"
+        },
+        "object_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "interface_block_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "property_value_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "interface_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "property_counts": {
+          "$ref": "#/$defs/countMap"
+        },
+        "sample_blocks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "object_path_hash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{16}$"
+              }
+            },
+            "not": {
+              "required": ["object_path"]
+            },
+            "additionalProperties": true
+          }
+        },
+        "property_values_omitted": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "parser": {"const": "delimited_records"}
+            },
+            "required": ["parser"]
+          },
+          "then": {
+            "required": [
+              "delimiter",
+              "header_present",
+              "columns",
+              "column_count",
+              "malformed_record_count"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "parser": {"const": "pcie_topology_records"}
+            },
+            "required": ["parser"]
+          },
+          "then": {
+            "required": [
+              "record_kind_counts",
+              "status_code_counts",
+              "records_without_unit_identifier",
+              "sample_records",
+              "sensitive_fields_omitted"
+            ],
+            "properties": {
+              "sample_records": {
+                "items": {
+                  "required": ["label_hash"]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "parser": {"const": "mdb_properties"}
+            },
+            "required": ["parser"]
+          },
+          "then": {
+            "required": [
+              "object_count",
+              "interface_block_count",
+              "property_value_count",
+              "interface_counts",
+              "property_counts",
+              "sample_blocks",
+              "property_values_omitted"
+            ],
+            "properties": {
+              "sample_blocks": {
+                "items": {
+                  "required": ["object_path_hash"]
+                }
+              }
+            }
+          }
+        }
+      ],
+      "not": {
+        "required": ["record_count"]
+      },
+      "additionalProperties": true
+    },
+    "countMap": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/nonNegativeInteger"
+      }
+    },
+    "scan": {
+      "type": "object",
+      "required": [
+        "complete",
+        "scanned_path_count",
+        "scanned_bytes",
+        "max_paths_per_log",
+        "max_total_bytes",
+        "max_bytes_per_file",
+        "max_line_bytes",
+        "truncated",
+        "path_discovery",
+        "errors",
+        "warnings"
+      ],
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "scanned_path_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "scanned_bytes": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "max_paths_per_log": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_total_bytes": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_bytes_per_file": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "max_line_bytes": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "path_discovery": {
+          "$ref": "#/$defs/pathDiscovery"
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scanIssueWithLog"
+          }
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scanIssueWithLog"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "pathDiscovery": {
+      "type": "object",
+      "required": [
+        "entries_examined",
+        "entry_limit",
+        "complete",
+        "truncated",
+        "path_limit",
+        "glob_match_limit",
+        "rotation_limit",
+        "component_hint_discovery"
+      ],
+      "properties": {
+        "entries_examined": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "entry_limit": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "path_limit": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "glob_match_limit": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "rotation_limit": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "component_hint_discovery": {
+          "$ref": "#/$defs/componentHintDiscovery"
+        }
+      },
+      "additionalProperties": false
+    },
+    "componentHintDiscovery": {
+      "type": "object",
+      "required": [
+        "matched_directory_count",
+        "retained_directory_count",
+        "entries_examined",
+        "complete",
+        "truncated",
+        "limit",
+        "entry_limit"
+      ],
+      "properties": {
+        "matched_directory_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "retained_directory_count": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "entries_examined": {
+          "$ref": "#/$defs/nonNegativeInteger"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "limit": {
+          "$ref": "#/$defs/positiveInteger"
+        },
+        "entry_limit": {
+          "$ref": "#/$defs/positiveInteger"
+        }
+      },
+      "additionalProperties": false
+    },
+    "scanIssue": {
+      "type": "object",
+      "required": ["path", "code", "message"],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "scanIssueWithLog": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/scanIssue"
+        },
+        {
+          "type": "object",
+          "required": ["log"],
+          "properties": {
+            "log": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 if __name__ == '__main__':
-    import sys as _plugin_sys
-    _plugin_sys.dont_write_bytecode = True
-    import runpy as _plugin_runpy
-    from pathlib import Path as _PluginPath
-    _plugin_runpy.run_path(str(_PluginPath(__file__).parent / '../../openubmc-debug/scripts/_plugin_entrypoint.py'))['initialize'](__file__)
+    import sys as _openubmc_sys
+    _openubmc_sys.dont_write_bytecode = True
+    import runpy as _openubmc_runpy
+    from pathlib import Path as _openubmc_Path
+    _openubmc_guard = _openubmc_Path(__file__).parent / '../../openubmc-debug/scripts/_plugin_entrypoint.py'
+    _openubmc_cache = _openubmc_runpy.run_path(str(_openubmc_guard))['initialize'](__file__)
+
 
 import argparse
 import json
@@ -23,7 +25,8 @@ import sys
 ROOT = Path(__file__).resolve().parents[1] / 'resources' / 'community'
 
 
-def run_check(kind, repo, files=(), *, timeout=120, old_ref=None, new_ref=None, output=None):
+def run_check(kind, repo, files=(), *, timeout=120, old_ref=None, new_ref=None, output=None,
+              old_dir=None, new_dir=None):
     repo = Path(repo).resolve(strict=True)
     if not repo.is_dir():
         raise ValueError('repo must be a local directory')
@@ -35,7 +38,8 @@ def run_check(kind, repo, files=(), *, timeout=120, old_ref=None, new_ref=None, 
         scoped.append(str(path.relative_to(repo)))
     if kind == 'compliance':
         scoped = [p for p in scoped if p.endswith('.json') and p.startswith(
-            ('interface_config/redfish/', 'intf/mdb/', 'messages/', 'path/mdb/'))]
+            ('interface_config/redfish/', 'intf/mdb/', 'messages/', 'path/mdb/',
+             'json/intf/mdb/', 'json/path/mdb/'))]
         if not scoped:
             return {'status': 'skipped', 'reason': 'no matching interface files', 'files': []}
         node = shutil.which('node')
@@ -53,15 +57,33 @@ def run_check(kind, repo, files=(), *, timeout=120, old_ref=None, new_ref=None, 
             return {'status': 'skipped', 'reason': 'no web_backend files changed'}
         command = [sys.executable, str(ROOT / 'web-backend/scripts/rackmount_web_backend_check.py'), '--repo', str(repo)]
     elif kind == 'redfish-diff':
-        if not old_ref or not new_ref or not output:
-            raise ValueError('old-ref, new-ref and output are required')
-        refs = []
-        for ref in (old_ref, new_ref):
-            result = subprocess.run(['git', 'rev-parse', '--verify', '--end-of-options', ref + '^{commit}'], cwd=repo,
-                                    capture_output=True, text=True, timeout=10, check=True)
-            refs.append(result.stdout.strip())
+        if not output:
+            raise ValueError('output is required')
+        if old_dir or new_dir:
+            if not old_dir or not new_dir or old_ref or new_ref:
+                raise ValueError('supply old-dir/new-dir or old-ref/new-ref')
+            roots = [Path(p).resolve(strict=True) for p in (old_dir, new_dir)]
+            if not all(p.is_dir() for p in roots):
+                raise ValueError('old-dir and new-dir must be directories')
+            inputs = ['--old', str(roots[0]), '--new', str(roots[1])]
+        else:
+            if not old_ref or not new_ref:
+                raise ValueError('old-ref and new-ref are required')
+            refs = []
+            for ref in (old_ref, new_ref):
+                result = subprocess.run(['git', 'rev-parse', '--verify', '--end-of-options', ref + '^{commit}'], cwd=repo,
+                                        capture_output=True, text=True, timeout=10, check=True,
+                                        env={**os.environ, 'GIT_NO_LAZY_FETCH': '1', 'GIT_TERMINAL_PROMPT': '0'})
+                refs.append(result.stdout.strip())
+            inputs = ['--repo', str(repo), '--old-ref', refs[0], '--new-ref', refs[1]]
+        destination = Path(output).resolve()
+        sources = [repo] if not (old_dir or new_dir) else roots
+        if any(destination == source or source.is_relative_to(destination) for source in sources):
+            raise ValueError('output must not contain a source directory')
+        if destination.exists() and (not destination.is_dir() or any(destination.iterdir())):
+            raise ValueError('output must be a new or empty directory')
         command = [sys.executable, str(ROOT / 'redfish-diff/scripts/analyze_redfish_diff.py'),
-                   '--repo', str(repo), '--old-ref', refs[0], '--new-ref', refs[1], '--out-dir', str(Path(output).resolve())]
+                   *inputs, '--out-dir', str(destination), '--offline']
     else:
         raise ValueError('unknown check')
     if os.name != "posix":
@@ -69,7 +91,8 @@ def run_check(kind, repo, files=(), *, timeout=120, old_ref=None, new_ref=None, 
     process = None
     try:
         with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-            process = subprocess.Popen(command, cwd=repo, stdout=stdout, stderr=stderr, start_new_session=True)
+            process = subprocess.Popen(command, cwd=repo, stdout=stdout, stderr=stderr, start_new_session=True,
+                                       env={**os.environ, 'GIT_NO_LAZY_FETCH': '1', 'GIT_TERMINAL_PROMPT': '0'})
             deadline = time.monotonic() + timeout
             while process.poll() is None:
                 if time.monotonic() >= deadline:
@@ -116,12 +139,15 @@ def main():
     parser.add_argument('--old-ref')
     parser.add_argument('--new-ref')
     parser.add_argument('--output')
+    parser.add_argument('--old-dir')
+    parser.add_argument('--new-dir')
     args = parser.parse_args()
     if not 1 <= args.timeout <= 600:
         parser.error('timeout must be 1-600 seconds')
     try:
         result = run_check(args.kind, args.repo, args.file, timeout=args.timeout,
-                           old_ref=args.old_ref, new_ref=args.new_ref, output=args.output)
+                           old_ref=args.old_ref, new_ref=args.new_ref, output=args.output,
+                           old_dir=args.old_dir, new_dir=args.new_dir)
     except (ValueError, OSError, subprocess.SubprocessError) as exc:
         result = {'status': 'incomplete', 'reason': str(exc)}
     print(json.dumps(result, ensure_ascii=False, indent=2))

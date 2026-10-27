@@ -1,61 +1,35 @@
 {
-  "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
-  "hosted_ci": {
-    "conclusion": "success",
-    "head_commit": "68bc81254e716f65b4887ca3e68523b100d2f40c",
-    "jobs": [
-      {
-        "conclusion": "success",
-        "name": "verify"
-      },
-      {
-        "conclusion": "success",
-        "name": "Windows native plugin bootstrap"
-      }
-    ],
-    "run_id": 39404719355,
-    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/39404719355"
-  },
-  "installed_hosts": {
-    "hosts": [
-      "0630",
-      "2603",
-      "windows"
-    ],
-    "passed": true,
-    "plugin_installations": 5,
-    "receipt": "docs/installed-hosts-2.1.9.json"
-  },
-  "native_windows_runtime_regressions": {
-    "passed": 5,
-    "python": "3.12.14",
-    "tests": 5
-  },
-  "passed": true,
-  "property_checks": {
-    "passed": 42,
-    "tests": 42
+  "version": "2.2.16",
+  "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+  "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+  "passed": false,
+  "local_qualification_passed": true,
+  "release_eligible": false,
+  "archive_sha256": "4bc3e82bdb5091d0fd0dbbfc360d496383d9fb195f2136eb35b22945d942e355",
+  "native_lifecycle": {
+    "report": "docs/qualification/2.2.16/plugin-qualification.json",
+    "passed": true
   },
   "public_behavior": {
     "behavior": {
       "artifacts": {
         "passed": true,
-        "seconds": 5.009,
+        "seconds": 4.609,
         "tests": 4
       },
       "build": {
         "passed": true,
-        "seconds": 1.217,
+        "seconds": 1.218,
         "tests": 6
       },
       "credentials": {
         "passed": true,
-        "seconds": 1.068,
+        "seconds": 0.693,
         "tests": 9
       },
       "doctor": {
         "passed": true,
-        "seconds": 4.143,
+        "seconds": 2.887,
         "tests": 5
       },
       "kb_loader": {
@@ -64,48 +38,48 @@
       },
       "logs": {
         "passed": true,
-        "seconds": 0.256,
+        "seconds": 0.078,
         "tests": 3
       },
       "migration": {
         "passed": true,
-        "seconds": 9.255,
+        "seconds": 7.314,
         "tests": 17
       },
       "python_entrypoints": {
         "passed": true,
-        "seconds": 38.758,
-        "tests": 11
+        "seconds": 33.654,
+        "tests": 13
       },
       "skill_entry": {
         "passed": true,
-        "seconds": 32.699,
+        "seconds": 22.297,
         "tests": 10
       },
       "ssh": {
         "passed": true,
-        "seconds": 4.713,
+        "seconds": 13.509,
         "tests": 4
       },
       "startup": {
         "passed": true,
-        "seconds": 1.421,
-        "tests": 5
+        "seconds": 0.76,
+        "tests": 7
       },
       "upgrade": {
         "passed": true,
-        "seconds": 6.252,
+        "seconds": 5.671,
         "tests": 2
       }
     },
     "cold_dependencies": {
       "passed": true,
-      "seconds": 34.501
+      "seconds": 2.869
     },
-    "content_digest": "59a5115a94faacfc15c5b686e393189be12286410f636a149293f8be8b710cca",
+    "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
     "dependency_locks": {
-      "openubmc-kb-mcp/package-lock.json": "a9476a47627b6b628b7ea8d8e1d47f3fabfc8dfd4e8c9f88dee07aadf90e0a65",
-      "requirements.lock": "27e99ceb902b98111f4becff47a1f6754d951b9f57a8af3adda0b50650232f36"
+      "openubmc-kb-mcp/package-lock.json": "acff33474be7a162ad912da7573b790575aa8430a5b4312a5ddad04b38edb7e5",
+      "requirements.lock": "8eb3b8a6fda4512f6cbc4f2f921063f8bad7163786d8e577b075b7e2581abf93"
     },
     "mcp_startup": {
       "kb": {
@@ -113,7 +87,7 @@
         "ok": true,
         "server": {
           "name": "openubmc-kb-mcp-server",
-          "version": "1.3.0"
+          "version": "1.3.4"
         },
         "stderr": "",
         "timed_out": false,
@@ -153,17 +127,71 @@
     "remote_business_qualification": "not_run",
     "runtime_shutdown_verified": true,
     "schema": "openubmc.public-behavior.v1",
-    "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
-    "version": "2.1.9"
+    "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+    "version": "2.2.16"
   },
-  "records": {
-    "credential_fixture": "isolated capturing-backend defaults",
-    "passed": 167,
-    "skipped_native_windows": 3,
-    "tests": 170
+  "installed_host_records": {
+    "codex": "codex-cli 0.153.4",
+    "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+    "desktop_ui_tested": false,
+    "fresh_v2_records": true,
+    "installed_export_verified": true,
+    "live_device_tested": false,
+    "live_model_tested": false,
+    "measurement_source_failure_and_recovery": true,
+    "native_hooks": true,
+    "native_resume_preserved_run": true,
+    "network_scope": "loopback only",
+    "passed": true,
+    "registered_task_only_measurements": true,
+    "same_task_project_switch": true,
+    "schema": "openubmc.installed-host-records.qualification/v1",
+    "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+    "two_project_bindings": true,
+    "unexecuted_test_receipts_absent": true,
+    "unknown_usage_retained": true,
+    "version": "2.2.16"
   },
-  "remote_business_qualification": "not_run",
-  "source_commit": "38960986e93a2e24dbcd2a77f5c8b6447f908b98",
-  "status": "qualified",
-  "version": "2.1.9"
+  "platforms": {
+    "linux": {
+      "schema": "openubmc.portable-capabilities.v1",
+      "passed": true,
+      "version": "2.2.16",
+      "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+      "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+      "platform": "Linux",
+      "python": "3.12.3",
+      "native_windows_runtime": "unsupported",
+      "windows_setup_recovery": true,
+      "offline_analysis": true,
+      "redaction": true
+    },
+    "windows": {
+      "schema": "openubmc.portable-capabilities.v1",
+      "passed": true,
+      "version": "2.2.16",
+      "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+      "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+      "platform": "Windows",
+      "python": "3.14.7",
+      "native_windows_runtime": "unsupported",
+      "windows_setup_recovery": true,
+      "offline_analysis": true,
+      "redaction": true
+    }
+  },
+  "hosted_ci": {
+    "status": "not_run"
+  },
+  "publication": {
+    "status": "pending"
+  },
+  "source_release_commit": "d75687f026fbbc56b58377266ba1126a8874c52a",
+  "repository_validation": {
+    "passed": true,
+    "report": "docs/qualification/2.2.16/repository-validation.json",
+    "python_tests": 2888,
+    "node_tests": 123,
+    "python_skipped": 31
+  }
 }

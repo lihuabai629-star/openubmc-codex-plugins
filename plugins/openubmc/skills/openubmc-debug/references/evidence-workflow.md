@@ -47,7 +47,7 @@ Keep the working directory at the task's openUBMC repository and run the helper
 through its canonical installed Skill path:
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/preflight_remote.py" \
+python "<plugin-root>/skills/openubmc-debug/scripts/preflight_remote.py" \
   --ip <ip> --json --compact-json
 ```
 
@@ -199,7 +199,7 @@ Bound reads by files, keyword, line count, rotation range, or boot time. Record 
 Enter this auxiliary lane only when the question explicitly requires host-side visibility and the user supplied `OPENUBMC_OS_*` access. It is not a fifth BMC capability and does not replace object, alarm, log, or file evidence.
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/doctor.py" --ip <bmc-ip> --os-check --json --compact-json
+python "<plugin-root>/skills/openubmc-debug/scripts/doctor.py" --ip <bmc-ip> --os-check --json --compact-json
 ```
 
 The OS probe is fixed and read-only: host identity plus a bounded PCI sample. It uses the
@@ -258,7 +258,7 @@ of generating an unbounded pairwise diff. Preserve every raw single-target resul
 only the comparison view.
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/compare_remote.py" \
+python "<plugin-root>/skills/openubmc-debug/scripts/compare_remote.py" \
   --reference-ip <reference-ip> \
   --candidate-ip <candidate-ip-1> \
   --candidate-ip <candidate-ip-2> \

@@ -113,6 +113,26 @@ def identity(path: Path) -> str | None:
     return verify_directory(path)['content_digest'] if path.exists() or path.is_symlink() else None
 
 
+def cache_in_use(path: Path) -> bool:
+    """Keep live Linux hosts' cwd and executable paths available during rollback."""
+    if not Path('/proc/self').exists():
+        return True
+    prefix = os.fsencode(str(path))
+    for process in Path('/proc').iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            cwd = (process/'cwd').resolve(strict=True)
+            arguments = (process/'cmdline').read_bytes().split(b'\0')
+        except (OSError, RuntimeError):
+            continue  # A process can exit during the inspection.
+        if cwd == path or path in cwd.parents or any(
+            value == prefix or value.startswith(prefix+b'/') for value in arguments
+        ):
+            return True
+    return False
+
+
 def stage_directory(path: Path, files: dict[str, bytes]) -> None:
     temporary = path.with_name('.'+path.name+'-'+uuid.uuid4().hex)
     materialize(temporary, files)
@@ -210,6 +230,8 @@ def replace_directory(journal: Path, record: dict, key: str, candidate: Path) ->
     path = Path(record[key])
     if identity(path) != record[key+'_before']:
         raise ValueError('plugin '+key+' changed before activation')
+    if record[key+'_before'] == record['content_digest']:
+        return
     record[key+'_written'] = True
     write(journal/'transaction.json', canonical(record))
     if path.exists():
@@ -358,9 +380,18 @@ def activate(archive: Path, archive_sha: str, home: Path, codex: Path) -> dict:
                         raise ValueError('previous Codex cache is not owned by this installer')
                     saved = saved_root/old_path.name
                     old_caches.append({'path':str(old_path), 'saved':str(saved), 'content_digest':old_identity})
-            record['cache_old'] = old_caches
+            # Existing hosts can still resolve helpers or hold their cwd here.
+            # Codex chooses the highest cached version, so rollback must move only
+            # newer inactive versions; normal updates retain every older version.
+            version_key = lambda value: tuple(int(part) for part in value.split('.'))
+            record['cache_retained'] = [item for item in old_caches
+                if version_key(Path(item['path']).name) < version_key(lock['version'])]
+            record['cache_old'] = [item for item in old_caches
+                if item not in record['cache_retained']]
+            if any(cache_in_use(Path(item['path'])) for item in record['cache_old']):
+                raise ValueError('newer plugin cache is in use; close its hosts before rollback')
             write(journal/'transaction.json', canonical(record))
-            for item in old_caches:
+            for item in record['cache_old']:
                 rename(Path(item['path']), Path(item['saved']))
             replace_directory(journal, record, 'cache', stage_cache)
             record['config_after'], record['config_written'] = digest(after), True

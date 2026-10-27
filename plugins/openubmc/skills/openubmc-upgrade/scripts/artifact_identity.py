@@ -103,7 +103,7 @@ def validate_artifact_metadata(
     product_version: str,
     actual_size: int | None = None,
 ) -> dict[str, object]:
-    """Fail closed when a build sidecar or versioned filename disagrees.
+    """Bind artifact identity; report release provenance separately.
 
     Build emits ``<artifact>.metadata.json`` with the artifact digest, size, and
     product version.  A version embedded in the HPM filename is also checked
@@ -136,10 +136,11 @@ def validate_artifact_metadata(
     sidecar_sha = identity.get("sha256")
     sidecar_size = identity.get("size")
     sidecar_version = document.get("product_version")
+    provenance_warnings = []
     if "upgrade_eligible" in document and document.get("upgrade_eligible") is not True:
-        raise ValueError("build artifact is not eligible for Upgrade")
+        provenance_warnings.append("build_upgrade_eligibility_unverified")
     if "package_binding" in document and document.get("package_binding") != "package_binding_verified":
-        raise ValueError("build artifact package binding is not verified")
+        provenance_warnings.append("build_package_binding_unverified")
     if not isinstance(sidecar_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", sidecar_sha):
         raise ValueError(f"artifact metadata sidecar has invalid SHA-256: {sidecar}")
     if isinstance(sidecar_size, bool) or not isinstance(sidecar_size, int) or sidecar_size < 0:
@@ -167,6 +168,7 @@ def validate_artifact_metadata(
         "sidecar_sha256": sidecar_sha.lower(),
         "sidecar_size": sidecar_size,
         "sidecar_product_version": sidecar_version.strip(),
+        "provenance_warnings": provenance_warnings,
     }
 
 

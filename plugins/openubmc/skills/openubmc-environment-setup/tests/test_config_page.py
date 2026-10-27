@@ -39,7 +39,8 @@ class ConfigPageTests(unittest.TestCase):
 
         def checker(kind, config, target, **_metadata):
             observed.append((kind, config, target))
-            return {"verified": True, "code": "connected", "password": "must-not-return"}
+            return {"verified": True, "code": "connected", "password": "must-not-return",
+                    "transport_verification": "disabled"}
 
         with tempfile.TemporaryDirectory() as raw, page.LocalConfigurationServer(
             Path(raw), checker=checker, wait_for_save=True
@@ -66,6 +67,8 @@ class ConfigPageTests(unittest.TestCase):
             })
             self.assertTrue(result["verified"])
             self.assertEqual(result["code"], "connected")
+            self.assertEqual(result["transport_verification"], "disabled")
+            self.assertEqual(server.completion["checks"][0]["transport_verification"], "disabled")
             self.assertEqual(observed[-1][1]["credentials"][observed[-1][1]["targets"][target["ip"]]["bmc"]["ssh"]]["password"], "local-only-secret")
             self.assertNotIn("local-only-secret", json.dumps(result) + json.dumps(server.state()) + json.dumps(server.completion))
             self.assertNotIn("must-not-return", json.dumps(result))
@@ -543,6 +546,7 @@ class ConfigPageTests(unittest.TestCase):
                 self.assertEqual(result["target"], {"remote": "fixture_remote"})
 
     def test_connection_checker_uses_runtime_selection_and_only_a_read_command(self):
+        import os
         import sys
         from unittest.mock import patch
 
@@ -560,7 +564,6 @@ class ConfigPageTests(unittest.TestCase):
         )
         checks = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(checks)
-        transport = FakeSshTransport()
         config = {
             "schema_version": 1,
             "credentials": {
@@ -569,17 +572,53 @@ class ConfigPageTests(unittest.TestCase):
             },
             "defaults": {"bmc": {"ssh": "default"}, "os": {"ssh": "host"}},
         }
-        with patch.object(
-            _remote_common, "OpenSshControlMasterTransport", return_value=transport
-        ):
-            result = checks.check_target(
-                config, {"ip": "192.0.2.10", "purpose": "os", "transport": "ssh"}
-            )
-        self.assertTrue(result["verified"])
-        self.assertEqual(transport.last_credentials.password, "fixture-os")
-        self.assertEqual(transport.channel_commands, ["true"])
-        self.assertEqual(transport.closes, 1)
-        self.assertNotIn("fixture-os", json.dumps(result))
+        cases = [("os", False, "", "", "strict"), ("bmc", False, "", "", "insecure"),
+                 ("bmc", True, "", "", "strict"), ("bmc", False, "strict", "", "strict"),
+                 ("os", False, "", "insecure", "insecure"), ("os", True, "", "insecure", "strict")]
+        for purpose, strict, configured_policy, task_policy, expected_policy in cases:
+            with self.subTest(purpose=purpose, strict=strict, policy=configured_policy):
+                transport = FakeSshTransport()
+                with patch.dict(os.environ, {"OPENUBMC_SSH_HOST_KEY_POLICY": configured_policy}), patch.object(
+                    _remote_common, "OpenSshControlMasterTransport", return_value=transport
+                ) as constructor:
+                    result = checks.check_target(
+                        config, {"ip": "192.0.2.10", "purpose": purpose, "transport": "ssh"},
+                        strict_transport=strict,
+                        ssh_host_key_policy=task_policy,
+                    )
+                self.assertTrue(result["verified"])
+                self.assertEqual(constructor.call_args.kwargs["host_key_policy"], expected_policy)
+                self.assertEqual(result["transport_verification"],
+                                 "disabled" if expected_policy == "insecure" else expected_policy)
+                self.assertEqual(transport.last_credentials.password, "fixture-os" if purpose == "os" else "fixture-bmc")
+                self.assertEqual(transport.channel_commands, ["true"])
+                self.assertEqual(transport.closes, 1)
+                self.assertNotIn("fixture-os", json.dumps(result))
+                self.assertNotIn("fixture-bmc", json.dumps(result))
+
+    def test_redfish_authentication_checks_follow_runtime_or_requested_strict_transport(self):
+        import sys
+        from unittest.mock import Mock, patch
+
+        root = SCRIPT.parents[2]
+        sys.path[:0] = [str(root / "openubmc-target-runtime"), str(root / "openubmc-upgrade")]
+        spec = importlib.util.spec_from_file_location("config_checks", SCRIPT.with_name("config_checks.py"))
+        checks = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checks)
+        from openubmc_upgrade import runtime_backend
+        config = {"schema_version": 1, "credentials": {"bmc": {"user": "fixture", "password": "private-only"}},
+                  "defaults": {"bmc": {"redfish": "bmc"}}}
+        for strict in (False, True):
+            with self.subTest(strict=strict):
+                session = Mock()
+                with patch.object(runtime_backend, "RedfishHttpSession", return_value=session) as constructor:
+                    result = checks.check_target(config, {"ip": "192.0.2.10", "purpose": "bmc", "transport": "redfish"},
+                                                 strict_transport=strict)
+                self.assertTrue(result["verified"])
+                self.assertEqual(result["transport_verification"], "strict" if strict else "disabled")
+                self.assertEqual(constructor.call_args.kwargs["verify_tls"], strict)
+                session.request_json.assert_called_once_with("GET", "/redfish/v1/Managers")
+                self.assertNotIn("private-only", json.dumps(result))
 
     def test_conan_connection_failure_is_not_reported_as_a_rejected_password(self):
         import os

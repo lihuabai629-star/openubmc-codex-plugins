@@ -2,15 +2,15 @@
 
 Use this card after selecting the `remote_log_file` evidence path and confirming a read-only file capability.
 
-Keep the task repository as the working directory and invoke helpers from `$HOME/.agents/skills/openubmc-debug`.
+Keep the task repository as the working directory and invoke helpers from `<plugin-root>/skills/openubmc-debug`.
 
 The bundled `read_remote_file.py` helper currently uses Telnet. Use it when preflight reports the
 capability. Otherwise use another validated read-only channel or request an offline copy.
 
 ```bash
-python "$HOME/.agents/skills/openubmc-debug/scripts/read_remote_file.py" --ip <ip> --path /etc/version.json --json --compact-json
-python "$HOME/.agents/skills/openubmc-debug/scripts/read_remote_file.py" --ip <ip> --path /proc/uptime --sed-range 1:1 --json --compact-json
-python "$HOME/.agents/skills/openubmc-debug/scripts/read_remote_file.py" --ip <ip> --path /etc/os-release --grep version,name --json --compact-json
+python "<plugin-root>/skills/openubmc-debug/scripts/read_remote_file.py" --ip <ip> --path /etc/version.json --json --compact-json
+python "<plugin-root>/skills/openubmc-debug/scripts/read_remote_file.py" --ip <ip> --path /proc/uptime --sed-range 1:1 --json --compact-json
+python "<plugin-root>/skills/openubmc-debug/scripts/read_remote_file.py" --ip <ip> --path /etc/os-release --grep version,name --json --compact-json
 ```
 
 Bound reads with `--head`, `--tail`, `--grep`, `--sed-range`, or a small known file. Use `collect_logs.py` for log timelines and rotations. Record path, command, target timestamp, line count, truncation/filtering, and failure code.

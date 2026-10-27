@@ -189,7 +189,8 @@ function renderRemember() {
         state.targets = result.configuration;
         expertTargets = separateBmcAccounts(state.targets.config);
         render();
-        notice("连接成功，已为此 IP 记住账号。后续任务会自动使用。");
+        notice("连接成功，已为此 IP 记住账号。后续任务会自动使用。" +
+          (result.transport_verification === "disabled" ? " 本次未校验设备证书或主机密钥。" : ""));
         if (state.page_session?.wait_for_save) finishConfiguration();
       } finally {
         password.value = "";
@@ -259,6 +260,7 @@ function renderSimpleTargets(config) {
   const initialHosts = new Set([
     ...Object.keys(config.devices || {}),
     ...Object.keys(config.targets || {}).filter((ip) => config.targets[ip].bmc || !Object.keys(config.targets[ip]).length),
+    ...(state.page_session?.focus_target ? [state.page_session.focus_target] : []),
   ]);
   function optionalAccount(parent, label, title, source) {
     const toggle = input(parent, title, "", "checkbox");
@@ -278,8 +280,8 @@ function renderSimpleTargets(config) {
     const bmc = optionalAccount(row, "设备 BMC", "此 BMC 使用不同账号", originalBmc?.ssh || originalBmc?.redfish);
     const originalOs = config.devices?.[ip]?.os_ip || "";
     const osIp = input(row, "关联 OS IP", originalOs);
-    osIp.placeholder = "可选";
-    const os = optionalAccount(row, "设备 OS", "此 OS 使用不同账号", config.targets?.[originalOs]?.os?.ssh);
+    osIp.placeholder = "可选；留空时通过 BMC SOL 登录";
+    const os = optionalAccount(row, "设备 OS", "此 OS 使用不同账号", config.targets?.[originalOs || ip]?.os?.ssh);
     const entry = { address, bmc, osIp, os };
     rows.push(entry);
     const remove = node("button", "移除设备", row);
@@ -321,7 +323,7 @@ function renderSimpleTargets(config) {
     for (const host of initialHosts) {
       if (result.targets[host]) delete result.targets[host].bmc;
       if (result.targets[host] && !Object.keys(result.targets[host]).length) delete result.targets[host];
-      const oldOs = config.devices?.[host]?.os_ip;
+      const oldOs = config.devices?.[host]?.os_ip || host;
       if (result.targets[oldOs]) delete result.targets[oldOs].os;
       if (result.targets[oldOs] && !Object.keys(result.targets[oldOs]).length) delete result.targets[oldOs];
     }
@@ -340,12 +342,13 @@ function renderSimpleTargets(config) {
       }
       if (osHost) result.devices[host] = { os_ip: osHost };
       if (row.os.toggle.checked) {
-        if (!osHost || osOverrides.has(osHost)) throw new Error("关联 OS IP 不能为空，且不能重复设置账号。");
-        osOverrides.add(osHost);
+        const osScope = osHost || host;
+        if (osOverrides.has(osScope)) throw new Error("不能为同一设备重复设置 OS 账号。");
+        osOverrides.add(osScope);
         const name = reference(row.os.read, row.os.source);
-        if (!name) throw new Error("请填写关联 OS 的账号。");
-        result.targets[osHost] ||= {};
-        result.targets[osHost].os = { ssh: name };
+        if (!name) throw new Error("请填写此设备的 OS 账号。");
+        result.targets[osScope] ||= {};
+        result.targets[osScope].os = { ssh: name };
       }
     }
     const referenced = new Set([result.defaults, ...Object.values(result.targets)].flatMap((purposes) => Object.values(purposes).flatMap(Object.values)));
@@ -686,47 +689,14 @@ function renderChecks() {
       : t?.remote || "知识库";
     const row = node(
       "div",
-      `${label}：${reasons[entry.code] || "检查未完成"}`,
+      `${label}：${reasons[entry.code] || "检查未完成"}${entry.transport_verification === "disabled" ? "（未校验设备证书或主机密钥）" : ""}`,
       parent,
     );
     row.className = "check-row" + (entry.verified ? " ok" : "");
   }
 }
-function renderStorageRecovery() {
-  const affected = state.storage?.roots?.find((root) => root.status !== "ready");
-  const blocked = Boolean(affected);
-  $("storage-recovery").hidden = !blocked;
-  for (const selector of ["aside", "#editor", "#remember", ".connection", "#config-location", "#plugin-maintenance"])
-    document.querySelector(selector).hidden = blocked;
-  if (!blocked) return false;
-  $("storage-recovery-undo").hidden = !state.storage_repair;
-  $("title").textContent = "本机目录需要修复";
-  $("subtitle").textContent = "修复后会继续打开原来的配置页面。";
-  $("saved-state").textContent = "需要修复";
-  $("storage-path").textContent = affected.path;
-  $("storage-message").textContent = affected.status === "repairable"
-    ? "此目录继承了额外读取权限。修复只调整目录权限，保留已有配置。"
-    : "此目录无法自动修复，请检查目录所有者、链接和访问权限。";
-  $("storage-repair").hidden = affected.status !== "repairable";
-  $("storage-repair").onclick = () => action(async () => {
-    await api("/api/plugin", { action: "repair-storage", root_id: affected.root_id,
-      snapshot_token: affected.snapshot_token });
-    state = await api("/api/state");
-    if (renderStorageRecovery()) {
-      notice("目录已修复，请继续处理列出的目录。", false);
-      return;
-    }
-    kind = state.page_session?.kind || "targets";
-    expertTargets = separateBmcAccounts(state.targets.config);
-    render();
-    notice("本机目录已修复，原有配置已保留。");
-  });
-  return true;
-}
 function render() {
-  if (renderStorageRecovery()) return;
   dirty = false;
-  $("plugin-storage-undo").hidden = !state.storage_repair;
   const current = state[kind];
   $("fields").replaceChildren();
   $("fields").oninput = null;
@@ -909,14 +879,7 @@ $("plugin-undo").onclick = () => action(async () => {
   $("plugin-result").textContent = "已恢复修复前的配置。";
   await pluginStatus();
 });
-const undoStorage = () => action(async () => {
-  await api("/api/plugin", { action: "undo-storage" });
-  state = await api("/api/state");
-  render();
-  notice("本次目录修复已撤销。", false);
-});
-$("plugin-storage-undo").onclick = undoStorage;
-$("storage-recovery-undo").onclick = undoStorage;
+
 for (const capability of ["runtime", "kb"]) {
   $("plugin-" + capability).onclick = () => action(async () => {
     $("plugin-result").textContent = "正在修复依赖，请保持页面打开。";

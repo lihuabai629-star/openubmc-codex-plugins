@@ -272,13 +272,7 @@ class SQLiteArtifactRepository:
 
     def __init__(self, path: Path) -> None:
         self.path = Path(path)
-        if os.name == "nt":
-            from .windows_private import ensure_private_directory, verify_private_path
-            ensure_private_directory(self.path.parent)
-            if self.path.exists():
-                verify_private_path(self.path)
-        else:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         with self._connect() as connection:
             connection.executescript(
@@ -323,14 +317,8 @@ class SQLiteArtifactRepository:
     @contextmanager
     def _connect(self):
         created = not self.path.exists()
-        if os.name == "nt" and not created:
-            from .windows_private import verify_private_path
-            verify_private_path(self.path)
         connection = sqlite3.connect(self.path, timeout=30)
         try:
-            if os.name == "nt" and created:
-                from .windows_private import harden_new_file
-                harden_new_file(self.path)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=NORMAL")
@@ -509,15 +497,9 @@ class LocalArtifactStore:
     ) -> None:
         if temporary_retention_seconds <= 0:
             raise ValueError("temporary Artifact retention must be positive")
-        default_root = (Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local")
-                        / "openubmc-agent-workflow" / "artifacts" if os.name == "nt"
-                        else Path(tempfile.gettempdir()) / "openubmc-target-runtime-artifacts")
+        default_root = ((Path(tempfile.gettempdir()) / "openubmc-target-runtime-artifacts"))
         self.content_root = Path(content_root or default_root)
-        if os.name == "nt":
-            from .windows_private import ensure_private_directory
-            ensure_private_directory(self.content_root)
-        else:
-            self.content_root.mkdir(parents=True, exist_ok=True)
+        self.content_root.mkdir(parents=True, exist_ok=True)
         self.repository = repository or InMemoryArtifactRepository()
         self.clock = clock
         self.temporary_retention_seconds = float(temporary_retention_seconds)
@@ -529,8 +511,6 @@ class LocalArtifactStore:
 
     @staticmethod
     def _path(handle: str) -> Path:
-        if os.name == "nt" and Path(handle).drive:
-            return Path(handle)
         parsed = urlparse(handle)
         if parsed.scheme not in {"", "file"}:
             raise ReferenceViolation(

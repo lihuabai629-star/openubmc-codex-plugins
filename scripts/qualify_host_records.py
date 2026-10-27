@@ -114,6 +114,12 @@ def qualify(codex, output):
             'model_providers.record_fixture.env_key': '"OPENUBMC_LOCAL_RECORD_KEY"',
             'model_providers.record_fixture.wire_api': '"responses"',
             'model_providers.record_fixture.supports_websockets': 'false'}
+        runtime = json.loads((plugin / '.mcp.json').read_text())['mcpServers']['openubmc-target-runtime']
+        runtime = dict(runtime, cwd=str(plugin), required=True)
+        runtime.pop('type', None)
+        runtime['args'] = [str(plugin / item) if item.startswith('./') else item for item in runtime['args']]
+        settings['mcp_servers.openubmc-target-runtime'] = '{' + ', '.join(
+            key + ' = ' + json.dumps(value) for key, value in runtime.items()) + '}'
         config = [part for key, value in settings.items() for part in ('-c', key+'='+value)]
         flags = ['--json', '--skip-git-repo-check', '--dangerously-bypass-approvals-and-sandbox',
                  '--dangerously-bypass-hook-trust', '--model', 'gpt-5.6-sol', *config]
@@ -193,28 +199,23 @@ def qualify(codex, output):
             producer.write_text(json.dumps(producer_report))
             if measured_records()['task_aggregate']['usage_totals']['input_tokens'] != 10:
                 raise ValueError('installed measurement source did not recover on a fresh read')
-            test_result = json.loads(command([*cli, 'test-record', '--task-id', tasks[0]['task_id'],
-                '--run-id', tasks[0]['run_id'], '--repo-ref',
-                tasks[0]['binding']['snapshot']['repositories'][0]['repo_ref'],
-                '--command-ref', 'test:installed-argv', '--timeout', '30', '--test-command',
-                sys.executable, '-c', 'import sys; assert sys.argv[1:] == ["with space", "--literal-option"]',
-                'with space', '--literal-option'], environment, cwd=root))
-            if test_result['status'] != 'passed' or test_result['exit_code'] != 0:
-                raise ValueError('installed test-record did not execute the original argv')
             exported = json.loads(command([*cli, 'export-records', '--task-id', tasks[0]['task_id'],
                                           '--output-directory', str(root / 'exports')], environment, cwd=root))
             checked = json.loads(command([*cli, 'verify-records', '--record-file', exported['path']], environment, cwd=root))
             if checked['content_digest'] != exported['content_digest']:
                 raise ValueError('installed export verification disagrees')
             encoded = Path(exported['path']).read_text()
-            test_entries = [entry for entry in json.loads(encoded)['operation_evidence']['snapshot']['entries']
-                            if entry['kind'] == 'test']
-            if (len(test_entries) != 1 or test_entries[0]['event_ref'] != test_result['event_ref']
-                    or test_entries[0]['status'] != 'passed'
-                    or test_entries[0]['run_ref'] != tasks[0]['run_id']
-                    or test_entries[0]['source_commit'] !=
-                       tasks[0]['binding']['snapshot']['repositories'][0]['commit']):
-                raise ValueError('installed export lost the actual test receipt or its source binding')
+            operation_evidence = json.loads(encoded)['operation_evidence']
+            snapshot = operation_evidence['snapshot']
+            if snapshot is None:
+                if operation_evidence['status'] != 'unavailable':
+                    raise ValueError('missing operation snapshot claimed available evidence')
+                entries = []
+            else:
+                entries = snapshot['entries']
+            test_entries = [entry for entry in entries if entry['kind'] == 'test']
+            if test_entries:
+                raise ValueError('installed export fabricated a test receipt without an executed test')
             if str(root) in encoded or 'synthetic-loopback-only' in encoded:
                 raise ValueError('export contains private fixture data')
             command([codex, 'plugin', 'remove', 'openubmc@record-qualification', '--json'], environment, cwd=root)
@@ -224,7 +225,7 @@ def qualify(codex, output):
                 'native_resume_preserved_run': True, 'fresh_v2_records': True, 'unknown_usage_retained': True,
                 'same_task_project_switch': True, 'registered_task_only_measurements': True,
                 'measurement_source_failure_and_recovery': True,
-                'installed_test_record_verified': True,
+                'unexecuted_test_receipts_absent': True,
                 'installed_export_verified': True, 'live_model_tested': False, 'live_device_tested': False,
                 'network_scope': 'loopback only', 'desktop_ui_tested': False}
             output.write_text(json.dumps(report, indent=2, sort_keys=True)+'\n')

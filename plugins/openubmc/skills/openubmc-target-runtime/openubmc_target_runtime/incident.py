@@ -66,6 +66,30 @@ INCIDENT_RECOVERY_POLICIES = {
             ),
         ),
         IncidentRecoveryPolicy(
+            code="verification_capability_unavailable",
+            recovery_path="inspect_verification_gap",
+            allowed_commands=("cancel",),
+            operator_action=(
+                "inspect the failed verification capability and saved evidence; SSH login "
+                "does not establish Linux/MDB access. Use read-only Redfish observations "
+                "for supported acceptance checks and report the remaining gap. Retain "
+                "the completed mutation and MutationJournal; do not reapply the change"
+            ),
+            recoverable=False,
+        ),
+        IncidentRecoveryPolicy(
+            code="verification_retry_exhausted",
+            recovery_path="inspect_verification_gap",
+            allowed_commands=("cancel",),
+            operator_action=(
+                "inspect the last verification failure and repair its transport or local "
+                "execution environment before independent read-only verification. Report "
+                "unverified acceptance checks and retain the completed mutation and "
+                "MutationJournal; do not reapply the change"
+            ),
+            recoverable=False,
+        ),
+        IncidentRecoveryPolicy(
             code="invalid_run_continuation",
             recovery_path="cancel_terminal",
             allowed_commands=("cancel",),

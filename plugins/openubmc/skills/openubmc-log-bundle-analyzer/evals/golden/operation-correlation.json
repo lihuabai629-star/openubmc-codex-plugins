@@ -1,0 +1,35 @@
+{
+  "finding_count": 1,
+  "event_correlations": [
+    {
+      "anchor_id": "operation-event-349b199d053a72eb",
+      "anchor": {
+        "log": "operation.log",
+        "path": "dump_info/LogDump/operation.log",
+        "line_number": 1,
+        "timestamp": "2026-08-31T08:00:00",
+        "source_revision": "topic-290-post-1"
+      },
+      "basis": [
+        "temporal_proximity",
+        "shared_component"
+      ],
+      "candidates": [
+        {
+          "log": "app.log",
+          "path": "dump_info/LogDump/app.log",
+          "line_number": 1,
+          "timestamp": "2026-08-31T08:00:02",
+          "source_revision": "topic-290-post-1",
+          "delta_seconds": 2,
+          "shared_components": [
+            "iam"
+          ]
+        }
+      ],
+      "interpretation": "candidate_context_not_causality",
+      "candidate_scan_complete": true
+    }
+  ],
+  "unmatched_event_anchors": []
+}

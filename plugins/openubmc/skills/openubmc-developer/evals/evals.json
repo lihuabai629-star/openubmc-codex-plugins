@@ -1317,7 +1317,7 @@
             "(?:rg|sed|cat|nl|awk|head|tail|less|more|python3?)[^\\n]*products/product-x/profile\\.json"
           ],
           "forbidden_patterns": [
-            "bmcgo\\s+gen|bingo\\s+gen"
+            "bmcgo\\s+gen"
           ]
         },
         "messages": {

@@ -1,0 +1,4 @@
+interface:
+  display_name: "openUBMC Documentation Review"
+  short_description: "Review openUBMC docs with static and evidence-backed checks"
+  default_prompt: "Use $openubmc-doc-review to review these openUBMC Markdown documents and return one release-readiness report."

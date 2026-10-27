@@ -1,5 +1,10 @@
 """Versioned public contracts for the internal openUBMC Target Runtime."""
 
+import sys as _sys
+if _sys.platform == "win32":
+    raise RuntimeError("unsupported_platform: run the openUBMC plugin inside Linux or WSL")
+
+
 from .contracts import (
     RUNTIME_API_VERSION,
     CredentialSelector,
@@ -307,6 +312,7 @@ from .semantic_runtime import (
     ReconcileRun,
     ReferenceViolation,
     ResumeRun,
+    AttachQemuEvidence,
     RunCommand,
     RunTurn,
     RunTarget,
@@ -675,6 +681,7 @@ __all__ = [
     "ReconcileRun",
     "ReferenceViolation",
     "ResumeRun",
+    "AttachQemuEvidence",
     "RunCommand",
     "RunEngine",
     "RunTurn",
@@ -744,6 +751,7 @@ __all__ = [
 ]
 
 from .systemd_contract import UNIT as SYSTEMD_UNIT, validate_systemd_names
+from .os_console_contract import validate_os_console_names
 from .redaction import redact_text
 
 from .host_records import InstalledHostRecords

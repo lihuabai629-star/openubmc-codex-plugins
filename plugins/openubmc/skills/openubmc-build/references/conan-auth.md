@@ -1,65 +1,40 @@
-# Conan Remote Authentication
+# Conan remote authentication
 
-Use this before component upload, manifest dependency resolution, or product builds that need Conan remotes.
+Reuse the native Conan authentication cache for the remote actually required by
+the selected build or publication. An unrelated remote is not a prerequisite.
 
-## Rules
+Agent calls contain remote/configuration references only. Private local
+configuration, a secret resolver, or an already inherited environment supplies
+credentials at process creation. Keep values out of chat, tool parameters,
+command text, saved plans and Case inputs. Preserve secret bytes exactly.
+Manual terminal login remains available to the user.
 
-- Prove auth with `conan remote auth`; `conan remote list-users` can show stale `authenticated: True`.
-- Scan auth output for per-remote errors because Conan 2 can return exit code 0 while printing `error:`.
-- Use Conan 2 environment variables for credentials. Do not write real passwords into skill files, repos, shell history, or command-line arguments.
-- Quote credential variables and preserve punctuation exactly; punctuation such as a trailing comma can be part of a password.
-- Do not disable a remote as an auth workaround for product builds unless the user explicitly agrees the remote is not needed.
+## Diagnose the selected remote
 
-## Environment Variables
+Inspect the selected dependency graph, package identity and failing remote.
+Separate missing binary/profile/revision errors, network/proxy/TLS failures,
+authorization denial and authentication rejection. A missing binary alone does
+not justify login or a local-source fallback.
 
-Remote-specific suffixes are the remote names uppercased with `-` replaced by `_`.
-
-```bash
-export CONAN_LOGIN_USERNAME_OPENUBMC_SDK=<user>
-export CONAN_PASSWORD_OPENUBMC_SDK=<password>
-export CONAN_LOGIN_USERNAME_OPENUBMC_OPENSOURCE=<user>
-export CONAN_PASSWORD_OPENUBMC_OPENSOURCE=<password>
-export CONAN_LOGIN_USERNAME_LOCAL=<user>
-export CONAN_PASSWORD_LOCAL=<password>
-```
-
-## Preflight
-
-For a remote that a build must use, do not pass `--with-user`; missing credentials should fail clearly.
+When fresh evidence requires an authentication check, use the existing cache
+and noninteractive mode for that one remote:
 
 ```bash
-for remote in openubmc_sdk openubmc_opensource local; do
-  log="$(mktemp)"
-  if ! (
-    set -o pipefail
-    conan remote auth "$remote" --force -cc core:non_interactive=True 2>&1 | tee "$log"
-  ); then
-    rm -f "$log"
-    echo "Conan auth command failed for $remote" >&2
-    exit 1
-  fi
-  if grep -Eiq '(^|[[:space:]])error:|Wrong user|Wrong password|Authentication error|interactive mode disabled' "$log"; then
-    rm -f "$log"
-    echo "Conan auth failed for $remote" >&2
-    exit 1
-  fi
-  rm -f "$log"
-done
+python scripts/check_conan_auth.py --remote <selected-remote>
 ```
 
-If auth fails with `Wrong user or password`, clear only that remote and retry with corrected environment variables:
+The helper checks both exit status and per-remote errors: Conan can return zero
+while a remote failed. It invokes only the named remote without forcing login
+and emits no raw authentication output. `conan remote list-users` reports cached state, not current
+server acceptance. Do not force authentication, log out, disable remotes or
+probe every configured remote as a routine build preflight.
 
-```bash
-conan remote logout <remote>
-CONAN_LOGIN_USERNAME_<REMOTE_SUFFIX>=<user> \
-CONAN_PASSWORD_<REMOTE_SUFFIX>=<password> \
-  conan remote auth <remote> --force -cc core:non_interactive=True
-```
+For an actual account change, let the local private configuration path supply
+the corrected values. Confirm the selected remote with one bounded check,
+then retry the original failed read or build within its existing authorization.
+Do not replace Git URLs, rebuild dependencies or change remote configuration to
+hide a resolution failure.
 
-## Missing Binaries
-
-When a product build reports a missing binary package, treat it as a remote/auth/resolution problem first. Do not rewrite Git URLs or build a local source fallback for a product dependency unless the user explicitly asks for a local workaround; product builds are expected to resolve stable dependencies from Conan remotes after auth is proven.
-
-## Proxy Hangs
-
-If Conan graph/dependency resolution stalls, inspect proxy variables as well as auth. `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and lowercase variants can route Conan through a dead local proxy. Fix the proxy or run with the proxy set unset plus an appropriate `NO_PROXY`.
+For stalled resolution, inspect the proxy configuration relevant to that remote
+without displaying secret-bearing environment values. Preserve unrelated
+working remotes and the task's selected profiles and revisions.
