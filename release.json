@@ -5,14 +5,43 @@
   "name": "openubmc",
   "release_scope": "codex-plugin",
   "release_tag": "v2.2.16",
-  "status": "candidate",
+  "status": "released",
   "archive_sha256": "4bc3e82bdb5091d0fd0dbbfc360d496383d9fb195f2136eb35b22945d942e355",
   "upgrade_baseline": "2.1.9",
   "hosted_ci": {
-    "status": "not_run"
+    "status": "passed",
+    "source": {
+      "repository": "lihuabai629-star/openubmc-agent-workflow",
+      "head_commit": "d75687f026fbbc56b58377266ba1126a8874c52a",
+      "run_id": 40622896880,
+      "run_attempt": 1,
+      "url": "https://github.com/lihuabai629-star/openubmc-agent-workflow/actions/runs/40622896880",
+      "conclusion": "success",
+      "jobs": [
+        "CI contract preflight",
+        "Complete repository validation"
+      ]
+    },
+    "marketplace": {
+      "repository": "lihuabai629-star/openubmc-codex-plugins",
+      "head_commit": "e33d92c4e85cf8b5a970689a728e57f64d252c84",
+      "run_id": 40628536927,
+      "run_attempt": 1,
+      "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/40628536927",
+      "conclusion": "success",
+      "jobs": [
+        "Windows native plugin bootstrap",
+        "verify"
+      ]
+    }
   },
   "publication": {
-    "status": "pending"
+    "status": "published",
+    "github_release_id": 426243131,
+    "tag": "v2.2.16",
+    "tag_commit": "e33d92c4e85cf8b5a970689a728e57f64d252c84",
+    "published_at": "2026-10-28T04:02:49Z",
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/releases/tag/v2.2.16"
   },
   "source_release_commit": "d75687f026fbbc56b58377266ba1126a8874c52a",
   "repository_validation": {
@@ -21,5 +50,14 @@
     "python_tests": 2888,
     "node_tests": 123,
     "python_skipped": 31
+  },
+  "release_gate": {
+    "status": "passed",
+    "scope": "codex-plugin",
+    "schema": "openubmc.codex-plugin.release-gate.v1",
+    "run_id": 40630043321,
+    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/40630043321",
+    "asset": "plugin-release-gate.json",
+    "sha256": "6861a7cbcdfce736ee703bc3926cacd9d0d12d0d839070426a94e66c5b4fefb3"
   }
 }
