@@ -158,8 +158,8 @@ def qualify(root: Path, source: Path, archive: Path, release_tag: str) -> dict:
     require(tuple(map(int, previous_tag[1:].split('.'))) < tuple(map(int, release['version'].split('.'))), 'release is not newer than baseline')
     require(release.get('upgrade_baseline') == previous_tag[1:], 'upgrade baseline is no longer latest')
     tag = json.loads(command('gh', 'api', f'repos/{MARKETPLACE_REPOSITORY}/git/ref/tags/{release_tag}'))
-    require(tag.get('object') == {'sha': market_commit, 'type': 'commit',
-            'url': f'https://api.github.com/repos/{MARKETPLACE_REPOSITORY}/git/commits/{market_commit}'}, 'release tag does not point to the checked candidate')
+    require(tag.get('object', {}).get('sha') == market_commit
+            and tag.get('object', {}).get('type') == 'commit', 'release tag does not point to the checked candidate')
     source_identity = json.loads(command(sys.executable, '-B', str(source / 'scripts/generate_release_lock.py'), 'verify', '--root', str(source)))
     source_commit = source_identity['source_commit']
     require(source_identity['release_version'] == release['version'] and release['source_commit'] == source_commit, 'source lock identity mismatch')

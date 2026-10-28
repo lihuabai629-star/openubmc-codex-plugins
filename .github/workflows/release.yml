@@ -86,4 +86,17 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --pattern "openubmc-${RELEASE_TAG#v}.tar.gz" --output "$RUNNER_TEMP/promote.tar.gz"
+          python3 - <<'PYCODE'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          report = json.loads((Path(os.environ['RUNNER_TEMP']) / 'plugin-release-gate.json').read_text())
+          release_tag = os.environ['RELEASE_TAG']
+          tag = json.loads(subprocess.check_output(['gh', 'api', f"repos/{os.environ['GITHUB_REPOSITORY']}/git/ref/tags/{release_tag}"]))
+          archive = Path(os.environ['RUNNER_TEMP']) / 'promote.tar.gz'
+          if (report.get('passed') is not True or report['release_tag'] != release_tag
+                  or tag['object']['type'] != 'commit' or tag['object']['sha'] != report['marketplace_commit']
+                  or hashlib.sha256(archive.read_bytes()).hexdigest() != report['archive_sha256']):
+              raise SystemExit('Candidate changed after Release Gate')
+          PYCODE
           gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
