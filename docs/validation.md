@@ -24,3 +24,19 @@ behavior and startup checks do not establish authenticated remote business quali
 
 `release.json` with `status: candidate` identifies an unpublished candidate. Its version number
 alone does not imply a release or qualification on another operating system.
+
+## Codex plugin Release Gate
+
+A plugin release uses `Release Codex plugin` in this marketplace. The immutable
+candidate tag, archive, source lock and both repository CI runs must agree.
+Required jobs and individual checks must have executed successfully; skipped or
+zero-step jobs cannot qualify a release. The gate rebuilds the archive from its
+locked source and checks the marketplace payload byte for byte. Lifecycle,
+upgrade/resume, KB isolation, host records, and Linux/Windows offline evidence
+must refer to that same archive and supported scope.
+
+The workflow downloads the archive from a draft Release, writes and attaches
+`plugin-release-gate.json` and its checksum, and publishes only after every
+check succeeds. A failure keeps the Release draft. The source repository's
+older Runtime/model A/B qualification is a separate experiment; a plugin gate
+does not claim new live-device, external-model or desktop-GUI qualification.

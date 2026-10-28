@@ -27,6 +27,8 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund --prefix scripts/host
           echo "$PWD/scripts/host/node_modules/.bin" >> "$GITHUB_PATH"
       - run: python3 -I scripts/check_marketplace.py
+      - name: Run plugin release gate contract tests
+        run: python3 -B -m unittest discover -s scripts/tests -p "test_*.py"
       - name: Check bundled community skill integrations
         run: python3 -B scripts/check_community.py
       - name: Check bundled Run records and offline exports

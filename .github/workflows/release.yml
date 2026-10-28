@@ -1,0 +1,89 @@
+name: Release Codex plugin
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Immutable vMAJOR.MINOR.PATCH candidate tag with a draft Release
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: plugin-release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+jobs:
+  qualify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
+          path: marketplace
+      - name: Read locked source identity
+        id: identity
+        working-directory: marketplace
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          record = json.load(open('release.json'))
+          commit = record['source_release_commit']
+          if not re.fullmatch('[0-9a-f]{40}', commit):
+              raise SystemExit('Invalid source release identity')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write('source_commit=' + commit + '\n')
+          PY
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: lihuabai629-star/openubmc-agent-workflow
+          ref: ${{ steps.identity.outputs.source_commit }}
+          persist-credentials: false
+          fetch-depth: 0
+          path: source
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Restore candidate archive
+        working-directory: marketplace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release download "$RELEASE_TAG" --pattern "openubmc-${RELEASE_TAG#v}.tar.gz" --output "$RUNNER_TEMP/openubmc.tar.gz"
+      - name: Run plugin Release Gate
+        working-directory: marketplace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: >-
+          python3 -B scripts/check_release_gate.py
+          --source-root "$GITHUB_WORKSPACE/source"
+          --archive "$RUNNER_TEMP/openubmc.tar.gz"
+          --release-tag "$RELEASE_TAG"
+          --output "$RUNNER_TEMP/plugin-release-gate.json"
+      - name: Attach gate evidence
+        if: ${{ !cancelled() }}
+        working-directory: marketplace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          test -f "$RUNNER_TEMP/plugin-release-gate.json"
+          cd "$RUNNER_TEMP"
+          sha256sum plugin-release-gate.json > plugin-release-gate.json.sha256
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber plugin-release-gate.json plugin-release-gate.json.sha256
+      - name: Publish stable plugin release
+        working-directory: marketplace
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
