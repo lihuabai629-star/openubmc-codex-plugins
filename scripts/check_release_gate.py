@@ -72,8 +72,17 @@ def assess_reports(root: Path, lock: dict, release: dict, previous_version: str)
             and resume.get('resume_error') is None, 'upgrade baseline or resume mismatch')
     for field in ('native_codex_exec', 'optional_kb_failure_isolation'):
         run = lifecycle.get(field, {})
-        require(run.get('restart_verified') is True and run.get('invocations', 0) >= 2,
-                f'{field} incomplete')
+        runs = run.get('runs', [])
+        require(run.get('restart_verified') is True and type(run.get('invocations')) is int
+                and run['invocations'] >= 2 and isinstance(runs, list)
+                and len(runs) == run['invocations'], f'{field} incomplete')
+        for item in runs:
+            require(item.get('source_commit') == lock['source_commit'], f'{field} run source mismatch')
+            require(set(item.get('validated_calls', [])) >= {'observe', 'execute'}
+                    and bool(item.get('thread_id')) and bool(item.get('session_id')),
+                    f'{field} run calls or identity missing')
+        require(len({item['thread_id'] for item in runs}) == len(runs)
+                and len({item['session_id'] for item in runs}) == 1, f'{field} restart identity mismatch')
     for name in ('public-behavior', 'installed-host-records',
                  'portable-capabilities-linux', 'portable-capabilities-windows'):
         record = reports[name]

@@ -95,6 +95,26 @@ class QualificationEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'resume'):
             self.assess()
 
+    def test_missing_lifecycle_runs_are_rejected(self):
+        self.change('plugin-qualification', lambda record: record['native_codex_exec'].update(runs=[]))
+        with self.assertRaisesRegex(ValueError, 'native_codex_exec incomplete'):
+            self.assess()
+
+    def test_reused_other_source_run_is_rejected(self):
+        self.change('plugin-qualification', lambda record: record['native_codex_exec']['runs'][0].update(source_commit='b' * 40))
+        with self.assertRaisesRegex(ValueError, 'run source mismatch'):
+            self.assess()
+
+    def test_missing_actual_run_calls_are_rejected(self):
+        self.change('plugin-qualification', lambda record: record['native_codex_exec']['runs'][0].update(validated_calls=[]))
+        with self.assertRaisesRegex(ValueError, 'run calls'):
+            self.assess()
+
+    def test_changed_restart_session_is_rejected(self):
+        self.change('plugin-qualification', lambda record: record['native_codex_exec']['runs'][0].update(session_id='other'))
+        with self.assertRaisesRegex(ValueError, 'restart identity'):
+            self.assess()
+
     def test_missing_host_recovery_proof_is_rejected(self):
         self.change('installed-host-records', lambda record: record.update(native_resume_preserved_run=False))
         with self.assertRaisesRegex(ValueError, 'host records'):
