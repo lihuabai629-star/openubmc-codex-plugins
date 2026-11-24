@@ -1274,6 +1274,8 @@ class _OrchestratedMcpTask:
                     self._credential_values = self._credential_resolver.resolve_legacy_values(task_id=self.task_id, loader=load_selected_credentials_file)
                     self._credential_parse_count += 1
                 values = dict(self._credential_values)
+            values = {name: value for name, value in values.items()
+                      if not name.startswith("OPENUBMC_OS_")}
             register_secret_values(values)
             return values
 

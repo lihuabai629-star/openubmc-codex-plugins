@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "name": "openubmc-debug",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "以只读方式组合源码、接口、对象、告警、日志和主机证据，定位或多环境对比 openUBMC 运行态问题并验证现场交付结果。",
   "author": "OpenUBMC Team",
   "license": "MulanPSL-2.0",

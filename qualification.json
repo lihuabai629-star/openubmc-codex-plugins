@@ -1,35 +1,35 @@
 {
-  "version": "2.2.16",
-  "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
-  "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
-  "passed": true,
+  "version": "2.2.17",
+  "source_commit": "0ed3421d82b7181aafce0496a703db6220312140",
+  "content_digest": "65313b72d82e5dab8881ee32bd3a8347fef644dcb3e94d1ff54642666ed0d1d6",
+  "passed": false,
   "local_qualification_passed": true,
-  "release_eligible": true,
-  "archive_sha256": "4bc3e82bdb5091d0fd0dbbfc360d496383d9fb195f2136eb35b22945d942e355",
+  "release_eligible": false,
+  "archive_sha256": "d2a01d2a4f5d475b219fb105cd73616e0fac0811ce3a732797b89f81a64b0fd2",
   "native_lifecycle": {
-    "report": "docs/qualification/2.2.16/plugin-qualification.json",
+    "report": "docs/qualification/2.2.17/plugin-qualification.json",
     "passed": true
   },
   "public_behavior": {
     "behavior": {
       "artifacts": {
         "passed": true,
-        "seconds": 4.609,
+        "seconds": 4.602,
         "tests": 4
       },
       "build": {
         "passed": true,
-        "seconds": 1.218,
+        "seconds": 1.308,
         "tests": 6
       },
       "credentials": {
         "passed": true,
-        "seconds": 0.693,
+        "seconds": 0.717,
         "tests": 9
       },
       "doctor": {
         "passed": true,
-        "seconds": 2.887,
+        "seconds": 3.25,
         "tests": 5
       },
       "kb_loader": {
@@ -38,45 +38,45 @@
       },
       "logs": {
         "passed": true,
-        "seconds": 0.078,
+        "seconds": 0.079,
         "tests": 3
       },
       "migration": {
         "passed": true,
-        "seconds": 7.314,
+        "seconds": 7.401,
         "tests": 17
       },
       "python_entrypoints": {
         "passed": true,
-        "seconds": 33.654,
+        "seconds": 31.97,
         "tests": 13
       },
       "skill_entry": {
         "passed": true,
-        "seconds": 22.297,
+        "seconds": 25.815,
         "tests": 10
       },
       "ssh": {
         "passed": true,
-        "seconds": 13.509,
+        "seconds": 13.53,
         "tests": 4
       },
       "startup": {
         "passed": true,
-        "seconds": 0.76,
+        "seconds": 0.78,
         "tests": 7
       },
       "upgrade": {
         "passed": true,
-        "seconds": 5.671,
+        "seconds": 5.678,
         "tests": 2
       }
     },
     "cold_dependencies": {
       "passed": true,
-      "seconds": 2.869
+      "seconds": 85.803
     },
-    "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+    "content_digest": "65313b72d82e5dab8881ee32bd3a8347fef644dcb3e94d1ff54642666ed0d1d6",
     "dependency_locks": {
       "openubmc-kb-mcp/package-lock.json": "acff33474be7a162ad912da7573b790575aa8430a5b4312a5ddad04b38edb7e5",
       "requirements.lock": "8eb3b8a6fda4512f6cbc4f2f921063f8bad7163786d8e577b075b7e2581abf93"
@@ -127,12 +127,12 @@
     "remote_business_qualification": "not_run",
     "runtime_shutdown_verified": true,
     "schema": "openubmc.public-behavior.v1",
-    "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
-    "version": "2.2.16"
+    "source_commit": "0ed3421d82b7181aafce0496a703db6220312140",
+    "version": "2.2.17"
   },
   "installed_host_records": {
     "codex": "codex-cli 0.153.4",
-    "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+    "content_digest": "65313b72d82e5dab8881ee32bd3a8347fef644dcb3e94d1ff54642666ed0d1d6",
     "desktop_ui_tested": false,
     "fresh_v2_records": true,
     "installed_export_verified": true,
@@ -146,19 +146,19 @@
     "registered_task_only_measurements": true,
     "same_task_project_switch": true,
     "schema": "openubmc.installed-host-records.qualification/v1",
-    "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
+    "source_commit": "0ed3421d82b7181aafce0496a703db6220312140",
     "two_project_bindings": true,
     "unexecuted_test_receipts_absent": true,
     "unknown_usage_retained": true,
-    "version": "2.2.16"
+    "version": "2.2.17"
   },
   "platforms": {
     "linux": {
       "schema": "openubmc.portable-capabilities.v1",
       "passed": true,
-      "version": "2.2.16",
-      "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
-      "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+      "version": "2.2.17",
+      "source_commit": "0ed3421d82b7181aafce0496a703db6220312140",
+      "content_digest": "65313b72d82e5dab8881ee32bd3a8347fef644dcb3e94d1ff54642666ed0d1d6",
       "platform": "Linux",
       "python": "3.12.3",
       "native_windows_runtime": "unsupported",
@@ -169,9 +169,9 @@
     "windows": {
       "schema": "openubmc.portable-capabilities.v1",
       "passed": true,
-      "version": "2.2.16",
-      "source_commit": "c08d3a13895587d24d98640747d186f3225e746d",
-      "content_digest": "20e8d495b10a972b382e7e6494ccae4d5dcc89b224e7ad0f38d9b63fcd3cf350",
+      "version": "2.2.17",
+      "source_commit": "0ed3421d82b7181aafce0496a703db6220312140",
+      "content_digest": "65313b72d82e5dab8881ee32bd3a8347fef644dcb3e94d1ff54642666ed0d1d6",
       "platform": "Windows",
       "python": "3.14.7",
       "native_windows_runtime": "unsupported",
@@ -181,55 +181,17 @@
     }
   },
   "hosted_ci": {
-    "status": "passed",
-    "source": {
-      "repository": "lihuabai629-star/openubmc-agent-workflow",
-      "head_commit": "d75687f026fbbc56b58377266ba1126a8874c52a",
-      "run_id": 40622896880,
-      "run_attempt": 1,
-      "url": "https://github.com/lihuabai629-star/openubmc-agent-workflow/actions/runs/40622896880",
-      "conclusion": "success",
-      "jobs": [
-        "CI contract preflight",
-        "Complete repository validation"
-      ]
-    },
-    "marketplace": {
-      "repository": "lihuabai629-star/openubmc-codex-plugins",
-      "head_commit": "e33d92c4e85cf8b5a970689a728e57f64d252c84",
-      "run_id": 40628536927,
-      "run_attempt": 1,
-      "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/40628536927",
-      "conclusion": "success",
-      "jobs": [
-        "Windows native plugin bootstrap",
-        "verify"
-      ]
-    }
+    "status": "not_run"
   },
   "publication": {
-    "status": "published",
-    "github_release_id": 426243131,
-    "tag": "v2.2.16",
-    "tag_commit": "e33d92c4e85cf8b5a970689a728e57f64d252c84",
-    "published_at": "2026-10-28T04:02:49Z",
-    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/releases/tag/v2.2.16"
+    "status": "pending"
   },
-  "source_release_commit": "d75687f026fbbc56b58377266ba1126a8874c52a",
+  "source_release_commit": "1b735fa1c63b453546c76121f46dfbb1cd239e93",
   "repository_validation": {
     "passed": true,
-    "report": "docs/qualification/2.2.16/repository-validation.json",
-    "python_tests": 2888,
+    "report": "docs/qualification/2.2.17/repository-validation.json",
+    "python_tests": 2896,
     "node_tests": 123,
     "python_skipped": 31
-  },
-  "release_gate": {
-    "status": "passed",
-    "scope": "codex-plugin",
-    "schema": "openubmc.codex-plugin.release-gate.v1",
-    "run_id": 40630043321,
-    "url": "https://github.com/lihuabai629-star/openubmc-codex-plugins/actions/runs/40630043321",
-    "asset": "plugin-release-gate.json",
-    "sha256": "6861a7cbcdfce736ee703bc3926cacd9d0d12d0d839070426a94e66c5b4fefb3"
   }
 }

@@ -1,0 +1,13 @@
+{
+  "schema": "openubmc.portable-capabilities.v1",
+  "passed": true,
+  "version": "2.2.17",
+  "source_commit": "0ed3421d82b7181aafce0496a703db6220312140",
+  "content_digest": "65313b72d82e5dab8881ee32bd3a8347fef644dcb3e94d1ff54642666ed0d1d6",
+  "platform": "Windows",
+  "python": "3.14.7",
+  "native_windows_runtime": "unsupported",
+  "windows_setup_recovery": true,
+  "offline_analysis": true,
+  "redaction": true
+}

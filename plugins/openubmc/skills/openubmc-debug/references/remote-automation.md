@@ -41,6 +41,10 @@ use OS credentials only for an explicit OS target. A rejected IP override is an 
 failure, not permission to retry with a different default account. Repeated lookups reuse the
 Runtime's task/target/purpose/transport cache; keep credential values in local Runtime memory.
 
+BMC observations, diagnosis, bundle collection and delivery resolve only BMC credentials. A retained OS address
+or incomplete OS account does not block those operations. The explicit `os_console` selector uses its
+separate BMC and OS account selection.
+
 `OPENUBMC_CREDENTIALS_CONFIG`, `OPENUBMC_CREDENTIALS_FILE`, and
 `OPENUBMC_DEBUG_CREDENTIALS_FILE` are source selectors. Supplied selectors must agree. Preserve
 existing legacy files and environment settings; do not export structured records into ambient

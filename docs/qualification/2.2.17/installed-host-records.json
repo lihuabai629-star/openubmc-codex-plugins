@@ -1,0 +1,22 @@
+{
+  "codex": "codex-cli 0.153.4",
+  "content_digest": "65313b72d82e5dab8881ee32bd3a8347fef644dcb3e94d1ff54642666ed0d1d6",
+  "desktop_ui_tested": false,
+  "fresh_v2_records": true,
+  "installed_export_verified": true,
+  "live_device_tested": false,
+  "live_model_tested": false,
+  "measurement_source_failure_and_recovery": true,
+  "native_hooks": true,
+  "native_resume_preserved_run": true,
+  "network_scope": "loopback only",
+  "passed": true,
+  "registered_task_only_measurements": true,
+  "same_task_project_switch": true,
+  "schema": "openubmc.installed-host-records.qualification/v1",
+  "source_commit": "0ed3421d82b7181aafce0496a703db6220312140",
+  "two_project_bindings": true,
+  "unexecuted_test_receipts_absent": true,
+  "unknown_usage_retained": true,
+  "version": "2.2.17"
+}

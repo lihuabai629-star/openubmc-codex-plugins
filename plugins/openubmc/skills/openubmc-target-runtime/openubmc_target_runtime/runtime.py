@@ -543,8 +543,9 @@ class CredentialResolver:
     def resolve_local_values(
         self, *, task_id: str, host: str, arguments: Mapping[str, object] | None = None,
         transports: tuple[str, ...] = ("ssh", "redfish"),
+        include_os: bool = False,
     ) -> dict[str, str]:
-        """Project selected records only into local Domain Adapter input."""
+        """Project BMC adapter credentials; OS records require an explicit include_os request."""
         from .credential_file import (CREDENTIALS_FILE_MAX_BYTES, CredentialFileError,
                                       parse_credentials_text, selected_credential_value)
         from .credentials import CredentialConfigurationError, read_private_credentials
@@ -576,13 +577,15 @@ class CredentialResolver:
                           ("OPENUBMC_OS_SSH_USER",), ("OPENUBMC_OS_SSH_PASSWORD",),
                           ("OPENUBMC_TELNET_USER",), ("OPENUBMC_TELNET_PASSWORD",),
                           ("OPENUBMC_OS_IP",), ("OPENUBMC_OS_SSH_PORT",)):
+                if not include_os and names[0].startswith("OPENUBMC_OS_"):
+                    continue
                 selected = selected_credential_value(legacy_values, names,
                                                      environ=self._local_source.environ)
                 if selected is not None:
                     for name in names:
                         values[name] = selected
         for purpose, transport in (("bmc", "ssh"), ("bmc", "redfish"), ("os", "ssh")):
-            if transport not in transports:
+            if transport not in transports or purpose == "os" and not include_os:
                 continue
             prefix = ("os_" if purpose == "os" else "") + transport
             if any(arguments.get(prefix + suffix) for suffix in ("_user", "_user_env", "_password", "_password_env", "_identity_file")):

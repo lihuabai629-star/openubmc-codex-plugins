@@ -19,5 +19,5 @@
     "host/package.json": "e5d217eab09d78093024ec641c2b15421af3735b5044435a3ebaf93c8083eef5",
     "test-support/private-fixture.mjs": "7d04ee27258f661015c9589b4a287243f6b05fbad5885986368814beeef2197b"
   },
-  "source_commit": "c08d3a13895587d24d98640747d186f3225e746d"
+  "source_commit": "0ed3421d82b7181aafce0496a703db6220312140"
 }

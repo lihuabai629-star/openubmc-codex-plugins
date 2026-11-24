@@ -491,7 +491,11 @@ class ObservationSelector:
                     "capability selector cannot contain queries",
                     reason=PreflightReason.UNDECLARED_FIELD,
                     field=f"selectors[{index - 1}].queries",
-                    limit={"allowed_fields": ["id", "kind", "names"]},
+                    limit={
+                        "allowed_fields": ["id", "kind", "names"],
+                        "queries_allowed": False,
+                        "queries_selector_kind": "mdb",
+                    },
                 )
             raw_names = value.get("names", [])
             if not isinstance(raw_names, list) or not raw_names:

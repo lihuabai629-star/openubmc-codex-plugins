@@ -35,6 +35,7 @@ from .semantic_runtime import (
     RunTurn,
     ScopeContract,
     ScopeViolation,
+    SELECTOR_ID_MAX_BYTES,
     SelectorContract,
     SemanticRuntimeError,
     SemanticRuntimePort,
@@ -56,6 +57,8 @@ OBSERVATION_PROJECTION_TARGET_BYTES = 4 * 1024
 # Compatibility name for callers that report the historical projection target.
 # ObservationReceipts may exceed it; it is not a completeness or control boundary.
 OBSERVATION_MAX_BYTES = OBSERVATION_PROJECTION_TARGET_BYTES
+MDB_DISCOVERY_MAX_BYTES = 16 * 1024
+MDB_DISCOVERY_MAX_LINES = 512
 TURN_PROJECTION_TARGET_BYTES = 8 * 1024
 # Compatibility name for callers that report the historical projection target.
 # Runtime-owned Turn semantics may exceed it; it is not a control-flow maximum.
@@ -187,6 +190,35 @@ def _observe_preflight_example(
                 if isinstance(selectors, list) and selector_index < len(selectors):
                     selector = selectors[selector_index]
                     if isinstance(selector, dict):
+                        if (
+                            field == "queries"
+                            and selector.get("kind") == "capability"
+                            and isinstance(selector.get("queries"), list)
+                            and selector.get("queries")
+                        ):
+                            queries = list(selector["queries"])
+                            selector.pop("queries", None)
+                            used_ids = {
+                                _text(item.get("id"))
+                                for item in selectors
+                                if isinstance(item, Mapping)
+                            }
+                            base_id = _text(selector.get("id")) or "capabilities"
+                            suffix = "-mdb"
+                            sequence = 1
+                            while True:
+                                prefix = base_id.encode("utf-8")[
+                                    : SELECTOR_ID_MAX_BYTES - len(suffix)
+                                ].decode("utf-8", errors="ignore")
+                                mdb_id = prefix + suffix
+                                if mdb_id not in used_ids:
+                                    break
+                                sequence += 1
+                                suffix = f"-mdb-{sequence}"
+                            selectors.append(
+                                {"id": mdb_id, "kind": "mdb", "queries": queries}
+                            )
+                            return example
                         selector.pop(field, None)
                         return example
             freshness_match = re.fullmatch(r"freshness\.([^.[\]]+)", detail.field)
@@ -391,6 +423,15 @@ def _preflight_guidance(
     arguments: Mapping[str, object] | None = None,
 ) -> tuple[dict[str, object], str]:
     if operation == "observe":
+        if (
+            detail.reason == PreflightReason.UNDECLARED_FIELD
+            and isinstance(detail.limit, Mapping)
+            and detail.limit.get("queries_allowed") is False
+        ):
+            return (
+                _complete_observe_preflight_example(detail, arguments),
+                "capability selectors use names only; keep read-only queries in a separate kind=mdb selector and use next_action once; do not repeat the invalid request",
+            )
         actions = {
             PreflightReason.UNSUPPORTED_CAPABILITY: (
                 "retry observe with the corrected canonical capability name"
@@ -1064,7 +1105,10 @@ def _compact_observation_results(value: object) -> dict[str, object]:
                     },
                     **(
                         {
-                            "value": _compact_value(
+                            "value": _mapping(raw_item).get("value")
+                            if result.get("kind") == "mdb"
+                            and _mapping(_mapping(raw_item).get("value")).get("discovery")
+                            else _compact_value(
                                 _mapping(raw_item).get("value"),
                                 max_depth=8,
                                 max_items=32,
@@ -1476,6 +1520,29 @@ class ResultProjector:
         payload = _mapping(child.get("payload"))
         result = _mapping(payload.get("result")) or _mapping(child.get("result"))
         stdout_lines = result.get("stdout_lines")
+        if (query.split(maxsplit=1)[0].lower() in {"lsclass", "lsmc", "lsobj"}
+                and isinstance(stdout_lines, list) and all(isinstance(line, str) for line in stdout_lines)):
+            source_bytes = len("\n".join(stdout_lines).encode("utf-8"))
+            visible = []
+            remaining = MDB_DISCOVERY_MAX_BYTES
+            for line in stdout_lines[:MDB_DISCOVERY_MAX_LINES]:
+                separator = int(bool(visible))
+                encoded = line.encode("utf-8")
+                if len(encoded) + separator > remaining:
+                    prefix = encoded[:max(0, remaining - separator)].decode("utf-8", errors="ignore")
+                    # A cut identifier cannot become a new, apparently complete class name.
+                    boundary = max(prefix.rfind(" "), prefix.rfind("\t"))
+                    if boundary > 0:
+                        visible.append(prefix[:boundary])
+                    break
+                visible.append(line)
+                remaining -= len(encoded) + separator
+            return {"stdout_lines": visible, "discovery": {
+                "query": query, "source_bytes": source_bytes,
+                "returned_bytes": len("\n".join(visible).encode("utf-8")),
+                "source_lines": len(stdout_lines), "returned_lines": len(visible),
+                "projection_complete": visible == stdout_lines,
+            }}
         if query.split(maxsplit=1)[0].lower() == "getprop" and isinstance(
             stdout_lines, list
         ):
@@ -1701,6 +1768,14 @@ class ResultProjector:
         }
         if observation_ref is not None:
             document["observation_ref"] = observation_ref
+        if any(_mapping(_mapping(item.get("value")).get("discovery")).get("projection_complete") is False
+               for result in observations.values() for item in _mapping(result).get("values", [])
+               if isinstance(item, Mapping)):
+            document.update(content_compacted=True, projection_compacted=True, projection_truncated=True)
+            document["next_guidance"] = (
+                "The discovery list exceeds its inline byte/line limit. Do not infer absence from its prefix; "
+                "use the installed read-only MDB helper for the retained discovery scope."
+            )
         return _finalize_observation_projection(document)
 
     def turn(self, turn: RunTurn) -> dict[str, object]:
@@ -1964,6 +2039,47 @@ class AgentGateway:
 
 
 def agent_operation_descriptors() -> tuple[OperationDescriptor, ...]:
+    names_schema = {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 16,
+        "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+        },
+    }
+    names_descriptions = {
+        "capability": "Case-insensitive names: " + ", ".join(sorted(CAPABILITY_ALIASES)),
+        "systemd": "Literal .service IDs or [failed].",
+        "os_console": "identity and/or network via BMC SOL.",
+    }
+    queries_schema = {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 32,
+        "items": {"type": "string", "minLength": 1, "maxLength": 1024},
+    }
+    selector_variants = [
+        {
+            "type": "object",
+            "required": ["kind", field],
+            "properties": {
+                "id": {"type": "string", "minLength": 1, "maxLength": 64},
+                "kind": {"type": "string", "enum": [kind]},
+                field: queries_schema if kind == "mdb" else {
+                    **names_schema, "description": names_descriptions[kind],
+                },
+            },
+            "additionalProperties": False,
+        }
+        for kind, field in (
+            ("capability", "names"),
+            ("mdb", "queries"),
+            ("systemd", "names"),
+            ("os_console", "names"),
+        )
+    ]
     observe_schema = {
         "type": "object",
         "required": ["target", "selectors"],
@@ -1974,35 +2090,7 @@ def agent_operation_descriptors() -> tuple[OperationDescriptor, ...]:
                 "type": "array",
                 "minItems": 1,
                 "maxItems": 16,
-                "items": {
-                    "type": "object",
-                    "required": ["kind"],
-                    "properties": {
-                        "id": {"type": "string", "minLength": 1, "maxLength": 64},
-                        "kind": {"type": "string", "enum": ["capability", "mdb", "systemd", "os_console"]},
-                        "names": {
-                            "type": "array",
-                            "maxItems": 16,
-                            "items": {
-                                "type": "string",
-                                "minLength": 1,
-                                "maxLength": 255,
-                                "description": (
-                                    "For os_console, identity and/or network via BMC SOL; one selector per query. "
-                                    "For systemd, literal .service IDs or [failed]; one systemd selector per query. "
-                                    "Capability names are case-insensitive; canonical names: "
-                                    + ", ".join(sorted(CAPABILITY_ALIASES))
-                                ),
-                            },
-                        },
-                        "queries": {
-                            "type": "array",
-                            "maxItems": 32,
-                            "items": {"type": "string", "minLength": 1, "maxLength": 1024},
-                        },
-                    },
-                    "additionalProperties": False,
-                },
+                "items": {"anyOf": selector_variants},
             },
             "freshness": {
                 "type": "object",

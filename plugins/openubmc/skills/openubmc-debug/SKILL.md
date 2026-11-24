@@ -28,40 +28,33 @@ Use the default `openubmc-target-runtime` MCP through its semantic Agent Interfa
 
 - For service failures, use a `systemd` selector with literal `.service` names or `["failed"]`.
 - For an authorized OS task with BMC IP and no OS IP, select `os_console`; see its reference below.
-- Call `observe` for an exact read-only question using only required selectors.
-  Use the established target and credentials. Internal Gate response fields are
-  filled by the Agent from evidence; they are not requests for human approval.
-  A narrow MDB or capability query should complete in one call and return an inline
-  `ObservationReceipt`.
+- Call `observe` for an exact read-only question using only required selectors and
+  established credentials. Internal Gate response fields are filled by the Agent from
+  evidence, not human approval. A narrow MDB or capability query should complete in one call
+  and return an inline `ObservationReceipt`.
 - Combine capability, MDB, systemd and OS-console selectors in the same `observe` call.
-  Do not run a separate capability preflight.
+  Do not run a separate capability preflight. Keep `capability` (`id`, `kind`, `names`) separate
+  from `mdb` (`id`, `kind`, `queries`); if preflight returns `next_action`, apply it once.
 - Call `execute` for diagnosis Runs, source changes, builds, patches, upgrades, verification
   or an authorized MDB assignment. Read its property reference before any assignment.
 - A build-upgrade Run may declare `hardware_acceptance.devices` for exact Drive convergence.
   Only post-upgrade `debug_collect` applies it: missing, unhealthy, unidentified or
   protocol-mismatched Drives keep verification partial and require fresh evidence.
-- An `ObservationRef` proves reusable observation evidence; it does not by itself prove a root
-  cause. Every diagnosis workflow reaches the Runtime-owned `diagnosis.acceptance` Gate before
-  `developer.change`, including a complete collection receipt.
-- Answer `diagnosis.acceptance` using its returned binding and input schema.
-  Accept only a verified causal chain supported by non-empty evidence IDs from
-  the current DiagnosticReceipt, with an identified owner and no contradictions.
-  The Runtime derives observation time and freshness from persisted evidence.
+- An `ObservationRef` proves reusable observation evidence, not a root cause. Every diagnosis
+  workflow reaches `diagnosis.acceptance` before `developer.change`.
+- Answer `diagnosis.acceptance` using its returned binding and schema: require a verified causal
+  chain, non-empty evidence IDs from the current DiagnosticReceipt, an owner, and no contradictions.
 - `execute(kind=resume)` reattaches the Run; it cannot answer an unanswered Gate.
-  For `response_required=true` and `progress.status=no_progress`, submit the
-  returned Gate binding. When no defensible diagnosis exists, fail or cancel
-  that Gate and preserve the gap while continuing independent authorized work.
+  For `response_required=true` and `progress.status=no_progress`, submit the Gate binding,
+  or fail/cancel the Gate when no defensible diagnosis exists while continuing authorized work.
 - For `completed`, `failed`, or `cancelled`, deliver the Outcome and remaining gaps.
-  A terminal Run stays terminal when resumed. Start a new Run for a new target or intent,
-  record its link to the prior Run, and use its returned bindings. An unknown Effect instead
-  retains its original Run, Incident and Effect identities for recovery.
-- Treat one `ObservationReceipt` or `Turn` as the semantic result. Capability is tri-state:
-  `available`, `unavailable`, or `not_checked`; never infer an unobserved capability.
-- In an `execute` MCP result, inspect `structured_content.diagnostic_receipt`; `content` is a state
-  summary, not the full result. Treat every result with `status=available` and a substantive `value` or
-  bounded `summary` as citable visible evidence. Raw Evidence bytes do not need a separate read.
-  `projection_truncated` and `content_compacted` describe the display; determine source
-  completeness from the receipt's `truncated`, `content_complete`, freshness, coverage, and gaps.
+  A terminal Run stays terminal when resumed; start a new linked Run for a new target or intent.
+  An unknown Effect retains its original Run, Incident and Effect identities for recovery.
+- Capability is tri-state (`available`, `unavailable`, `not_checked`); never infer unobserved capability.
+- In `execute` MCP results, inspect `structured_content.diagnostic_receipt` (`content` is only a summary).
+  Every `status=available` item with substantive `value` or `summary` is citable without reading raw bytes.
+  `projection_truncated` and `content_compacted` describe display only; check `truncated`,
+  `content_complete`, freshness, coverage, and gaps for source completeness.
 - Do not use compatibility or operator operations from the default Agent profile.
 Windows/WSL: see `references/windows-routing.md`.
 

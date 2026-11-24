@@ -28,6 +28,8 @@ mdbctl lsmc
 
 `getprop` 不按成员名称阻断；只要命令符合只读语法，属性名和值都会原样返回。`lsprop`、`lsobj` 等宽查询仍应受对象范围、输出上限和任务相关性约束。
 
+`observe` 的 `lsclass`、`lsmc` 和 `lsobj` 发现结果在 16 KiB、512 行内保留完整 `stdout_lines`，不会因普通摘要的单行或条目上限再次缩略。`value.discovery` 记录原始/显示字节数、行数及 `projection_complete`。超出范围时只显示完整标识符的前缀，回执明确设置 `projection_truncated`、`content_compacted` 和后续指引；不能用该前缀证明类或对象不存在。需要补足时使用同一安装的只读 MDB helper，不重复无变化的宽查询。
+
 脚本严格按上面的参数个数校验命令，并只接受以 ASCII 字母、数字、`_` 或 `/` 开头，后续由这些字符及 `.`、`:`、`@`、`+`、`-` 组成的对象标识 token。换行、分号、空白、shell 元字符、控制字符、命令行选项和未文档化命令全部在凭据解析及 SSH 之前拒绝；direct-skynet 不能用来绕过此门禁。
 
 如果非交互 SSH 找不到 `mdbctl`，优先用 POSIX 登录 shell：
